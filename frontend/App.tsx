@@ -39,10 +39,12 @@ const styles = StyleSheet.create({
     width: "100%",
     height: HEADER_HEIGHT,
     overflow: "hidden",
-    marginTop: "20%",
+    paddingTop: "20%",
     marginBottom: "-15%",
+    marginTop: 0,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#F5F6F8",
   },
   loginHeaderImage: {
     width: "90%",

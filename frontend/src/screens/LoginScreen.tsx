@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { StatusBar } from "expo-status-bar";
 import {
   Image,
   Pressable,
@@ -35,6 +36,8 @@ export default function LoginScreen() {
   };
 
   return (
+    <>
+      <StatusBar style="dark" />
     <View style={styles.screen}>
       <View style={styles.headerWrap}>
         
@@ -104,6 +107,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
     </View>
+    </>
   );
 }
 
