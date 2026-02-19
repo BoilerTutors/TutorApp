@@ -1,58 +1,50 @@
-import { StatusBar } from "expo-status-bar";
-import { SafeAreaView, StyleSheet, Text, View } from "react-native";
-import { MockUserRole } from "./src/types/models";
+import { StyleSheet, View, Image, Dimensions } from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import LoginScreen from "./src/screens/LoginScreen";
+import StudentScreen from "./src/screens/StudentScreen";
+import TutorScreen from "./src/screens/TutorScreen";
+
+const Stack = createNativeStackNavigator();
+const HEADER_HEIGHT = Dimensions.get("window").height * 0.25;
 
 export default function App() {
-  const activeRole: MockUserRole = "student";
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>BoilerTutors</Text>
-        <Text style={styles.subtitle}>
-          React Native + TypeScript client scaffold
-        </Text>
-        <Text style={styles.body}>Active dashboard role: {activeRole}</Text>
-        <Text style={styles.body}>
-          Next steps: auth, tutor search, scheduling, messaging, reviews.
-        </Text>
-      </View>
-      <StatusBar style="auto" />
-    </SafeAreaView>
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{
+            header: () => (
+              <View style={styles.loginHeader}>
+                <Image
+                  source={require("./src/assets/purdue_logo.png")}
+                  style={styles.loginHeaderImage}
+                  resizeMode="cover"
+                />
+              </View>
+            )
+          }}
+        />
+        <Stack.Screen name="Student Dashboard" component={StudentScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={{ headerShown: false }} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f2f4f8",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20
-  },
-  card: {
+  loginHeader: {
     width: "100%",
-    maxWidth: 560,
-    backgroundColor: "#ffffff",
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2
+    height: HEADER_HEIGHT,
+    overflow: "hidden",
+    backgroundColor: "rgb(157, 150, 141)",
+    borderBottomWidth: HEADER_HEIGHT * 0.03,
+    borderBottomColor: "#000000",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 8
-  },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 14
-  },
-  body: {
-    fontSize: 15,
-    marginBottom: 8
+  loginHeaderImage: {
+    width: "100%",
+    height: "100%"
   }
 });
