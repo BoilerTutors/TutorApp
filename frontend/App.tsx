@@ -6,7 +6,7 @@ import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 
 const Stack = createNativeStackNavigator();
-const HEADER_HEIGHT = Dimensions.get("window").height * 0.25;
+const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
 
 export default function App() {
   return (
@@ -39,12 +39,13 @@ const styles = StyleSheet.create({
     width: "100%",
     height: HEADER_HEIGHT,
     overflow: "hidden",
-    backgroundColor: "rgb(157, 150, 141)",
-    borderBottomWidth: HEADER_HEIGHT * 0.03,
-    borderBottomColor: "#000000",
+    marginTop: "20%",
+    marginBottom: "-15%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   loginHeaderImage: {
-    width: "100%",
+    width: "90%",
     height: "100%"
   }
 });
