@@ -18,6 +18,7 @@ type RootStackParamList = {
   Login: undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
+  "Tutor Registration": undefined;
 };
 
 export default function LoginScreen() {
@@ -26,12 +27,22 @@ export default function LoginScreen() {
   const [role, setRole] = useState<Role>("tutor");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const onLogin = () => {
     if (role === "student") {
       navigation.navigate("Student Dashboard");
     } else {
       navigation.navigate("Tutor Dashboard");
+    }
+  };
+
+  const onSignUp = () => {
+    if (role === "tutor") {
+      navigation.navigate("Tutor Registration");
+    } else {
+      // TODO: Navigate to Student Registration when created
+      navigation.navigate("Student Dashboard");
     }
   };
 
@@ -48,7 +59,7 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Login to Your Account</Text>
+        <Text style={styles.cardTitle}>{isSignUp ? "Create Your Account" : "Login to Your Account"}</Text>
 
         <View style={styles.inputWrap}>
           <Ionicons name="mail" size={16} color="#8C93A4" />
@@ -95,15 +106,26 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.helperText}>
-          Don't have an account? <Text style={styles.link}>Sign Up Now!</Text>
-        </Text>
-        <TouchableOpacity>
-          <Text style={styles.forgot}>Forgot Account?</Text>
-        </TouchableOpacity>
+        {isSignUp ? (
+          <Text style={styles.helperText}>
+            Already have an account?{" "}
+            <Text style={styles.link} onPress={() => setIsSignUp(false)}>Sign In!</Text>
+          </Text>
+        ) : (
+          <Text style={styles.helperText}>
+            Don't have an account?{" "}
+            <Text style={styles.link} onPress={() => setIsSignUp(true)}>Sign Up Now!</Text>
+          </Text>
+        )}
+        
+        {!isSignUp && (
+          <TouchableOpacity>
+            <Text style={styles.forgot}>Forgot Account?</Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity style={styles.loginBtn} onPress={onLogin}>
-          <Text style={styles.loginText}>LOGIN</Text>
+        <TouchableOpacity style={styles.loginBtn} onPress={isSignUp ? onSignUp : onLogin}>
+          <Text style={styles.loginText}>{isSignUp ? "SIGN UP" : "LOGIN"}</Text>
         </TouchableOpacity>
       </View>
     </View>

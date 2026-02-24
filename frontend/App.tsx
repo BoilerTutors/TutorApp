@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "./src/screens/LoginScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
+import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 
 const Stack = createNativeStackNavigator();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
@@ -29,6 +30,7 @@ export default function App() {
         />
         <Stack.Screen name="Student Dashboard" component={StudentScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
