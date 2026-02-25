@@ -40,6 +40,9 @@ class User(Base):
     is_tutor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_student: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Account status: e.g. active, disabled, banned
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
