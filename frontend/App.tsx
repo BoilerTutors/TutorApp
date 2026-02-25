@@ -9,6 +9,7 @@ import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
 import { api, setAuthToken } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
+import Header from "./src/components/Header";
 
 const Stack = createNativeStackNavigator();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
@@ -38,6 +39,9 @@ export default function App() {
     let cancelled = false;
 
     const bootstrapAuth = async () => {
+      // uncomment return to test different default screens. Change initialRoute default value to
+      // page you want to test as well.
+      // return;
       try {
         // If no token exists, render login immediately.
         const token = await loadToken();
@@ -98,8 +102,34 @@ export default function App() {
             )
           }}
         />
-        <Stack.Screen name="Student Dashboard" component={StudentScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="Student Dashboard"
+          component={StudentScreen}
+          options={{
+            header: () => (
+              <Header
+                role="STUDENT"
+                onLogout={() => {
+                  // TODO: Implement logout
+                }}
+              />
+            ),
+          }}
+        />
+        <Stack.Screen
+          name="Tutor Dashboard"
+          component={TutorScreen}
+          options={{
+            header: () => (
+              <Header
+                role="TUTOR"
+                onLogout={() => {
+                  // TODO: Implement logout
+                }}
+              />
+            ),
+          }}
+        />
         <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Messenger" component={MessengerScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
