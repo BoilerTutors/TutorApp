@@ -20,4 +20,5 @@ build/
 .vscode/
 
 certs/
-.gitignore
+backend/dev_schema.sql
+backend/main_schema.sql
