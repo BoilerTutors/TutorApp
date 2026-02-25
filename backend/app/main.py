@@ -1,7 +1,7 @@
 """FastAPI application entry point."""
 from fastapi import FastAPI
 
-from app.routers import auth, availability, classes, reviews, sessions, students, tutors, users
+from app.routers import auth, availability, classes, reviews, sessions, students, tutors, users, messages
 
 app = FastAPI(
     title="BoilerTutors API",
@@ -17,6 +17,7 @@ app.include_router(classes.router, prefix="/classes", tags=["classes"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(availability.router, prefix="/availability", tags=["availability"])
+app.include_router(messages.router, prefix="/messages", tags=["messages"])
 
 
 @app.get("/")
