@@ -15,6 +15,7 @@ if str(backend) not in sys.path:
 
 from app.database import SessionLocal  # type: ignore  # noqa: E402
 from app.models import User, TutorProfile, StudentProfile  # type: ignore  # noqa: E402
+from app.auth import hash_password  # type: ignore  # noqa: E402
 
 
 def get_or_create_user(session, email: str, **kwargs) -> User:
@@ -33,8 +34,9 @@ def get_or_create_user(session, email: str, **kwargs) -> User:
 
 def main() -> None:
     with SessionLocal() as session:
-        # Simple dummy "hashed" password for local dev only.
-        dummy_hashed = "dev_hashed_password"
+        # Local dev password (works with /auth/login)
+        plain_password = "Password123!"
+        dummy_hashed = hash_password(plain_password)
 
         # Tutor account
         tutor_user = get_or_create_user(
@@ -84,11 +86,27 @@ def main() -> None:
             )
             session.add(student_profile)
 
+        # Admin account (no tutor/student profile)
+        admin_user = get_or_create_user(
+            session,
+            email="admin@example.com",
+            first_name="Admin",
+            last_name="User",
+            hashed_password=dummy_hashed,
+            mfa_enabled=False,
+            mfa_code=None,
+            mfa_expires_at=None,
+            mfa_code_attempts=0,
+            is_tutor=False,
+            is_student=False,
+        )
+
         session.commit()
 
     print("Seeded local DB with:")
-    print(f"  Tutor   -> id={tutor_user.id}, email=tutor@example.com")
-    print(f"  Student -> id={student_user.id}, email=student@example.com")
+    print(f"  Tutor   -> id={tutor_user.id}, email=tutor@example.com, password={plain_password!r}")
+    print(f"  Student -> id={student_user.id}, email=student@example.com, password={plain_password!r}")
+    print(f"  Admin   -> id={admin_user.id}, email=admin@example.com, password={plain_password!r}")
 
 
 if __name__ == "__main__":
