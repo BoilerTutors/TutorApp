@@ -6,3 +6,5 @@
 - PATCH  /tutors/me            - update own tutor profile
 - DELETE /tutors/me            - delete own tutor profile
 """
+from fastapi import APIRouter
+router = APIRouter()

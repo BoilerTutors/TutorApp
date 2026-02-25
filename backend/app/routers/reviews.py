@@ -6,3 +6,5 @@
 - PATCH  /reviews/{review_id}   - update own review
 - DELETE /reviews/{review_id}   - delete own review
 """
+from fastapi import APIRouter
+router = APIRouter()

@@ -12,3 +12,5 @@
 - GET    /classes/tutor/me            - get current tutor's classes
 - DELETE /classes/tutor/{id}          - remove tutor class entry
 """
+from fastapi import APIRouter
+router = APIRouter()

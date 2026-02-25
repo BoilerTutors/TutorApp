@@ -1,24 +1,31 @@
 import React, { useState } from "react";
-import { StatusBar } from "expo-status-bar";
 import {
-  Image,
+  ActivityIndicator,
+  Alert,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { api, setAuthToken } from "../api/client";
+import { saveToken } from "../auth/storage";
 
 type Role = "tutor" | "student";
 type RootStackParamList = {
   Login: undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
-  "Tutor Registration": undefined;
+  "Tutor Registration": {
+    email: string;
+    password: string;
+    role: Role;
+  };
 };
 
 export default function LoginScreen() {
@@ -28,21 +35,54 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const onLogin = () => {
-    if (role === "student") {
-      navigation.navigate("Student Dashboard");
-    } else {
-      navigation.navigate("Tutor Dashboard");
+  const onLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert("Error", "Please enter email and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await api.post<{ access_token: string; token_type: string }>(
+        "/auth/login",
+        { email: email.trim().toLowerCase(), password }
+      );
+      setAuthToken(data.access_token);
+      await saveToken(data.access_token);
+      if (role === "student") {
+        navigation.navigate("Student Dashboard");
+      } else {
+        navigation.navigate("Tutor Dashboard");
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Login failed. Check email and password.";
+      Alert.alert("Login failed", message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const onSignUp = () => {
+    if (!email.trim() || !password) {
+      Alert.alert("Error", "Please enter email and password to create an account.");
+      return;
+    }
+    if (password.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters long.");
+      return;
+    }
     if (role === "tutor") {
-      navigation.navigate("Tutor Registration");
+      navigation.navigate("Tutor Registration", {
+        email: email.trim().toLowerCase(),
+        password,
+        role,
+      });
     } else {
-      // TODO: Navigate to Student Registration when created
-      navigation.navigate("Student Dashboard");
+      Alert.alert(
+        "Not implemented yet",
+        "Student registration is not implemented yet. Please register as a tutor or log in."
+      );
     }
   };
 
@@ -124,8 +164,16 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.loginBtn} onPress={isSignUp ? onSignUp : onLogin}>
-          <Text style={styles.loginText}>{isSignUp ? "SIGN UP" : "LOGIN"}</Text>
+        <TouchableOpacity
+          style={styles.loginBtn}
+          onPress={isSignUp ? onSignUp : onLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.loginText}>{isSignUp ? "SIGN UP" : "LOGIN"}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>

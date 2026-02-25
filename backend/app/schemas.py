@@ -39,6 +39,12 @@ class UserUpdate(BaseModel):
     is_student: Optional[bool] = None
 
 
+class UserStatusUpdate(BaseModel):
+    """Update a user's account status: 0=active, 1=disabled, 2=banned."""
+
+    status: int = Field(ge=0, le=2)
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -250,6 +256,11 @@ class TutorClassPublic(BaseModel):
 # ===========================================================
 # ---- Auth / misc schemas ----
 # ===========================================================
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -261,6 +272,52 @@ class TokenPayload(BaseModel):
 
 class Message(BaseModel):
     message: str
+
+
+# ===========================================================
+# ---- Messaging schemas ----
+# ===========================================================
+
+class MessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=10000)
+
+
+class MessagePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    conversation_id: int
+    sender_id: int
+    content: str
+    created_at: datetime
+
+
+class ConversationCreate(BaseModel):
+    """Start or get a conversation with another user."""
+    other_user_id: int
+
+
+class ConversationPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user1_id: int
+    user2_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationWithPartner(BaseModel):
+    """Conversation list item: conversation plus the other user's id and last message preview."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user1_id: int
+    user2_id: int
+    created_at: datetime
+    updated_at: datetime
+    other_user_id: int
+    last_message: Optional[MessagePublic] = None
 
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
