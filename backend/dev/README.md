@@ -30,4 +30,42 @@ From **backend**:
 python dev/create_tables.py
 ```
 
+## 4. Seed test data
+
+Seed a test tutor and student user (safe to run multiple times):
+
+```bash
+python dev/seed_test_data.py
+```
+
+This prints their `id` and `email` so you can use them in the FastAPI docs for messaging tests.
+
+## 5. Connect with psql (optional)
+
+If you have the Postgres client installed:
+
+```bash
+PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d tutorapp
+```
+
+Then, for example:
+
+```sql
+\dt              -- list tables
+SELECT * FROM users;  -- view seeded users
+```
+
+## 6. Reset the local database
+
+If your `models.py` changed a lot or you just want a clean slate, you can drop and recreate the local DB data:
+
+From **backend**:
+
+```bash
+docker compose -f dev/docker-compose.yml down -v   # stop container and delete data volume
+docker compose -f dev/docker-compose.yml up -d     # start fresh Postgres
+python dev/create_tables.py                        # recreate tables from models.py
+python dev/seed_test_data.py                       # reseed test users (optional)
+```
+
 Credentials used by Docker: user `postgres`, password `postgres`, database `tutorapp`, port `5432`.

@@ -4,7 +4,16 @@
     "slug": "boilertutors",
     "version": "0.1.0",
     "orientation": "portrait",
-    "platforms": ["ios", "android", "web"],
-    "assetBundlePatterns": ["**/*"]
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

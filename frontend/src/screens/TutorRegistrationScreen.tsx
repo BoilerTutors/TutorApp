@@ -11,14 +11,20 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { TutorClass, SessionMode } from "../types";
+import type { RouteProp } from "@react-navigation/native";
+import type { TutorClass, SessionMode } from "../types/models";
+import { api } from "../api/client";
 
 type RootStackParamList = {
   Login: undefined;
   "Tutor Dashboard": undefined;
-  "Tutor Registration": undefined;
+  "Tutor Registration": {
+    email: string;
+    password: string;
+    role: "tutor" | "student";
+  };
 };
 
 // Mock Purdue classes - in production, fetch from backend
@@ -66,8 +72,20 @@ const showAlert = (title: string, message: string, onOk?: () => void) => {
   }
 };
 
+const splitFullName = (full: string): [string, string] => {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return [parts[0], parts[0]];
+  }
+  const first = parts[0];
+  const last = parts.slice(1).join(" ");
+  return [first, last];
+};
+
 export default function TutorRegistrationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, "Tutor Registration">>();
+  const { email, password } = route.params;
   
   // Step tracking
   const [currentStep, setCurrentStep] = useState(1);
@@ -89,6 +107,7 @@ export default function TutorRegistrationScreen() {
 
   // Success state
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Filter classes based on search
   const filteredClasses = AVAILABLE_CLASSES.filter(
@@ -182,21 +201,40 @@ export default function TutorRegistrationScreen() {
     setCurrentStep(currentStep - 1);
   };
 
-  const handleSubmit = () => {
-    // TODO: Send to backend API
-    const registrationData = {
-      fullName,
-      bio,
-      selectedClasses,
-      sessionMode,
-      selectedLocations,
-      weeklySessionCap: parseInt(weeklySessionCap),
+  const handleSubmit = async () => {
+    if (!validateStep(currentStep)) return;
+    if (!email?.trim() || !password) {
+      showAlert("Error", "Missing email or password from the previous step.");
+      return;
+    }
+
+    const [firstName, lastName] = splitFullName(fullName);
+
+    const payload = {
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      password,
+      is_tutor: true,
+      is_student: false,
+      tutor_profile: {
+        bio: bio || undefined,
+      },
     };
-    
-    console.log("Registration Data:", registrationData);
-    
-    // Show success state
-    setIsSubmitted(true);
+
+    setSubmitting(true);
+    try {
+      await api.post("/users", payload);
+      setIsSubmitted(true);
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Registration failed. Please check your details and try again.";
+      showAlert("Registration failed", message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const goToDashboard = () => {

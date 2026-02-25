@@ -10,11 +10,13 @@ REST:
 WebSocket:
 - WS     /messages/ws/chat/{pairing_id}    - real-time chat (pairing_id = conversation_id)
 """
-from fastapi import APIRouter, Header, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.crud import messages as crud_messages
+from app.models import User
 from app.schemas import (
     ConversationCreate,
     ConversationPublic,
@@ -24,15 +26,6 @@ from app.schemas import (
 )
 
 router = APIRouter()
-
-
-def get_current_user_id(
-    x_user_id: int | None = Header(default=None, alias="X-User-Id"),
-) -> int:
-    """Current user id. For development use Header X-User-Id; replace with JWT when auth is implemented."""
-    if x_user_id is None:
-        raise HTTPException(status_code=401, detail="Authentication required (X-User-Id for dev)")
-    return x_user_id
 
 
 class ConnectionManager:
@@ -62,10 +55,10 @@ manager = ConnectionManager()
 @router.get("/conversations", response_model=list[ConversationWithPartner])
 def list_conversations(
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     """List all conversations for the current user, with last message preview."""
-    rows = crud_messages.list_conversations_for_user(db, current_user_id)
+    rows = crud_messages.list_conversations_for_user(db, current_user.id)
     return [
         ConversationWithPartner(
             id=r["id"],
@@ -84,11 +77,11 @@ def list_conversations(
 def create_or_get_conversation(
     body: ConversationCreate,
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     """Get existing conversation with another user or create a new one."""
     try:
-        conv = crud_messages.get_or_create_conversation(db, current_user_id, body.other_user_id)
+        conv = crud_messages.get_or_create_conversation(db, current_user.id, body.other_user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ConversationPublic.model_validate(conv)
@@ -98,10 +91,10 @@ def create_or_get_conversation(
 def get_conversation(
     conversation_id: int,
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     """Get a conversation by id (only if current user is a participant)."""
-    conv = crud_messages.get_conversation_by_id(db, conversation_id, current_user_id)
+    conv = crud_messages.get_conversation_by_id(db, conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return ConversationPublic.model_validate(conv)
@@ -111,12 +104,12 @@ def get_conversation(
 def list_messages(
     conversation_id: int,
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ):
     """List messages in a conversation (oldest first). Paginated."""
-    messages = crud_messages.get_messages(db, conversation_id, current_user_id, skip=skip, limit=limit)
+    messages = crud_messages.get_messages(db, conversation_id, current_user.id, skip=skip, limit=limit)
     return [MessagePublic.model_validate(m) for m in messages]
 
 
@@ -125,10 +118,10 @@ def send_message(
     conversation_id: int,
     body: MessageCreate,
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     """Send a message in a conversation."""
-    msg = crud_messages.create_message(db, conversation_id, current_user_id, body.content)
+    msg = crud_messages.create_message(db, conversation_id, current_user.id, body.content)
     if msg is None:
         raise HTTPException(status_code=404, detail="Conversation not found or you are not a participant")
     return MessagePublic.model_validate(msg)
