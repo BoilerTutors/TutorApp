@@ -4,3 +4,5 @@
 - POST  /auth/mfa       - verify MFA code
 - POST  /auth/refresh   - refresh an expiring token
 """
+from fastapi import APIRouter
+router = APIRouter()

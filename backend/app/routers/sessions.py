@@ -6,3 +6,5 @@
 - PATCH  /sessions/{session_id}  - update session (status, reschedule, notes)
 - DELETE /sessions/{session_id}  - cancel/delete a session
 """
+from fastapi import APIRouter
+router = APIRouter()

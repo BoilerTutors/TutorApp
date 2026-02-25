@@ -5,3 +5,5 @@
 - PATCH  /students/me          - update own student profile
 - DELETE /students/me          - delete own student profile
 """
+from fastapi import APIRouter
+router = APIRouter()

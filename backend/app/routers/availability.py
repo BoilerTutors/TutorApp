@@ -6,3 +6,5 @@
 - PUT    /availability/{slot_id} - update a slot
 - DELETE /availability/{slot_id} - delete a slot
 """
+from fastapi import APIRouter
+router = APIRouter()

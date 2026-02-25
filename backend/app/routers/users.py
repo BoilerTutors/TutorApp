@@ -6,3 +6,5 @@
 - PATCH  /users/me         - update current user
 - DELETE /users/me         - delete current user
 """
+from fastapi import APIRouter
+router = APIRouter()
