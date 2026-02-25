@@ -6,6 +6,7 @@ import LoginScreen from "./src/screens/LoginScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
+import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
 import { api, setAuthToken } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
@@ -131,6 +132,7 @@ export default function App() {
           }}
         />
         <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Student Registration" component={StudentRegistrationScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Messenger" component={MessengerScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
