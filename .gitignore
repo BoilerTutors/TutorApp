@@ -8,6 +8,7 @@ __pycache__/
 venv/
 .env
 .env.*
+backend/.env
 .npmrc
 
 node_modules/
@@ -19,3 +20,4 @@ build/
 .vscode/
 
 certs/
+.gitignore
