@@ -9,12 +9,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type HeaderProps = {
+type DashboardHeaderProps = {
   role: "STUDENT" | "TUTOR";
   onLogout: () => void;
 };
 
-export default function Header({ role, onLogout }: HeaderProps) {
+export default function DashboardHeader({ role, onLogout }: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
 
   return (

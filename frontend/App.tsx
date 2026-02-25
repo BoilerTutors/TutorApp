@@ -10,7 +10,8 @@ import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
 import { api, setAuthToken } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
-import Header from "./src/components/Header";
+import DashboardHeader from "./src/components/DashboardHeader";
+import { logout } from "./src/auth/logout";
 
 const Stack = createNativeStackNavigator();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
@@ -103,37 +104,67 @@ export default function App() {
             )
           }}
         />
+
+        {/* Student Dashboard Screen */}
         <Stack.Screen
           name="Student Dashboard"
           component={StudentScreen}
-          options={{
+          options={({ navigation }) => ({
             header: () => (
-              <Header
+              <DashboardHeader
                 role="STUDENT"
-                onLogout={() => {
-                  // TODO: Implement logout
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  });
                 }}
               />
             ),
-          }}
+          })}
         />
+
+        {/* Tutor Dashboard Screen */}
         <Stack.Screen
           name="Tutor Dashboard"
           component={TutorScreen}
-          options={{
+          options={({ navigation }) => ({
             header: () => (
-              <Header
+              <DashboardHeader
                 role="TUTOR"
-                onLogout={() => {
-                  // TODO: Implement logout
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  });
                 }}
               />
             ),
-          }}
+          })}
         />
-        <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Student Registration" component={StudentRegistrationScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Messenger" component={MessengerScreen} options={{ headerShown: false }} />
+
+        {/* Tutor Registration Screen */}
+        <Stack.Screen 
+          name="Tutor Registration" 
+          component={TutorRegistrationScreen} 
+          options={{ headerShown: false }} 
+        />
+
+        {/* Student Registration Screen */}
+        <Stack.Screen 
+          name="Student Registration" 
+          component={StudentRegistrationScreen} 
+          options={{ headerShown: false }} 
+        />
+
+        {/* Messenger Screen */}
+        <Stack.Screen 
+          name="Messenger" 
+          component={MessengerScreen} 
+          options={{ headerShown: false }} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
