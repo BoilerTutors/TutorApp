@@ -39,6 +39,12 @@ class UserUpdate(BaseModel):
     is_student: Optional[bool] = None
 
 
+class UserStatusUpdate(BaseModel):
+    """Update a user's account status: 0=active, 1=disabled, 2=banned."""
+
+    status: int = Field(ge=0, le=2)
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

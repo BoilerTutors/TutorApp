@@ -8,10 +8,24 @@ import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 
 const Stack = createNativeStackNavigator();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
+const TestTargetScreen = StudentScreen;
+
+const linking = {
+  prefixes: [],
+  config: {
+    screens: {
+      Test: "test",
+    },
+  },
+};
+
+function TestRouteScreen() {
+  return <TestTargetScreen />;
+}
 
 export default function App() {
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator>
         <Stack.Screen
           name="Login"
@@ -31,6 +45,7 @@ export default function App() {
         <Stack.Screen name="Student Dashboard" component={StudentScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Test" component={TestRouteScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
