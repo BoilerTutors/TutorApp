@@ -26,6 +26,11 @@ type RootStackParamList = {
     password: string;
     role: Role;
   };
+  "Student Registration": {
+    email: string;
+    password: string;
+    role: Role;
+  };
 };
 
 export default function LoginScreen() {
@@ -85,10 +90,11 @@ export default function LoginScreen() {
         role,
       });
     } else {
-      Alert.alert(
-        "Not implemented yet",
-        "Student registration is not implemented yet. Please register as a tutor or log in."
-      );
+      navigation.navigate("Student Registration", {
+        email: email.trim().toLowerCase(),
+        password,
+        role,
+      });
     }
   };
 

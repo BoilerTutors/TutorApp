@@ -31,7 +31,6 @@ def create_user(db: Session, data: UserCreate) -> User:
         is_tutor=data.is_tutor,
         is_student=data.is_student,
     )
-    print(user)
     db.add(user)
     db.flush()  # assign user.id so we can create related rows
 
