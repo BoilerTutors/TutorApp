@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api, setAuthToken } from "../api/client";
+import { saveToken } from "../auth/storage";
 
 type Role = "tutor" | "student";
 type RootStackParamList = {
@@ -48,6 +49,7 @@ export default function LoginScreen() {
         { email: email.trim().toLowerCase(), password }
       );
       setAuthToken(data.access_token);
+      await saveToken(data.access_token);
       if (role === "student") {
         navigation.navigate("Student Dashboard");
       } else {
