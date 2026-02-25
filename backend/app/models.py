@@ -333,8 +333,3 @@ class TutorClass(Base):
     tutor: Mapped["TutorProfile"] = relationship(back_populates="classes_tutoring")
     class_: Mapped["Class"] = relationship(back_populates="tutor_classes")
 
-
-
-# =========================
-# Pydantic schemas (API I/O)
-# =========================
