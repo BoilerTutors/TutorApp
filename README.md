@@ -64,7 +64,7 @@ Create a `backend/.env` file with either:
   - creating tables (`python dev/create_tables.py`)
   - seeding test users (`python dev/seed_test_data.py`)
 
-- **Shared RDS DB** – if you have AWS credentials from your team:
+- **Shared RDS DB** – if you have want to connect to deployed db:
 
   ```env
   RDS_HOST=...
