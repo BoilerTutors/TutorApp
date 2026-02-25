@@ -1,9 +1,13 @@
+from sqlalchemy.orm.session import Session
+
+
 from dotenv import load_dotenv
 from pathlib import Path
 import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+
 
 BASE_DIR = Path(__file__).resolve().parents[1] # get the backend directory path
 load_dotenv(BASE_DIR / ".env") # load the environment variables from the .env file
@@ -32,4 +36,15 @@ engine = create_engine(
     },
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal: sessionmaker[Session] = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    expire_on_commit=False,
+)
+
+class Base(DeclarativeBase):
+    pass
+
+def get_db():
+    with SessionLocal() as session:
+        yield session
