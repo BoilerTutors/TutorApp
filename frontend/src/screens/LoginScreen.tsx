@@ -50,6 +50,12 @@ export default function LoginScreen() {
       );
       setAuthToken(data.access_token);
       await saveToken(data.access_token);
+      console.log("[Auth] login ok", {
+        email: email.trim().toLowerCase(),
+        role,
+        tokenType: data.token_type,
+        tokenLength: data.access_token?.length ?? 0,
+      });
       if (role === "student") {
         navigation.navigate("Student Dashboard");
       } else {
