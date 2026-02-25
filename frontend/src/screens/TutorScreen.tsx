@@ -1,7 +1,14 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
+type RootStackParamList = {
+  Messenger: undefined;
+};
 
 
 export default function TutorScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   return ( 
     <View style={styles.container}>
@@ -14,6 +21,9 @@ export default function TutorScreen() {
         <Text style={styles.body}>
           Next steps: auth, tutor search, scheduling, messaging, reviews.
         </Text>
+        <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
+          <Text style={styles.buttonText}>Open Messenger</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -51,5 +61,17 @@ const styles = StyleSheet.create({
   body: {
     fontSize: 14,
     marginBottom: 12
-  }
+  },
+  button: {
+    marginTop: 8,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignSelf: "flex-start",
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
 });     

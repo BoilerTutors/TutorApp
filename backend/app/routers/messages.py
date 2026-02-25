@@ -10,10 +10,10 @@ REST:
 WebSocket:
 - WS     /messages/ws/chat/{pairing_id}    - real-time chat (pairing_id = conversation_id)
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_user_from_token
 from app.database import get_db
 from app.crud import messages as crud_messages
 from app.models import User
@@ -40,7 +40,12 @@ class ConnectionManager:
         self.active_connections[pairing_id].append(websocket)
 
     def disconnect(self, websocket: WebSocket, pairing_id: int):
-        self.active_connections[pairing_id].remove(websocket)
+        if pairing_id not in self.active_connections:
+            return
+        if websocket in self.active_connections[pairing_id]:
+            self.active_connections[pairing_id].remove(websocket)
+        if not self.active_connections[pairing_id]:
+            del self.active_connections[pairing_id]
 
     async def broadcast(self, message: dict, pairing_id: int):
         if pairing_id in self.active_connections:
@@ -131,16 +136,37 @@ def send_message(
 
 @router.websocket("/ws/chat/{pairing_id}")
 async def websocket_endpoint(websocket: WebSocket, pairing_id: int, db: Session = Depends(get_db)):
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authenticated")
+        return
+
+    try:
+        current_user = get_user_from_token(token, db)
+    except HTTPException:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+        return
+
+    conv = crud_messages.get_conversation_by_id(db, pairing_id, current_user.id)
+    if conv is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not a participant")
+        return
+
     await manager.connect(websocket, pairing_id)
     try:
         while True:
-            # Receive data from the client
             data = await websocket.receive_json()
-            
-            # 1. Save to Postgres via your CRUD logic
-            # new_msg = crud.messages.create_message(db, content=data['text'], sender_id=data['sender_id'])
-            
-            # 2. Broadcast to the "Room"
-            await manager.broadcast(data, pairing_id)
+            content = data.get("content") if isinstance(data, dict) else None
+            if not isinstance(content, str) or not content.strip():
+                await websocket.send_json({"error": "Message content is required"})
+                continue
+
+            msg = crud_messages.create_message(db, pairing_id, current_user.id, content.strip())
+            if msg is None:
+                await websocket.send_json({"error": "Conversation not found or not allowed"})
+                continue
+
+            payload = MessagePublic.model_validate(msg).model_dump(mode="json")
+            await manager.broadcast(payload, pairing_id)
     except WebSocketDisconnect:
         manager.disconnect(websocket, pairing_id)

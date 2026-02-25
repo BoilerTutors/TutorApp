@@ -1,32 +1,88 @@
-import { StyleSheet, View, Image, Dimensions } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, StyleSheet, View, Image, Dimensions, Text } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "./src/screens/LoginScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
+import MessengerScreen from "./src/screens/MessengerScreen";
+import { api, setAuthToken } from "./src/api/client";
+import { clearToken, loadToken } from "./src/auth/storage";
 
 const Stack = createNativeStackNavigator();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
-const TestTargetScreen = StudentScreen;
+type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
+const AUTH_CHECK_TIMEOUT_MS = 5000;
+type MeResponse = { is_tutor: boolean; is_student: boolean };
 
-const linking = {
-  prefixes: [],
-  config: {
-    screens: {
-      Test: "test",
-    },
-  },
-};
-
-function TestRouteScreen() {
-  return <TestTargetScreen />;
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("auth timeout")), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
 }
 
 export default function App() {
+  const [initialRoute, setInitialRoute] = useState<InitialRouteName | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrapAuth = async () => {
+      try {
+        // If no token exists, render login immediately.
+        const token = await loadToken();
+        if (!token) {
+          if (!cancelled) {
+            setInitialRoute("Login");
+          }
+          return;
+        }
+
+        // Token exists: authenticate it once with /users/me.
+        setAuthToken(token);
+        const me = await withTimeout(api.get<MeResponse>("/users/me"), AUTH_CHECK_TIMEOUT_MS);
+        const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
+        if (!cancelled) {
+          setInitialRoute(route);
+        }
+      } catch {
+        setAuthToken(null);
+        await clearToken();
+        if (!cancelled) {
+          setInitialRoute("Login");
+        }
+      }
+    };
+
+    void bootstrapAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!initialRoute) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2E57A2" />
+        <Text style={styles.loadingText}>Restoring session...</Text>
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer linking={linking}>
-      <Stack.Navigator>
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
         <Stack.Screen
           name="Login"
           component={LoginScreen}
@@ -45,7 +101,7 @@ export default function App() {
         <Stack.Screen name="Student Dashboard" component={StudentScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Test" component={TestRouteScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Messenger" component={MessengerScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -66,5 +122,16 @@ const styles = StyleSheet.create({
   loginHeaderImage: {
     width: "90%",
     height: "100%"
-  }
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F6F8",
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#59627A",
+  },
 });
