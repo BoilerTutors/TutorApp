@@ -76,6 +76,12 @@ class User(Base):
     cascade="all, delete-orphan",
     )
 
+    # Messaging: messages this user sent
+    messages_sent: Mapped[list["Message"]] = relationship(
+        foreign_keys="Message.sender_id",
+        back_populates="sender",
+    )
+
 
 class TutorProfile(Base):
     __tablename__ = "tutors"
@@ -259,6 +265,64 @@ class Review(Base):
     @property
     def tutor(self) -> "User":
         return self.session.tutor
+
+
+# ============================================
+# Messaging: Conversations and Messages
+# ============================================
+# Conversation: a thread between two users. user1_id < user2_id for canonical ordering.
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("user1_id", "user2_id", name="uq_conversation_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user1_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user2_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="Message.created_at",
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sender_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    sender: Mapped["User"] = relationship(
+        foreign_keys=[sender_id],
+        back_populates="messages_sent",
+    )
 
 
 # ============================================
