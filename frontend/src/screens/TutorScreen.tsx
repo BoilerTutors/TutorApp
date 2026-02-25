@@ -1,16 +1,22 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { logout } from "../auth/logout";
 
 type RootStackParamList = {
+  Login: undefined;
   Messenger: undefined;
 };
-
 
 export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  return ( 
+  const handleLogout = async () => {
+    await logout();
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  return (
     <View style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>BoilerTutors</Text>
@@ -23,6 +29,9 @@ export default function TutorScreen() {
         </Text>
         <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
           <Text style={styles.buttonText}>Open Messenger</Text>
+        </Pressable>
+        <Pressable style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
+          <Text style={styles.buttonText}>Log out</Text>
         </Pressable>
       </View>
     </View>
@@ -69,6 +78,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignSelf: "flex-start",
+  },
+  logoutButton: {
+    backgroundColor: "#6B7280",
+    marginTop: 12,
   },
   buttonText: {
     color: "#FFFFFF",
