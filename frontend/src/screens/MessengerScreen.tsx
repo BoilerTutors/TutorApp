@@ -16,9 +16,8 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import { API_BASE_URL } from "../config";
 import { api, getAuthToken } from "../api/client";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
 
 type Conversation = { id: number };
 
@@ -88,7 +87,6 @@ type RootStackParamList = {
 };
 
 export default function MessengerScreen() {
-  const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, "Messenger">>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -448,10 +446,6 @@ export default function MessengerScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.headerCard}>
         <View style={styles.headerRow}>
-          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={20} color="#1B2D50" />
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
           <View style={styles.headerControls}>
             <View style={[styles.statusDot, wsConnected ? styles.statusOnline : styles.statusOffline]} />
             <Pressable style={styles.secondaryBtn} onPress={onRefresh} disabled={refreshing}>
@@ -688,19 +682,6 @@ const styles = StyleSheet.create({
   },
   headerTextBlock: {
     justifyContent: "center",
-  },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 36,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    backgroundColor: "#EEF3FF",
-  },
-  backText: {
-    marginLeft: 2,
-    color: "#1B2D50",
-    fontWeight: "600",
   },
   statusDot: {
     width: 10,
