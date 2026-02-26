@@ -72,6 +72,8 @@ def list_conversations(
             created_at=r["created_at"],
             updated_at=r["updated_at"],
             other_user_id=r["other_user_id"],
+            other_user_first_name=r.get("other_user_first_name"),
+            other_user_last_name=r.get("other_user_last_name"),
             last_message=MessagePublic.model_validate(r["last_message"]) if r["last_message"] else None,
         )
         for r in rows
