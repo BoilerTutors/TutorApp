@@ -49,6 +49,14 @@ const AVAILABLE_CLASSES = [
 const GRADE_OPTIONS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C"];
 const SEMESTER_OPTIONS = ["Fall 2025", "Spring 2025", "Fall 2024", "Spring 2024", "Fall 2023", "Spring 2023"];
 
+const HELP_TYPE_OPTIONS = [
+  "Concept review",
+  "Homework help",
+  "Exam prep",
+  "Assignment debugging",
+  "Other",
+];
+
 const PURDUE_LOCATIONS = [
   "Lawson Computer Science Building",
   "Wilmeth Active Learning Center (WALC)",
@@ -105,6 +113,9 @@ export default function TutorRegistrationScreen() {
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
 
+  const [major, setMajor] = useState("");
+  const [gradYear, setGradYear] = useState("");
+
   // Step 2: Class Selection
   const [selectedClasses, setSelectedClasses] = useState<SelectedClass[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,6 +125,7 @@ export default function TutorRegistrationScreen() {
   const [sessionMode, setSessionMode] = useState<SessionMode | "both">("both");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [weeklySessionCap, setWeeklySessionCap] = useState("5");
+  const [helpProvided, setHelpProvided] = useState<string[]>([]);
 
   // Success state
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -177,7 +189,16 @@ export default function TutorRegistrationScreen() {
           showAlert("Required", "Please enter your full name");
           return false;
         }
+        if (gradYear.trim()) {
+          const n = parseInt(gradYear.trim(), 10);
+          if (Number.isNaN(n) || n < 1900 || n > 2100) {
+            showAlert("Invalid", "Please enter a valid graduation year (e.g. 2026).");
+            return false;
+          }
+        }
+
         return true;
+        
       case 2:
         if (selectedClasses.length === 0) {
           showAlert("Required", "Please select at least one class to tutor");
@@ -220,6 +241,8 @@ export default function TutorRegistrationScreen() {
 
     const [firstName, lastName] = splitFullName(fullName);
 
+    const gradYearNum = gradYear.trim() ? parseInt(gradYear.trim(), 10) : undefined;
+
     const tutorClasses = selectedClasses
       .map((c) => {
         const parsed = parseSemester(c.semesterTaken ?? "");
@@ -230,24 +253,27 @@ export default function TutorRegistrationScreen() {
           semester: parsed.semester,
           year_taken: parsed.year_taken,
           grade_received: grade,
+          has_taed: c.hasTAed,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
-    const payload = {
-      email,
-      first_name: firstName,
-      last_name: lastName,
-      password,
-      is_tutor: true,
-      is_student: false,
-      tutor_profile: {
-        bio: bio || undefined,
-        preferred_locations:
-          selectedLocations.length > 0 ? selectedLocations : undefined,
-        classes: tutorClasses.length > 0 ? tutorClasses : undefined,
-      },
-    };
+      const payload = {
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        password,
+        is_tutor: true,
+        is_student: false,
+        tutor_profile: {
+          bio: bio || undefined,
+          major: major.trim() || undefined,
+          grad_year: gradYearNum,
+          preferred_locations: selectedLocations.length > 0 ? selectedLocations : undefined,
+          help_provided: helpProvided.length > 0 ? helpProvided : undefined,
+          classes: tutorClasses.length > 0 ? tutorClasses : undefined,
+        },
+      };
 
     setSubmitting(true);
     try {
@@ -343,6 +369,33 @@ export default function TutorRegistrationScreen() {
           onChangeText={setBio}
           multiline
           numberOfLines={4}
+        />
+      </View>
+
+      <Text style={styles.label}>Major (optional)</Text>
+
+      <View style={styles.inputWrap}>
+        <Ionicons name="school" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Computer Science"
+          placeholderTextColor="#B0B6C3"
+          value={major}
+          onChangeText={setMajor}
+        />
+      </View>
+
+      <Text style={styles.label}>Graduation year (optional)</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="calendar-outline" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. 2026"
+          placeholderTextColor="#B0B6C3"
+          value={gradYear}
+          onChangeText={setGradYear}
+          keyboardType="number-pad"
+          maxLength={4}
         />
       </View>
     </View>
@@ -567,6 +620,36 @@ export default function TutorRegistrationScreen() {
       <Text style={styles.helperText}>
         Limit how many sessions students can book with you per week
       </Text>
+
+      <Text style={styles.label}>Type of help you provide (optional)</Text>
+      
+      <View style={styles.locationsGrid}>
+        {HELP_TYPE_OPTIONS.map((option) => (
+          <Pressable
+            key={option}
+            style={[
+              styles.locationChip,
+              helpProvided.includes(option) && styles.locationChipActive,
+            ]}
+            onPress={() =>
+              setHelpProvided((prev) =>
+                prev.includes(option)
+                  ? prev.filter((h) => h !== option)
+                  : [...prev, option]
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.locationChipText,
+                helpProvided.includes(option) && styles.locationChipTextActive,
+              ]}
+            >
+              {option}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 

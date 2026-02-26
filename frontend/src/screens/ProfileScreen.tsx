@@ -14,6 +14,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api } from "../api/client";
 import { logout } from "../auth/logout";
+import AvailabilityCalendar from "../components/AvailabilityCalendar";
 
 type MeResponse = {
   id: number;
@@ -32,6 +33,7 @@ type MeResponse = {
   student?: {
     id: number;
     user_id: number;
+    bio: string | null;
     major: string | null;
     grad_year: number | null;
   } | null;
@@ -73,7 +75,7 @@ export default function ProfileScreen() {
         data.tutor?.grad_year ?? data.student?.grad_year ?? null;
       setEditMajor(major ?? "");
       setEditYear(year != null ? String(year) : "");
-      setEditBio(data.tutor?.bio ?? "");
+      setEditBio(data.tutor?.bio ?? data.student?.bio ?? "");
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to load profile");
     } finally {
@@ -96,7 +98,7 @@ export default function ProfileScreen() {
         first_name?: string;
         last_name?: string;
         tutor_profile?: { bio?: string; major?: string; grad_year?: number };
-        student_profile?: { major?: string; grad_year?: number };
+        student_profile?: { bio?: string; major?: string; grad_year?: number };
       } = {
         first_name: editFirstName.trim() || undefined,
         last_name: editLastName.trim() || undefined,
@@ -111,7 +113,11 @@ export default function ProfileScreen() {
         };
       }
       if (me.is_student) {
-        body.student_profile = { major, grad_year: year };
+        body.student_profile = {
+          bio: editBio.trim() || undefined,
+          major,
+          grad_year: year,
+        };
       }
       const updated = await api.patch<MeResponse>("/users/me", body);
       setMe(updated);
@@ -162,7 +168,7 @@ export default function ProfileScreen() {
   const fullName = `${me.first_name} ${me.last_name}`.trim();
   const major = me.tutor?.major ?? me.student?.major ?? "";
   const year = me.tutor?.grad_year ?? me.student?.grad_year ?? null;
-  const bio = me.tutor?.bio ?? "";
+  const bio = me.tutor?.bio ?? me.student?.bio ?? "";
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -201,7 +207,7 @@ export default function ProfileScreen() {
               placeholder="Graduation year"
               keyboardType="number-pad"
             />
-            {me.is_tutor && (
+            {(me.is_tutor || me.is_student) && (
               <>
                 <Text style={styles.label}>Bio</Text>
                 <TextInput
@@ -245,7 +251,7 @@ export default function ProfileScreen() {
             <Text style={styles.value}>{major || "—"}</Text>
             <Text style={styles.label}>Year</Text>
             <Text style={styles.value}>{year != null ? String(year) : "—"}</Text>
-            {(me.is_tutor || bio) && (
+            {(me.is_tutor || me.is_student || bio) && (
               <>
                 <Text style={styles.label}>Bio</Text>
                 <Text style={styles.value}>{bio || "—"}</Text>
@@ -265,10 +271,13 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {me.is_student && (
+      {(me.is_student || me.is_tutor) && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Student preferences</Text>
-          <Text style={styles.placeholder}>No preferences set yet.</Text>
+          <Text style={styles.sectionTitle}>Your availability</Text>
+          <Text style={styles.sectionSubtitle}>
+            When you're available for sessions. Add time slots for each day.
+          </Text>
+          <AvailabilityCalendar />
         </View>
       )}
 
@@ -362,6 +371,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 12,
     color: "#1B2D50",
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginBottom: 8,
   },
   label: { fontSize: 12, fontWeight: "600", color: "#6B7280", marginBottom: 4 },
   value: { fontSize: 16, color: "#111827", marginBottom: 12 },

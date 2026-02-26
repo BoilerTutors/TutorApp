@@ -7,6 +7,7 @@ type RootStackParamList = {
   Login: undefined;
   Messenger: undefined;
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
+  Settings: undefined;
 };
 
 export default function TutorScreen() {
@@ -31,7 +32,12 @@ export default function TutorScreen() {
         <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
           <Text style={styles.buttonText}>Open Messenger</Text>
         </Pressable>
-
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Profile", { role: "TUTOR" })}
+        >
+          <Text style={styles.buttonText}>Account & availability</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -81,6 +87,10 @@ const styles = StyleSheet.create({
   logoutButton: {
     backgroundColor: "#6B7280",
     marginTop: 12,
+  },
+  secondaryButton: {
+    marginTop: 10,
+    backgroundColor: "#1B2D50",
   },
   buttonText: {
     color: "#FFFFFF",

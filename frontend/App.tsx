@@ -9,9 +9,10 @@ import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
-import DashboardHeader, { ProfileHeader } from "./src/components/DashboardHeader";
+import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 
 const Stack = createNativeStackNavigator();
@@ -23,6 +24,7 @@ type RootStackParamList = {
   "Tutor Registration": undefined;
   "Student Registration": undefined;
   Messenger: undefined;
+  Settings: undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -119,7 +121,7 @@ export default function App() {
   };
 
   return (
-    <NavigationContainer linking={linking} ref={navigationRef}>
+    <NavigationContainer linking={linking as any} ref={navigationRef}>
       <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
         <Stack.Screen
           name="Login"
@@ -152,6 +154,7 @@ export default function App() {
                     routes: [{ name: "Login" }],
                   });
                 }}
+                onSettingsPress={() => navigation.navigate("Settings")}
               />
             ),
           })}
@@ -172,6 +175,7 @@ export default function App() {
                     routes: [{ name: "Login" }],
                   });
                 }}
+                onSettingsPress={() => navigation.navigate("Settings")}
               />
             ),
           })}
@@ -208,6 +212,17 @@ export default function App() {
                 onBack={() => navigation.goBack()}
                 role={(route.params as { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" } | undefined)?.role ?? "STUDENT"}
               />
+            ),
+          })}
+        />
+
+        {/* Settings Screen */}
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <SettingsHeader onBack={() => navigation.goBack()} />
             ),
           })}
         />
