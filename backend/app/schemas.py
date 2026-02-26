@@ -37,6 +37,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     is_tutor: Optional[bool] = None
     is_student: Optional[bool] = None
+    mfa_enabled: Optional[bool] = None
 
 
 class UserStatusUpdate(BaseModel):
@@ -77,6 +78,7 @@ class UserPublic(BaseModel):
     is_tutor: bool
     is_student: bool
     created_at: datetime
+    mfa_enabled: bool
 
     tutor: Optional["TutorProfilePublic"] = None
     student: Optional["StudentProfilePublic"] = None
@@ -315,6 +317,8 @@ class TokenPayload(BaseModel):
 class Message(BaseModel):
     message: str
 
+class SecurityPreferencesUpdate(BaseModel):
+    mfa_enabled: bool
 
 # ===========================================================
 # ---- Messaging schemas ----

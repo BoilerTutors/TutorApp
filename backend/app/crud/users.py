@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session  # type: ignore[import]
 from app.auth import hash_password
 from app.crud.embeddings import refresh_student_embeddings, refresh_tutor_embeddings
 from app.models import User, TutorProfile, StudentProfile, TutorClass, StudentClass
-from app.schemas import ProfileUpdate, UserCreate
+from app.schemas import ProfileUpdate, UserCreate, SecurityPreferencesUpdate
 
 
 
@@ -143,3 +143,12 @@ def delete_user(db: Session, user: User) -> None:
     """Permanently delete a user and all related data (cascade)."""
     db.delete(user)
     db.commit()
+
+
+# change a user's security preferences
+def update_user_security_preferences(db: Session, user: User, data: SecurityPreferencesUpdate) -> User:
+    """Update the current user's security preferences."""
+    user.mfa_enabled = data.mfa_enabled
+    db.commit()
+    db.refresh(user)
+    return user

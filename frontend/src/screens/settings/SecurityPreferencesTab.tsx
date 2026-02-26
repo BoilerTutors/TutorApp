@@ -1,29 +1,27 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View, Platform } from "react-native";
 import { api } from "../../api/client";
 
-type NotificationPreferences = {
-  user_id: number;
-  email_digest_enabled: boolean;
-  updated_at: string;
+type SecurityPreferences = {
+  mfa_enabled: boolean;
 };
 
-export default function NotificationPreferencesTab({ showAlert }: { showAlert: (title: string, message: string) => void }) {
-  const [emailDigest, setEmailDigest] = useState(false);
+export default function SecurityPreferencesTab({ showAlert }: { showAlert: (title: string, message: string) => void }) {
+  const [mfaEnabled, setMfaEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const allEnabledCount = useMemo(
-    () => [emailDigest].filter(Boolean).length,
-    [emailDigest]
+    () => [mfaEnabled].filter(Boolean).length,
+    [mfaEnabled]
   );
 
   React.useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const prefs = await api.get<NotificationPreferences>("/notifications/preferences/me");
+        const prefs = await api.get<SecurityPreferences>("/users/me/security-preferences");
         if (!mounted) return;
-        setEmailDigest(!!prefs.email_digest_enabled);
+        setMfaEnabled(!!prefs.mfa_enabled);
       } catch {
         // Keep default UI state if preferences are unavailable.
       }
@@ -37,10 +35,10 @@ export default function NotificationPreferencesTab({ showAlert }: { showAlert: (
   const onSave = async () => {
     try {
       setSaving(true);
-      await api.put<NotificationPreferences>("/notifications/preferences/me", {
-        email_digest_enabled: emailDigest,
+      await api.put<SecurityPreferences>("/users/me/security-preferences", {
+        mfa_enabled: mfaEnabled,
       });
-      showAlert("Preferences updated", "Notification preferences saved successfully.");
+      showAlert("Preferences updated", "Security preferences saved successfully.");
     } catch (e) {
       showAlert("Error", e instanceof Error ? e.message : "Failed to save preferences");
     } finally {
@@ -51,16 +49,16 @@ export default function NotificationPreferencesTab({ showAlert }: { showAlert: (
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>Notification Preferences</Text>
+        <Text style={styles.title}>Security Preferences</Text>
         <Text style={styles.subtitle}>
           Choose which alerts you want to receive. This screen controls preferences only.
         </Text>
 
         <PreferenceRow
-          label="Email digest"
-          helper="Get a daily summary of unread activity."
-          enabled={emailDigest}
-          onToggle={() => setEmailDigest((v) => !v)}
+          label="Enable MFA"
+          helper="Enable multi-factor authentication for your account via email."
+          enabled={mfaEnabled}
+          onToggle={() => setMfaEnabled((v) => !v)}
         />
 
         <Pressable style={styles.saveBtn} onPress={() => void onSave()} disabled={saving}>
