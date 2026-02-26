@@ -92,6 +92,19 @@ class UserLookupPublic(BaseModel):
     first_name: str
     last_name: str
 
+
+class UserProfileDetailsPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    is_tutor: bool
+    is_student: bool
+    tutor: Optional["TutorProfilePublic"] = None
+    student: Optional["StudentProfilePublic"] = None
+    student_average_help_level: Optional[float] = None
+
 # ===========================================================
 # ---- Tutor profile schemas ----
 # ===========================================================
