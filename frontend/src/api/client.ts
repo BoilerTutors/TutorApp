@@ -1,6 +1,14 @@
 import { API_BASE_URL } from "../config";
+import { clearToken } from "../auth/storage";
 
 type RequestInitWithBody = Omit<RequestInit, "body"> & { body?: unknown };
+
+/** Called when a request returns 401 (after clearing token). Use to show a message and navigate to Login. */
+let onUnauthorized: (() => void) | null = null;
+
+export function setOnUnauthorized(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
 
 /**
  * Base URL for all backend requests. Use request() or get/post/etc. so every
@@ -50,6 +58,17 @@ async function request<T>(
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      // Had a token → session expired: clear and notify so app can redirect to Login.
+      if (authToken) {
+        authToken = null;
+        await clearToken();
+        onUnauthorized?.();
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+      // No token (e.g. wrong login credentials): show message on the login screen.
+      throw new Error("Invalid email or password.");
+    }
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
   }
