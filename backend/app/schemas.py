@@ -45,6 +45,28 @@ class UserStatusUpdate(BaseModel):
     status: int = Field(ge=0, le=2)
 
 
+class ProfileUpdate(BaseModel):
+    """Update current user profile (name + optional tutor/student profile fields)."""
+
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    tutor_profile: Optional["TutorProfileUpdate"] = None
+    student_profile: Optional["StudentProfileUpdate"] = None
+
+
+class DeleteAccountRequest(BaseModel):
+    """Confirm account deletion by typing DELETE."""
+
+    confirmation: str = Field(min_length=1)
+
+    @field_validator("confirmation")
+    @classmethod
+    def must_be_delete(cls, v: str) -> str:
+        if v.strip().upper() != "DELETE":
+            raise ValueError('You must type DELETE to confirm permanent account deletion')
+        return v.strip().upper()
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +90,9 @@ class TutorProfileCreate(BaseModel):
     hourly_rate_cents: Optional[int] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    classes: Optional[list["TutorClassCreate"]] = None
+    help_provided: Optional[list[str]] = None
 
 
 class TutorProfileUpdate(BaseModel):
@@ -75,6 +100,8 @@ class TutorProfileUpdate(BaseModel):
     hourly_rate_cents: Optional[int] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    help_provided: Optional[list[str]] = None
 
 
 class TutorProfilePublic(BaseModel):
@@ -86,20 +113,29 @@ class TutorProfilePublic(BaseModel):
     hourly_rate_cents: Optional[int] = None
     major: Optional[str] = None
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
     average_rating: Optional[float] = None
+    help_provided: Optional[list[str]] = None
 
 # ===========================================================
 # ---- Student profile schemas ----
 # ===========================================================
 
 class StudentProfileCreate(BaseModel):
+    bio: Optional[str] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    classes: Optional[list["StudentClassCreate"]] = None
+    help_needed: Optional[list[str]] = None
 
 
 class StudentProfileUpdate(BaseModel):
+    bio: Optional[str] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    help_needed: Optional[list[str]] = None
 
 
 class StudentProfilePublic(BaseModel):
@@ -107,8 +143,12 @@ class StudentProfilePublic(BaseModel):
 
     id: int
     user_id: int
+    bio: Optional[str] = None
     major: Optional[str] = None
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    help_needed: Optional[list[str]] = None
+
 
 # ===========================================================
 # ---- Availability schemas ----
@@ -241,6 +281,7 @@ class TutorClassCreate(BaseModel):
     semester: SemesterCode
     year_taken: int
     grade_received: str = Field(max_length=2)
+    has_taed: bool = False
 
 
 class TutorClassPublic(BaseModel):
@@ -252,6 +293,7 @@ class TutorClassPublic(BaseModel):
     semester: SemesterCode
     year_taken: int
     grade_received: str
+    has_taed: bool
 
 # ===========================================================
 # ---- Auth / misc schemas ----
@@ -317,7 +359,63 @@ class ConversationWithPartner(BaseModel):
     created_at: datetime
     updated_at: datetime
     other_user_id: int
+    other_user_first_name: Optional[str] = None
+    other_user_last_name: Optional[str] = None
     last_message: Optional[MessagePublic] = None
+
+
+# ===========================================================
+# ---- Matching schemas ----
+# ===========================================================
+class MatchResultPublic(BaseModel):
+    rank: int
+    tutor_id: int
+    tutor_profile_id: Optional[int] = None
+    tutor_first_name: str
+    tutor_last_name: str
+    tutor_major: Optional[str] = None
+    similarity_score: float
+    embedding_similarity: Optional[float] = None
+    class_strength: Optional[float] = None
+    availability_overlap: Optional[float] = None
+    location_match: Optional[float] = None
+
+
+class MatchSelectRequest(BaseModel):
+    tutor_id: int
+
+
+class DeviceTokenRegisterRequest(BaseModel):
+    token: str
+    platform: Optional[str] = None
+
+
+class DeviceTokenPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    token: str
+    platform: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    event_type: str
+    title: str
+    body: str
+    payload_json: Optional[dict] = None
+    is_read: bool
+    created_at: datetime
+
 
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
+
+ProfileUpdate.model_rebuild()
+

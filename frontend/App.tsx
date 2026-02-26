@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, View, Image, Dimensions, Text } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -8,9 +8,12 @@ import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
+import MatchesScreen from "./src/screens/MatchesScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
-import DashboardHeader from "./src/components/DashboardHeader";
+import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
 
@@ -22,7 +25,27 @@ type RootStackParamList = {
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
   "Student Registration": undefined;
-  Messenger: undefined;
+  Messenger:
+    | {
+        openTutorUserId?: number;
+        openTutorName?: string;
+      }
+    | undefined;
+  Settings:
+    | {
+        initialTab?: string;
+      }
+    | undefined;
+  Matches: {
+    matches?: Array<{
+      rank: number;
+      tutor_id: number;
+      tutor_first_name: string;
+      tutor_last_name: string;
+      tutor_major: string | null;
+      similarity_score: number;
+    }>;
+  } | undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -109,8 +132,17 @@ export default function App() {
     );
   }
 
+  const linking = {
+    prefixes: [],
+    config: {
+      screens: {
+        Profile: "profile",
+      },
+    },
+  };
+
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer linking={linking as any} ref={navigationRef}>
       <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
         <Stack.Screen
           name="Login"
@@ -143,6 +175,10 @@ export default function App() {
                     routes: [{ name: "Login" }],
                   });
                 }}
+                onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() =>
+                  navigation.navigate("Settings", { initialTab: "notifications" })
+                }
               />
             ),
           })}
@@ -163,6 +199,10 @@ export default function App() {
                     routes: [{ name: "Login" }],
                   });
                 }}
+                onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() =>
+                  navigation.navigate("Settings", { initialTab: "notifications" })
+                }
               />
             ),
           })}
@@ -187,6 +227,36 @@ export default function App() {
           name="Messenger" 
           component={MessengerScreen}
           options={{ header: () => <GeneralHeader title="Messenger" /> }} 
+        />
+
+        {/* Profile Screen - accessible at route "Profile" (/profile in deep linking) */}
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+          options={({ navigation, route }) => ({
+            header: () => (
+              <ProfileHeader
+                onBack={() => navigation.goBack()}
+                role={(route.params as { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" } | undefined)?.role ?? "STUDENT"}
+              />
+            ),
+          })}
+        />
+
+        {/* Settings Screen */}
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <SettingsHeader onBack={() => navigation.goBack()} />
+            ),
+          })}
+        />
+        <Stack.Screen
+          name="Matches"
+          component={MatchesScreen}
+          options={{ title: "Your Matches" }}
         />
       </Stack.Navigator>
     </NavigationContainer>

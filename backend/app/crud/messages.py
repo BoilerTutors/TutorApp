@@ -57,6 +57,7 @@ def list_conversations_for_user(db: Session, user_id: int):
     result = []
     for conv in conversations:
         other_id = conv.user2_id if conv.user1_id == user_id else conv.user1_id
+        other_user = db.get(User, other_id)
         last_msg = (
             db.execute(
                 select(Message)
@@ -73,6 +74,8 @@ def list_conversations_for_user(db: Session, user_id: int):
             "created_at": conv.created_at,
             "updated_at": conv.updated_at,
             "other_user_id": other_id,
+            "other_user_first_name": other_user.first_name if other_user else None,
+            "other_user_last_name": other_user.last_name if other_user else None,
             "last_message": last_msg,
         })
     return result

@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import (
+    ARRAY,
     String,
     Integer,
     Boolean,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     Time,
     Float,
     CheckConstraint,
+    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -84,6 +86,104 @@ class User(Base):
         foreign_keys="Message.sender_id",
         back_populates="sender",
     )
+    embeddings: Mapped[list["UserEmbedding"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    device_tokens: Mapped[list["UserDeviceToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserEmbedding(Base):
+    __tablename__ = "user_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "entity_type",
+            "field_name",
+            "model_name",
+            name="uq_user_embedding_slot",
+        ),
+        CheckConstraint("entity_type IN ('student', 'tutor')", name="ck_embedding_entity"),
+        CheckConstraint("field_name IN ('bio', 'help', 'locations')", name="ck_embedding_field"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    entity_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(32), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False, default="local-hash-v1")
+    embedding: Mapped[list[float]] = mapped_column(ARRAY(Float), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="embeddings")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="notifications")
+
+
+class UserDeviceToken(Base):
+    __tablename__ = "user_device_tokens"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_user_device_token_value"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token: Mapped[str] = mapped_column(String(255), nullable=False)
+    platform: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="device_tokens")
 
 
 class TutorProfile(Base):
@@ -106,6 +206,12 @@ class TutorProfile(Base):
     hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     major: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     grad_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    preferred_locations: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True, default=None
+    )
+    help_provided: Mapped[Optional[list[str]]] = mapped_column(
+    ARRAY(Text), nullable=True, default=None
+)
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(
@@ -140,10 +246,15 @@ class StudentProfile(Base):
         index=True,
     )
 
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     major: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     grad_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-
+    preferred_locations: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True, default=None
+    )
+    help_needed: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True, default=None
+    )
 
     user: Mapped["User"] = relationship(back_populates="student")
     classes_enrolled: Mapped[list["StudentClass"]] = relationship(
@@ -396,7 +507,56 @@ class TutorClass(Base):
     semester: Mapped[str] = mapped_column(String(1), nullable=False)        # "F" or "S"
     year_taken: Mapped[int] = mapped_column(Integer, nullable=False)        # e.g. 2025
     grade_received: Mapped[str] = mapped_column(String(2), nullable=False)  # "A+", "A", "A-", "B+", etc.
+    has_taed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     tutor: Mapped["TutorProfile"] = relationship(back_populates="classes_tutoring")
     class_: Mapped["Class"] = relationship(back_populates="tutor_classes")
 
+
+class MatchRun(Base):
+    __tablename__ = "match_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False, default="local-hash-v1")
+    top_k: Mapped[int] = mapped_column(Integer, nullable=False)
+    weights_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    matches: Mapped[list["Match"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class Match(Base):
+    __tablename__ = "matches"
+    __table_args__ = (
+        UniqueConstraint("run_id", "rank", name="uq_matches_run_rank"),
+        UniqueConstraint("run_id", "tutor_id", name="uq_matches_run_tutor"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("match_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tutor_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
+    embedding_similarity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    class_strength: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    availability_overlap: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    location_match: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    run: Mapped["MatchRun"] = relationship(back_populates="matches")

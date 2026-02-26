@@ -1,12 +1,27 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { logout } from "../auth/logout";
+import { api } from "../api/client";
+
+type MatchItem = {
+  rank: number;
+  tutor_id: number;
+  tutor_first_name: string;
+  tutor_last_name: string;
+  tutor_major: string | null;
+  similarity_score: number;
+};
 
 type RootStackParamList = {
   Login: undefined;
   Messenger: undefined;
+  Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
+  Settings: undefined;
+  Matches: { matches?: MatchItem[] } | undefined;
 };
 
 type QuickAction = {
@@ -25,7 +40,24 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [computingMatches, setComputingMatches] = useState(false);
 
+  const handleLogout = async () => {
+    await logout();
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  const handleComputeMatches = async () => {
+    setComputingMatches(true);
+    try {
+      const matches = await api.post<MatchItem[]>("/matches/me/refresh");
+      navigation.navigate("Matches", { matches });
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to compute matches");
+    } finally {
+      setComputingMatches(false);
+    }
+  };
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Welcome Section */}
@@ -45,13 +77,27 @@ export default function StudentScreen() {
               if (action.label === "Messages") {
                 navigation.navigate("Messenger");
               }
+              else if (action.label == "Profile") {
+                navigation.navigate("Profile", { role: "STUDENT" });
+              }
             }}
           >
             <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
-            <Text style={styles.actionText}>{action.label}</Text>
+            <Text style={styles.buttonText}>{action.label}</Text>
           </Pressable>
         ))}
       </View>
+      <Pressable
+          style={[styles.actionButton, styles.matchButton]}
+          onPress={handleComputeMatches}
+          disabled={computingMatches}
+        >
+          {computingMatches ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Calculate Matches</Text>
+          )}
+        </Pressable>
     </ScrollView>
   );
 }
@@ -109,7 +155,15 @@ const styles = StyleSheet.create({
   actionIcon: {
     marginRight: 6,
   },
-  actionText: {
+  secondaryButton: {
+    marginTop: 10,
+    backgroundColor: "#1B2D50",
+  },
+  matchButton: {
+    marginTop: 10,
+    backgroundColor: "#1F7A4C",
+  },
+  buttonText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",

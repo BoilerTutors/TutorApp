@@ -15,7 +15,8 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { TutorClass, SessionMode } from "../types/models";
-import { api } from "../api/client";
+import { api, setAuthToken } from "../api/client";
+import { saveToken } from "../auth/storage";
 
 type RootStackParamList = {
   Login: undefined;
@@ -47,6 +48,14 @@ const AVAILABLE_CLASSES = [
 
 const GRADE_OPTIONS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C"];
 const SEMESTER_OPTIONS = ["Fall 2025", "Spring 2025", "Fall 2024", "Spring 2024", "Fall 2023", "Spring 2023"];
+
+const HELP_TYPE_OPTIONS = [
+  "Concept review",
+  "Homework help",
+  "Exam prep",
+  "Assignment debugging",
+  "Other",
+];
 
 const PURDUE_LOCATIONS = [
   "Lawson Computer Science Building",
@@ -82,6 +91,15 @@ const splitFullName = (full: string): [string, string] => {
   return [first, last];
 };
 
+/** Map "Fall 2025" / "Spring 2025" to backend semester code and year. */
+function parseSemester(semesterTaken: string): { semester: "F" | "S"; year_taken: number } | null {
+  const match = semesterTaken.match(/^(Fall|Spring)\s+(\d{4})$/);
+  if (!match) return null;
+  const year = parseInt(match[2], 10);
+  const semester = match[1] === "Fall" ? "F" : "S";
+  return { semester, year_taken: year };
+}
+
 export default function TutorRegistrationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "Tutor Registration">>();
@@ -95,6 +113,9 @@ export default function TutorRegistrationScreen() {
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
 
+  const [major, setMajor] = useState("");
+  const [gradYear, setGradYear] = useState("");
+
   // Step 2: Class Selection
   const [selectedClasses, setSelectedClasses] = useState<SelectedClass[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -104,6 +125,7 @@ export default function TutorRegistrationScreen() {
   const [sessionMode, setSessionMode] = useState<SessionMode | "both">("both");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [weeklySessionCap, setWeeklySessionCap] = useState("5");
+  const [helpProvided, setHelpProvided] = useState<string[]>([]);
 
   // Success state
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -167,7 +189,16 @@ export default function TutorRegistrationScreen() {
           showAlert("Required", "Please enter your full name");
           return false;
         }
+        if (gradYear.trim()) {
+          const n = parseInt(gradYear.trim(), 10);
+          if (Number.isNaN(n) || n < 1900 || n > 2100) {
+            showAlert("Invalid", "Please enter a valid graduation year (e.g. 2026).");
+            return false;
+          }
+        }
+
         return true;
+        
       case 2:
         if (selectedClasses.length === 0) {
           showAlert("Required", "Please select at least one class to tutor");
@@ -210,17 +241,39 @@ export default function TutorRegistrationScreen() {
 
     const [firstName, lastName] = splitFullName(fullName);
 
-    const payload = {
-      email,
-      first_name: firstName,
-      last_name: lastName,
-      password,
-      is_tutor: true,
-      is_student: false,
-      tutor_profile: {
-        bio: bio || undefined,
-      },
-    };
+    const gradYearNum = gradYear.trim() ? parseInt(gradYear.trim(), 10) : undefined;
+
+    const tutorClasses = selectedClasses
+      .map((c) => {
+        const parsed = parseSemester(c.semesterTaken ?? "");
+        const grade = c.gradeReceived;
+        if (!parsed || !grade) return null;
+        return {
+          class_id: c.id,
+          semester: parsed.semester,
+          year_taken: parsed.year_taken,
+          grade_received: grade,
+          has_taed: c.hasTAed,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      const payload = {
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        password,
+        is_tutor: true,
+        is_student: false,
+        tutor_profile: {
+          bio: bio || undefined,
+          major: major.trim() || undefined,
+          grad_year: gradYearNum,
+          preferred_locations: selectedLocations.length > 0 ? selectedLocations : undefined,
+          help_provided: helpProvided.length > 0 ? helpProvided : undefined,
+          classes: tutorClasses.length > 0 ? tutorClasses : undefined,
+        },
+      };
 
     setSubmitting(true);
     try {
@@ -237,8 +290,22 @@ export default function TutorRegistrationScreen() {
     }
   };
 
-  const goToDashboard = () => {
-    navigation.navigate("Tutor Dashboard");
+  const goToDashboard = async () => {
+    try {
+      const data = await api.post<{ access_token: string; token_type: string }>(
+        "/auth/login",
+        { email: email.trim().toLowerCase(), password }
+      );
+      setAuthToken(data.access_token);
+      await saveToken(data.access_token);
+      navigation.navigate("Tutor Dashboard");
+    } catch (e) {
+      showAlert(
+        "Auto-login failed",
+        e instanceof Error ? e.message : "Please sign in from the Login screen."
+      );
+      navigation.navigate("Login");
+    }
   };
 
   // Render step indicator
@@ -302,6 +369,33 @@ export default function TutorRegistrationScreen() {
           onChangeText={setBio}
           multiline
           numberOfLines={4}
+        />
+      </View>
+
+      <Text style={styles.label}>Major (optional)</Text>
+
+      <View style={styles.inputWrap}>
+        <Ionicons name="school" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Computer Science"
+          placeholderTextColor="#B0B6C3"
+          value={major}
+          onChangeText={setMajor}
+        />
+      </View>
+
+      <Text style={styles.label}>Graduation year (optional)</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="calendar-outline" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. 2026"
+          placeholderTextColor="#B0B6C3"
+          value={gradYear}
+          onChangeText={setGradYear}
+          keyboardType="number-pad"
+          maxLength={4}
         />
       </View>
     </View>
@@ -526,6 +620,36 @@ export default function TutorRegistrationScreen() {
       <Text style={styles.helperText}>
         Limit how many sessions students can book with you per week
       </Text>
+
+      <Text style={styles.label}>Type of help you provide (optional)</Text>
+      
+      <View style={styles.locationsGrid}>
+        {HELP_TYPE_OPTIONS.map((option) => (
+          <Pressable
+            key={option}
+            style={[
+              styles.locationChip,
+              helpProvided.includes(option) && styles.locationChipActive,
+            ]}
+            onPress={() =>
+              setHelpProvided((prev) =>
+                prev.includes(option)
+                  ? prev.filter((h) => h !== option)
+                  : [...prev, option]
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.locationChipText,
+                helpProvided.includes(option) && styles.locationChipTextActive,
+              ]}
+            >
+              {option}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 

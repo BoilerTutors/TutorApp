@@ -1,7 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, users, tutors, students, classes, sessions, availability, reviews, sessions, messages
+from app.routers import (
+    auth,
+    users,
+    tutors,
+    students,
+    classes,
+    sessions,
+    availability,
+    reviews,
+    messages,
+    matches,
+    notifications,
+)
 
 app = FastAPI(title="BoilerTutors API", version="0.1.0")
 
@@ -27,6 +39,8 @@ app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(availability.router, prefix="/availability", tags=["availability"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
+app.include_router(matches.router, prefix="/matches", tags=["matches"])
+app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 
 
 @app.get("/")

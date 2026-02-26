@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 type RootStackParamList = {
   Login: undefined;
   Messenger: undefined;
+  Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
+  Settings: undefined;
 };
 
 type QuickAction = {
