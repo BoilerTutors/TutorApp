@@ -20,7 +20,7 @@ const getApiUrl = (): string => {
   if (typeof fromEnv === "string" && fromEnv) {
     return fromEnv.replace(/\/$/, "");
   }
-  return "http://localhost:8000";
+  return "http://127.0.0.1:8000/";
 };
 
 export const API_BASE_URL = getApiUrl();
