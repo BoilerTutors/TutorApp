@@ -359,6 +359,8 @@ class ConversationWithPartner(BaseModel):
     created_at: datetime
     updated_at: datetime
     other_user_id: int
+    other_user_first_name: Optional[str] = None
+    other_user_last_name: Optional[str] = None
     last_message: Optional[MessagePublic] = None
 
 
@@ -368,6 +370,7 @@ class ConversationWithPartner(BaseModel):
 class MatchResultPublic(BaseModel):
     rank: int
     tutor_id: int
+    tutor_profile_id: Optional[int] = None
     tutor_first_name: str
     tutor_last_name: str
     tutor_major: Optional[str] = None
@@ -376,6 +379,10 @@ class MatchResultPublic(BaseModel):
     class_strength: Optional[float] = None
     availability_overlap: Optional[float] = None
     location_match: Optional[float] = None
+
+
+class MatchSelectRequest(BaseModel):
+    tutor_id: int
 
 
 UserCreate.model_rebuild()
