@@ -1,7 +1,7 @@
 from datetime import datetime, time
 from typing import Optional, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, model_validator, field_validator
 
 
 # Type aliases for the session status and semester code
@@ -37,6 +37,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     is_tutor: Optional[bool] = None
     is_student: Optional[bool] = None
+    mfa_enabled: Optional[bool] = None
 
 
 class UserStatusUpdate(BaseModel):
@@ -77,9 +78,19 @@ class UserPublic(BaseModel):
     is_tutor: bool
     is_student: bool
     created_at: datetime
+    mfa_enabled: bool
 
     tutor: Optional["TutorProfilePublic"] = None
     student: Optional["StudentProfilePublic"] = None
+
+
+class UserLookupPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
 
 # ===========================================================
 # ---- Tutor profile schemas ----
@@ -93,6 +104,7 @@ class TutorProfileCreate(BaseModel):
     preferred_locations: Optional[list[str]] = None
     classes: Optional[list["TutorClassCreate"]] = None
     help_provided: Optional[list[str]] = None
+    session_mode: Optional[str] = None  # "online" | "in_person" | "both"
 
 
 class TutorProfileUpdate(BaseModel):
@@ -102,6 +114,21 @@ class TutorProfileUpdate(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     help_provided: Optional[list[str]] = None
+    session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    classes: Optional[list["TutorClassCreate"]] = None
+
+
+class TutorClassWithClassPublic(BaseModel):
+    """TutorClass with course_code from the related Class."""
+    id: int
+    tutor_id: int
+    class_id: int
+    semester: str
+    year_taken: int
+    grade_received: str
+    has_taed: bool
+    course_code: str
+    professor: Optional[str] = None
 
 
 class TutorProfilePublic(BaseModel):
@@ -116,6 +143,49 @@ class TutorProfilePublic(BaseModel):
     preferred_locations: Optional[list[str]] = None
     average_rating: Optional[float] = None
     help_provided: Optional[list[str]] = None
+    session_mode: Optional[str] = None
+    classes_tutoring: list["TutorClassWithClassPublic"] = []
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def build_classes_tutoring(cls, data: object, handler):
+        """Build classes_tutoring from ORM TutorClass objects with class_ relation."""
+        if hasattr(data, "classes_tutoring") and not isinstance(data, dict):
+            tutor = data
+            classes_data = []
+            for tc in tutor.classes_tutoring:
+                c = getattr(tc, "class_", None)
+                course_code = f"{c.subject} {c.class_number}" if c else "Unknown"
+                classes_data.append(
+                    TutorClassWithClassPublic(
+                        id=tc.id,
+                        tutor_id=tc.tutor_id,
+                        class_id=tc.class_id,
+                        semester=tc.semester,
+                        year_taken=tc.year_taken,
+                        grade_received=tc.grade_received,
+                        has_taed=tc.has_taed,
+                        course_code=course_code,
+                        professor=c.professor if c else None,
+                    )
+                )
+            avg_rating = getattr(tutor, "average_rating", None)
+            return handler(
+                {
+                    "id": tutor.id,
+                    "user_id": tutor.user_id,
+                    "bio": tutor.bio,
+                    "hourly_rate_cents": tutor.hourly_rate_cents,
+                    "major": tutor.major,
+                    "grad_year": tutor.grad_year,
+                    "preferred_locations": tutor.preferred_locations,
+                    "average_rating": avg_rating,
+                    "help_provided": tutor.help_provided,
+                    "session_mode": getattr(tutor, "session_mode", None),
+                    "classes_tutoring": classes_data,
+                }
+            )
+        return handler(data)
 
 # ===========================================================
 # ---- Student profile schemas ----
@@ -254,6 +324,11 @@ class ClassPublic(BaseModel):
     class_number: int
     professor: str
 
+    @computed_field
+    @property
+    def course_code(self) -> str:
+        return f"{self.subject} {self.class_number}"
+
 # ===========================================================
 # ---- StudentClass schemas ----
 # ===========================================================
@@ -315,6 +390,8 @@ class TokenPayload(BaseModel):
 class Message(BaseModel):
     message: str
 
+class SecurityPreferencesUpdate(BaseModel):
+    mfa_enabled: bool
 
 # ===========================================================
 # ---- Messaging schemas ----
@@ -331,6 +408,7 @@ class MessagePublic(BaseModel):
     conversation_id: int
     sender_id: int
     content: str
+    attachment: Optional["MessageAttachmentPublic"] = None
     created_at: datetime
 
 
@@ -414,8 +492,34 @@ class NotificationPublic(BaseModel):
     created_at: datetime
 
 
+class NotificationPreferencesPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    email_digest_enabled: bool
+    email_digest_frequency: Literal["12h", "daily", "weekly"] = "daily"
+    updated_at: datetime
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    email_digest_enabled: bool
+    email_digest_frequency: Literal["12h", "daily", "weekly"] = "daily"
+
+
+class MessageAttachmentPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    message_id: int
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime
+
+
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
+MessagePublic.model_rebuild()
 
 ProfileUpdate.model_rebuild()
 

@@ -10,7 +10,7 @@ from typing import Optional
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.models import Conversation, Message, User
+from app.models import Conversation, Message, MessageAttachment, User
 
 
 def _canonical_pair(user_id_a: int, user_id_b: int) -> tuple[int, int]:
@@ -118,3 +118,44 @@ def create_message(
     db.commit()
     db.refresh(msg)
     return msg
+
+
+def create_message_attachment(
+    db: Session,
+    *,
+    message_id: int,
+    file_name: str,
+    mime_type: str,
+    size_bytes: int,
+    storage_path: str,
+) -> MessageAttachment:
+    row = MessageAttachment(
+        message_id=message_id,
+        file_name=file_name,
+        mime_type=mime_type,
+        size_bytes=size_bytes,
+        storage_path=storage_path,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_attachment_for_user(
+    db: Session,
+    *,
+    attachment_id: int,
+    user_id: int,
+) -> MessageAttachment | None:
+    row = (
+        db.query(MessageAttachment)
+        .join(Message, Message.id == MessageAttachment.message_id)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .filter(
+            MessageAttachment.id == attachment_id,
+            (Conversation.user1_id == user_id) | (Conversation.user2_id == user_id),
+        )
+        .first()
+    )
+    return row

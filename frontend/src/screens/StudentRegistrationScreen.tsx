@@ -268,7 +268,7 @@ export default function StudentRegistrationScreen() {
 
     setSubmitting(true);
     try {
-      await api.post("/users", payload);
+      await api.post("/users/", payload);
       setIsSubmitted(true);
     } catch (e) {
       const message =

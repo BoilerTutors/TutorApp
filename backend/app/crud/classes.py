@@ -1,5 +1,8 @@
-"""CRUD operations for Class, StudentClass, and TutorClass.
+"""CRUD operations for Class, StudentClass, and TutorClass."""
+from sqlalchemy.orm import Session, joinedload
+from app.models import Class, TutorClass, StudentClass, TutorProfile, StudentProfile# type: ignore[import]
 
+"""
 - create_class (create a new class entry)
 - get_class_by_id
 - list_classes (with optional subject/professor filters)

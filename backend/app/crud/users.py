@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session  # type: ignore[import]
 from app.auth import hash_password
 from app.crud.embeddings import refresh_student_embeddings, refresh_tutor_embeddings
 from app.models import User, TutorProfile, StudentProfile, TutorClass, StudentClass
-from app.schemas import ProfileUpdate, UserCreate
+from app.schemas import ProfileUpdate, UserCreate, SecurityPreferencesUpdate
 
 
 
@@ -46,6 +46,7 @@ def create_user(db: Session, data: UserCreate) -> User:
             grad_year=data.tutor_profile.grad_year,
             preferred_locations=data.tutor_profile.preferred_locations or None,
             help_provided=data.tutor_profile.help_provided or None,
+            session_mode=data.tutor_profile.session_mode or "both",
         )
         db.add(tutor)
         db.flush()
@@ -115,6 +116,24 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
         if t.help_provided is not None:
             user.tutor.help_provided = t.help_provided or None
             tutor_embedding_needs_refresh = True
+        if t.session_mode is not None:
+            user.tutor.session_mode = t.session_mode
+        if t.classes is not None:
+            for tc in user.tutor.classes_tutoring:
+                db.delete(tc)
+            db.flush()
+            for tc in t.classes:
+                db.add(
+                    TutorClass(
+                        tutor_id=user.tutor.id,
+                        class_id=tc.class_id,
+                        semester=tc.semester,
+                        year_taken=tc.year_taken,
+                        grade_received=tc.grade_received,
+                        has_taed=tc.has_taed,
+                    )
+                )
+            tutor_embedding_needs_refresh = True
         if tutor_embedding_needs_refresh:
             refresh_tutor_embeddings(db, user.tutor)
     if data.student_profile is not None and user.student is not None:
@@ -144,3 +163,12 @@ def delete_user(db: Session, user: User) -> None:
     """Permanently delete a user and all related data (cascade)."""
     db.delete(user)
     db.commit()
+
+
+# change a user's security preferences
+def update_user_security_preferences(db: Session, user: User, data: SecurityPreferencesUpdate) -> User:
+    """Update the current user's security preferences."""
+    user.mfa_enabled = data.mfa_enabled
+    db.commit()
+    db.refresh(user)
+    return user

@@ -11,12 +11,15 @@ import MessengerScreen from "./src/screens/MessengerScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import MatchesScreen from "./src/screens/MatchesScreen";
+import NotificationsTab from "./src/screens/settings/NotificationsTab";
+import HelpScreen from "./src/screens/HelpScreen";
 import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
 import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
+import GeneralHeader from "./src/components/GeneralHeader";
 import { AuthProvider } from "./src/context/AuthContext";
 
 const Stack = createNativeStackNavigator();
@@ -40,6 +43,8 @@ type RootStackParamList = {
         initialTab?: string;
       }
     | undefined;
+  Notifications: undefined;
+  Help: undefined;
   Matches: {
     matches?: Array<{
       rank: number;
@@ -55,7 +60,7 @@ type RootStackParamList = {
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
 type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
-const AUTH_CHECK_TIMEOUT_MS = 5000;
+const AUTH_CHECK_TIMEOUT_MS = 15000;
 type MeResponse = { is_tutor: boolean; is_student: boolean };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -106,9 +111,14 @@ export default function App() {
         if (!cancelled) {
           setInitialRoute(route);
         }
-      } catch {
+      } catch (e) {
         setAuthToken(null);
-        await clearToken();
+        // Only clear token on auth failure (401). For network/timeout errors,
+        // keep the token so a refresh or retry can restore the session.
+        const isAuthError = e instanceof Error && e.message.includes("session has expired");
+        if (isAuthError) {
+          await clearToken();
+        }
         if (!cancelled) {
           setInitialRoute("Login");
         }
@@ -208,6 +218,51 @@ export default function App() {
             })}
           />
 
+        {/* Student Dashboard Screen */}
+        <Stack.Screen
+          name="Student Dashboard"
+          component={StudentScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <DashboardHeader
+                role="STUDENT"
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  });
+                }}
+                onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() => navigation.navigate("Notifications")}
+                onHelpPress={() => navigation.navigate("Help")}
+              />
+            ),
+          })}
+        />
+
+        {/* Tutor Dashboard Screen */}
+        <Stack.Screen
+          name="Tutor Dashboard"
+          component={TutorScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <DashboardHeader
+                role="TUTOR"
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  });
+                }}
+                onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() => navigation.navigate("Notifications")}
+                onHelpPress={() => navigation.navigate("Help")}
+              />
+            ),
+          })}
+        />
           {/* Tutor Registration Screen */}
           <Stack.Screen 
             name="Tutor Registration" 
@@ -229,6 +284,19 @@ export default function App() {
             options={{ headerShown: false }} 
           />
 
+        {/* Student Registration Screen */}
+        <Stack.Screen 
+          name="Student Registration" 
+          component={StudentRegistrationScreen} 
+          options={{ header: () => <GeneralHeader title="Student Registration" /> }} 
+        />
+
+        {/* Messenger Screen */}
+        <Stack.Screen 
+          name="Messenger" 
+          component={MessengerScreen}
+          options={{ header: () => <GeneralHeader title="Messenger" /> }} 
+        />
           {/* Tutor Reviews Screen */}
           <Stack.Screen 
             name="Tutor Reviews" 
@@ -268,6 +336,35 @@ export default function App() {
             })}
           />
 
+        {/* Settings Screen */}
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <SettingsHeader onBack={() => navigation.goBack()} />
+            ),
+          })}
+        />
+        <Stack.Screen
+          name="Notifications"
+          component={NotificationsTab}
+          options={{ title: "Notifications" }}
+        />
+        <Stack.Screen
+          name="Help"
+          component={HelpScreen}
+          options={({ navigation }) => ({
+            header: () => <GeneralHeader title="Help" />,
+          })}
+        />
+        <Stack.Screen
+          name="Matches"
+          component={MatchesScreen}
+          options={{ title: "Your Matches" }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
           {/* Matches Screen */}
           <Stack.Screen
             name="Matches"

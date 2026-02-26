@@ -15,6 +15,17 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
+import type { TutorClass, SessionMode } from "../types/models";
+import { api, setAuthToken } from "../api/client";
+import { saveToken } from "../auth/storage";
+import {
+  AVAILABLE_CLASSES_FALLBACK,
+  GRADE_OPTIONS,
+  SEMESTER_OPTIONS,
+  HELP_TYPE_OPTIONS,
+  PURDUE_LOCATIONS,
+} from "../constants/classes";
 import { useAuth } from "../context/AuthContext";
 import { 
   classesApi, 
@@ -29,6 +40,7 @@ type RootStackParamList = {
   "Tutor Registration": undefined;
 };
 
+const AVAILABLE_CLASSES = AVAILABLE_CLASSES_FALLBACK;
 const GRADE_OPTIONS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C"];
 
 type SelectedClass = ClassPublic & {

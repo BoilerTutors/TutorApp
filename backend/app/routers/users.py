@@ -10,10 +10,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import get_current_user
-from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user
+from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user, update_user_security_preferences
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserPublic, UserStatusUpdate, Message, ProfileUpdate, DeleteAccountRequest
+from app.schemas import (
+    UserCreate,
+    UserPublic,
+    UserStatusUpdate,
+    Message,
+    ProfileUpdate,
+    DeleteAccountRequest,
+    UserLookupPublic,
+    SecurityPreferencesUpdate,
+)
 
 router = APIRouter()
 
@@ -101,3 +110,36 @@ def update_user_status(
     db.commit()
 
     return Message(message="User status updated")
+
+
+"""
+- GET    /users/me/security-preferences - get current authenticated user's security preferences
+- PUT    /users/me/security-preferences - update current user's security preferences
+"""
+@router.get("/me/security-preferences", status_code=status.HTTP_200_OK)
+def get_security_preferences(current_user: User = Depends(get_current_user)) -> dict:
+    """Return the current user's security preferences."""
+    return {"mfa_enabled": current_user.mfa_enabled}
+
+
+@router.put("/me/security-preferences", status_code=status.HTTP_200_OK)
+def update_security_preferences(
+    data: SecurityPreferencesUpdate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+    ) -> dict:
+
+    user = update_user_security_preferences(db, current_user, data)
+    mfa_enabled = user.mfa_enabled
+    return {"mfa_enabled": mfa_enabled}
+
+@router.get("/{user_id}", response_model=UserLookupPublic)
+def get_user_public_lookup(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserLookupPublic:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserLookupPublic.model_validate(user)

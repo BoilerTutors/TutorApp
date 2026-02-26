@@ -98,6 +98,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    notification_settings: Mapped[Optional["UserNotificationSetting"]] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class UserEmbedding(Base):
@@ -186,6 +191,42 @@ class UserDeviceToken(Base):
     user: Mapped["User"] = relationship(back_populates="device_tokens")
 
 
+class UserNotificationSetting(Base):
+    __tablename__ = "user_notification_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "email_digest_frequency IN ('12h', 'daily', 'weekly')",
+            name="ck_email_digest_frequency",
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    email_digest_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    email_digest_frequency: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="daily",
+        server_default="daily",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="notification_settings")
+
+
 class TutorProfile(Base):
     __tablename__ = "tutors"
     __table_args__ = (
@@ -210,8 +251,10 @@ class TutorProfile(Base):
         ARRAY(Text), nullable=True, default=None
     )
     help_provided: Mapped[Optional[list[str]]] = mapped_column(
-    ARRAY(Text), nullable=True, default=None
-)
+        ARRAY(Text), nullable=True, default=None
+    )
+    # Session mode: "online" | "in_person" | "both"
+    session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(
@@ -437,6 +480,34 @@ class Message(Base):
         foreign_keys=[sender_id],
         back_populates="messages_sent",
     )
+    attachment: Mapped[Optional["MessageAttachment"]] = relationship(
+        back_populates="message",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+    __table_args__ = (
+        UniqueConstraint("message_id", name="uq_message_attachments_message_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    message: Mapped["Message"] = relationship(back_populates="attachment")
 
 
 # ============================================

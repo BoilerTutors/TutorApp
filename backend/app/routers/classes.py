@@ -1,5 +1,5 @@
-"""API routes for Class, StudentClass, and TutorClass.
-
+"""API routes for Class, StudentClass, and TutorClass."""
+"""
 - POST   /classes/                    - create a new class
 - GET    /classes/                    - list/search classes
 - GET    /classes/{class_id}          - get class details
@@ -25,6 +25,7 @@ from app.schemas import (
 )
 from app.crud import classes as crud_classes
 from app.crud import tutors as crud_tutors
+from app.crud.classes import list_classes
 
 router = APIRouter()
 
