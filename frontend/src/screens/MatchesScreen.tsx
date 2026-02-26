@@ -24,6 +24,12 @@ type MatchItem = {
   tutor_major: string | null;
   similarity_score: number;
 };
+type UserLookup = {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+};
 
 type RootStackParamList = {
   Matches: { matches?: MatchItem[] } | undefined;
@@ -45,11 +51,36 @@ export default function MatchesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [matchingTutorIds, setMatchingTutorIds] = useState<Record<number, boolean>>({});
   const [matchedTutorIds, setMatchedTutorIds] = useState<Record<number, boolean>>({});
+  const [tutorEmailsById, setTutorEmailsById] = useState<Record<number, string>>({});
+
+  const loadTutorEmails = async (rows: MatchItem[]) => {
+    const uniqueTutorIds = Array.from(new Set(rows.map((row) => row.tutor_id)));
+    if (uniqueTutorIds.length === 0) {
+      setTutorEmailsById({});
+      return;
+    }
+    const pairs = await Promise.all(
+      uniqueTutorIds.map(async (id) => {
+        try {
+          const user = await api.get<UserLookup>(`/users/${id}`);
+          return [id, user.email] as const;
+        } catch {
+          return [id, ""] as const;
+        }
+      })
+    );
+    const next: Record<number, string> = {};
+    for (const [id, email] of pairs) {
+      next[id] = email;
+    }
+    setTutorEmailsById(next);
+  };
 
   const loadLatestMatches = async () => {
     try {
       const data = await api.get<MatchItem[]>("/matches/me");
       setMatches(data);
+      await loadTutorEmails(data);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to load matches");
     } finally {
@@ -94,6 +125,9 @@ export default function MatchesScreen() {
   };
 
   useEffect(() => {
+    if (initialMatches.length > 0) {
+      void loadTutorEmails(initialMatches);
+    }
     void loadSavedMatches();
     if (initialMatches.length === 0) {
       void loadLatestMatches();
@@ -137,6 +171,8 @@ export default function MatchesScreen() {
             </View>
             <Text style={styles.name}>{item.tutor_first_name} {item.tutor_last_name}</Text>
             <Text style={styles.meta}>Tutor ID: {item.tutor_profile_id ?? "—"}</Text>
+            {/* TESTING ONLY: easy to remove once no longer needed */}
+            <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
             <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
             <View style={styles.actionsRow}>
               {(() => {
