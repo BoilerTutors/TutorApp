@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, View, Image, Dimensions, Text } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, StyleSheet, View, Image, Dimensions, Text } from "react-native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "./src/screens/LoginScreen";
 import StudentScreen from "./src/screens/StudentScreen";
@@ -8,10 +8,23 @@ import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
-import { api, setAuthToken } from "./src/api/client";
+import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
+import DashboardHeader from "./src/components/DashboardHeader";
+import { logout } from "./src/auth/logout";
 
 const Stack = createNativeStackNavigator();
+
+type RootStackParamList = {
+  Login: undefined;
+  "Student Dashboard": undefined;
+  "Tutor Dashboard": undefined;
+  "Tutor Registration": undefined;
+  "Student Registration": undefined;
+  Messenger: undefined;
+};
+
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
 type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
 const AUTH_CHECK_TIMEOUT_MS = 5000;
@@ -36,9 +49,23 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<InitialRouteName | null>(null);
 
   useEffect(() => {
+    setOnUnauthorized(() => {
+      Alert.alert(
+        "Session expired",
+        "Please sign in again.",
+        [{ text: "OK", onPress: () => navigationRef.resetRoot({ index: 0, routes: [{ name: "Login" }] }) }]
+      );
+    });
+    return () => setOnUnauthorized(null);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     const bootstrapAuth = async () => {
+      // uncomment return to test different default screens. Change initialRoute default value to
+      // page you want to test as well.
+      // return;
       try {
         // If no token exists, render login immediately.
         const token = await loadToken();
@@ -82,7 +109,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
         <Stack.Screen
           name="Login"
@@ -99,11 +126,67 @@ export default function App() {
             )
           }}
         />
-        <Stack.Screen name="Student Dashboard" component={StudentScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Student Registration" component={StudentRegistrationScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Messenger" component={MessengerScreen} options={{ headerShown: false }} />
+
+        {/* Student Dashboard Screen */}
+        <Stack.Screen
+          name="Student Dashboard"
+          component={StudentScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <DashboardHeader
+                role="STUDENT"
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  });
+                }}
+              />
+            ),
+          })}
+        />
+
+        {/* Tutor Dashboard Screen */}
+        <Stack.Screen
+          name="Tutor Dashboard"
+          component={TutorScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <DashboardHeader
+                role="TUTOR"
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  });
+                }}
+              />
+            ),
+          })}
+        />
+
+        {/* Tutor Registration Screen */}
+        <Stack.Screen 
+          name="Tutor Registration" 
+          component={TutorRegistrationScreen} 
+          options={{ headerShown: false }} 
+        />
+
+        {/* Student Registration Screen */}
+        <Stack.Screen 
+          name="Student Registration" 
+          component={StudentRegistrationScreen} 
+          options={{ headerShown: false }} 
+        />
+
+        {/* Messenger Screen */}
+        <Stack.Screen 
+          name="Messenger" 
+          component={MessengerScreen} 
+          options={{ headerShown: false }} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
