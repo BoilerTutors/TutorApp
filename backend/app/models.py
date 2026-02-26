@@ -110,6 +110,9 @@ class TutorProfile(Base):
     preferred_locations: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(Text), nullable=True, default=None
     )
+    help_provided: Mapped[Optional[list[str]]] = mapped_column(
+    ARRAY(Text), nullable=True, default=None
+)
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(
@@ -144,9 +147,13 @@ class StudentProfile(Base):
         index=True,
     )
 
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     major: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     grad_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     preferred_locations: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True, default=None
+    )
+    help_needed: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(Text), nullable=True, default=None
     )
 
@@ -401,6 +408,7 @@ class TutorClass(Base):
     semester: Mapped[str] = mapped_column(String(1), nullable=False)        # "F" or "S"
     year_taken: Mapped[int] = mapped_column(Integer, nullable=False)        # e.g. 2025
     grade_received: Mapped[str] = mapped_column(String(2), nullable=False)  # "A+", "A", "A-", "B+", etc.
+    has_taed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     tutor: Mapped["TutorProfile"] = relationship(back_populates="classes_tutoring")
     class_: Mapped["Class"] = relationship(back_populates="tutor_classes")

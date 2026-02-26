@@ -113,6 +113,7 @@ export default function StudentRegistrationScreen() {
 
   // Step 1: Basic info
   const [fullName, setFullName] = useState("");
+  const [bio, setBio] = useState("");
   const [major, setMajor] = useState("");
   const [gradYear, setGradYear] = useState("");
 
@@ -256,12 +257,13 @@ export default function StudentRegistrationScreen() {
       is_tutor: false,
       is_student: true,
       student_profile: {
+        bio: bio.trim() || undefined,
         major: major.trim() || undefined,
         grad_year: gradYearNum,
         classes: studentClasses.length > 0 ? studentClasses : undefined,
         preferred_locations: selectedLocations.length > 0 ? selectedLocations : undefined,
+        help_needed: helpTypes.length > 0 ? helpTypes : undefined,
       },
-
     };
 
     setSubmitting(true);
@@ -321,6 +323,19 @@ export default function StudentRegistrationScreen() {
           value={fullName}
           onChangeText={setFullName}
         /> 
+      </View>
+
+      <Text style={styles.label}>Bio (optional)</Text>
+      <View style={[styles.inputWrap, styles.textAreaWrap]}>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Tell tutors about your goals and what support you need..."
+          placeholderTextColor="#B0B6C3"
+          value={bio}
+          onChangeText={setBio}
+          multiline
+          numberOfLines={4}
+        />
       </View>
 
       <Text style={styles.label}>Major (optional)</Text>
@@ -572,6 +587,13 @@ export default function StudentRegistrationScreen() {
           </>
         )}
 
+        {bio.trim() && (
+          <>
+            <Text style={styles.overviewLabel}>Bio</Text>
+            <Text style={styles.overviewValue}>{bio.trim()}</Text>
+          </>
+        )}
+
         <Text style={styles.overviewLabel}>Classes ({selectedClasses.length})</Text>
         {selectedClasses.map((c) => (
           <View key={c.id} style={styles.overviewClassItem}>
@@ -757,11 +779,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF",
   },
+  textAreaWrap: {
+    height: 100,
+    alignItems: "flex-start",
+    paddingTop: 12,
+  },
   input: {
     flex: 1,
     marginLeft: 10,
     color: "#2F3850",
     fontSize: 15,
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
   },
   addClassBtn: {
     flexDirection: "row",

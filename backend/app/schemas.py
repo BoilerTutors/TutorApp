@@ -92,6 +92,7 @@ class TutorProfileCreate(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     classes: Optional[list["TutorClassCreate"]] = None
+    help_provided: Optional[list[str]] = None
 
 
 class TutorProfileUpdate(BaseModel):
@@ -100,6 +101,7 @@ class TutorProfileUpdate(BaseModel):
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
+    help_provided: Optional[list[str]] = None
 
 
 class TutorProfilePublic(BaseModel):
@@ -113,22 +115,27 @@ class TutorProfilePublic(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     average_rating: Optional[float] = None
+    help_provided: Optional[list[str]] = None
 
 # ===========================================================
 # ---- Student profile schemas ----
 # ===========================================================
 
 class StudentProfileCreate(BaseModel):
+    bio: Optional[str] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     classes: Optional[list["StudentClassCreate"]] = None
+    help_needed: Optional[list[str]] = None
 
 
 class StudentProfileUpdate(BaseModel):
+    bio: Optional[str] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
+    help_needed: Optional[list[str]] = None
 
 
 class StudentProfilePublic(BaseModel):
@@ -136,9 +143,12 @@ class StudentProfilePublic(BaseModel):
 
     id: int
     user_id: int
+    bio: Optional[str] = None
     major: Optional[str] = None
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
+    help_needed: Optional[list[str]] = None
+
 
 # ===========================================================
 # ---- Availability schemas ----
@@ -271,6 +281,7 @@ class TutorClassCreate(BaseModel):
     semester: SemesterCode
     year_taken: int
     grade_received: str = Field(max_length=2)
+    has_taed: bool = False
 
 
 class TutorClassPublic(BaseModel):
@@ -282,6 +293,7 @@ class TutorClassPublic(BaseModel):
     semester: SemesterCode
     year_taken: int
     grade_received: str
+    has_taed: bool
 
 # ===========================================================
 # ---- Auth / misc schemas ----

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session  # type: ignore[import]
 from app.auth import hash_password
 
 from app.models import User, TutorProfile, StudentProfile, TutorClass, StudentClass
-from app.schemas import UserCreate
+from app.schemas import ProfileUpdate, UserCreate
 
 
 
@@ -44,6 +44,7 @@ def create_user(db: Session, data: UserCreate) -> User:
             major=data.tutor_profile.major,
             grad_year=data.tutor_profile.grad_year,
             preferred_locations=data.tutor_profile.preferred_locations or None,
+            help_provided=data.tutor_profile.help_provided or None,
         )
         db.add(tutor)
         db.flush()
@@ -56,15 +57,18 @@ def create_user(db: Session, data: UserCreate) -> User:
                         semester=tc.semester,
                         year_taken=tc.year_taken,
                         grade_received=tc.grade_received,
+                        has_taed=tc.has_taed,
                     )
                 )
 
     if data.student_profile is not None:
         student = StudentProfile(
             user_id=user.id,
+            bio=data.student_profile.bio,
             major=data.student_profile.major,
             grad_year=data.student_profile.grad_year,
             preferred_locations=data.student_profile.preferred_locations or None,
+            help_needed=data.student_profile.help_needed or None,
         )
         db.add(student)
         db.flush()
@@ -102,10 +106,16 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             user.tutor.grad_year = t.grad_year
     if data.student_profile is not None and user.student is not None:
         s = data.student_profile
+        if s.bio is not None:
+            user.student.bio = s.bio
         if s.major is not None:
             user.student.major = s.major
         if s.grad_year is not None:
             user.student.grad_year = s.grad_year
+        if s.preferred_locations is not None:
+            user.student.preferred_locations = s.preferred_locations or None
+        if s.help_needed is not None:
+            user.student.help_needed = s.help_needed or None
     db.commit()
     db.refresh(user)
     return user
