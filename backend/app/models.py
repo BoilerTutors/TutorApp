@@ -42,6 +42,7 @@ class User(Base):
 
     # Account status: 0=active, 1=disabled, 2=banned
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stripe_account_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

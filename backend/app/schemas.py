@@ -54,6 +54,7 @@ class UserPublic(BaseModel):
     last_name: str
     is_tutor: bool
     is_student: bool
+    stripe_account_id: Optional[str] = None
     created_at: datetime
 
     tutor: Optional["TutorProfilePublic"] = None
