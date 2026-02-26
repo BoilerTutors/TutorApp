@@ -13,7 +13,16 @@ from app.auth import get_current_user
 from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user, update_user_security_preferences
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserPublic, UserStatusUpdate, Message, ProfileUpdate, DeleteAccountRequest, SecurityPreferencesUpdate
+from app.schemas import (
+    UserCreate,
+    UserPublic,
+    UserStatusUpdate,
+    Message,
+    ProfileUpdate,
+    DeleteAccountRequest,
+    UserLookupPublic,
+    SecurityPreferencesUpdate,
+)
 
 router = APIRouter()
 
@@ -123,3 +132,14 @@ def update_security_preferences(
     user = update_user_security_preferences(db, current_user, data)
     mfa_enabled = user.mfa_enabled
     return {"mfa_enabled": mfa_enabled}
+
+@router.get("/{user_id}", response_model=UserLookupPublic)
+def get_user_public_lookup(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserLookupPublic:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserLookupPublic.model_validate(user)

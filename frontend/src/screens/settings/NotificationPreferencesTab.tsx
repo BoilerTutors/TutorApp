@@ -5,11 +5,13 @@ import { api } from "../../api/client";
 type NotificationPreferences = {
   user_id: number;
   email_digest_enabled: boolean;
+  email_digest_frequency: "12h" | "daily" | "weekly";
   updated_at: string;
 };
 
 export default function NotificationPreferencesTab({ showAlert }: { showAlert: (title: string, message: string) => void }) {
   const [emailDigest, setEmailDigest] = useState(false);
+  const [emailDigestFrequency, setEmailDigestFrequency] = useState<"12h" | "daily" | "weekly">("daily");
   const [saving, setSaving] = useState(false);
 
   const allEnabledCount = useMemo(
@@ -24,6 +26,7 @@ export default function NotificationPreferencesTab({ showAlert }: { showAlert: (
         const prefs = await api.get<NotificationPreferences>("/notifications/preferences/me");
         if (!mounted) return;
         setEmailDigest(!!prefs.email_digest_enabled);
+        setEmailDigestFrequency(prefs.email_digest_frequency ?? "daily");
       } catch {
         // Keep default UI state if preferences are unavailable.
       }
@@ -39,6 +42,7 @@ export default function NotificationPreferencesTab({ showAlert }: { showAlert: (
       setSaving(true);
       await api.put<NotificationPreferences>("/notifications/preferences/me", {
         email_digest_enabled: emailDigest,
+        email_digest_frequency: emailDigestFrequency,
       });
       showAlert("Preferences updated", "Notification preferences saved successfully.");
     } catch (e) {
@@ -58,10 +62,32 @@ export default function NotificationPreferencesTab({ showAlert }: { showAlert: (
 
         <PreferenceRow
           label="Email digest"
-          helper="Get a daily summary of unread activity."
+          helper="Get recurring summaries of unread activity."
           enabled={emailDigest}
           onToggle={() => setEmailDigest((v) => !v)}
         />
+        {emailDigest ? (
+          <View style={styles.frequencyRow}>
+            <Text style={styles.frequencyLabel}>Digest frequency</Text>
+            <View style={styles.frequencyOptions}>
+              <FrequencyOption
+                label="12 hours"
+                selected={emailDigestFrequency === "12h"}
+                onPress={() => setEmailDigestFrequency("12h")}
+              />
+              <FrequencyOption
+                label="Daily"
+                selected={emailDigestFrequency === "daily"}
+                onPress={() => setEmailDigestFrequency("daily")}
+              />
+              <FrequencyOption
+                label="Weekly"
+                selected={emailDigestFrequency === "weekly"}
+                onPress={() => setEmailDigestFrequency("weekly")}
+              />
+            </View>
+          </View>
+        ) : null}
 
         <Pressable style={styles.saveBtn} onPress={() => void onSave()} disabled={saving}>
           <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save preferences"}</Text>
@@ -92,6 +118,25 @@ function PreferenceRow({ label, helper, enabled, onToggle }: PreferenceRowProps)
         <View style={[styles.toggleKnob, enabled ? styles.toggleKnobOn : styles.toggleKnobOff]} />
       </Pressable>
     </View>
+  );
+}
+
+type FrequencyOptionProps = {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+};
+
+function FrequencyOption({ label, selected, onPress }: FrequencyOptionProps) {
+  return (
+    <Pressable
+      style={[styles.frequencyOption, selected && styles.frequencyOptionSelected]}
+      onPress={onPress}
+    >
+      <Text style={[styles.frequencyOptionText, selected && styles.frequencyOptionTextSelected]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -175,6 +220,41 @@ const styles = StyleSheet.create({
   },
   toggleKnobOff: {
     alignSelf: "flex-start",
+  },
+  frequencyRow: {
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  frequencyLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2F3850",
+    marginBottom: 8,
+  },
+  frequencyOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  frequencyOption: {
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#FFFFFF",
+  },
+  frequencyOptionSelected: {
+    borderColor: "#2E57A2",
+    backgroundColor: "#EEF3FF",
+  },
+  frequencyOptionText: {
+    color: "#475569",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  frequencyOptionTextSelected: {
+    color: "#2E57A2",
   },
   saveBtn: {
     marginTop: 8,
