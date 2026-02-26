@@ -16,7 +16,7 @@
       "expo-secure-store"
     ],
     "extra": {
-      "apiUrl": "http://100.100.213.139:8000"
+      "apiUrl": "http://localhost:8000"
     }
   }
 }

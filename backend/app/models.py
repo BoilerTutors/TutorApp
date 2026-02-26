@@ -251,8 +251,10 @@ class TutorProfile(Base):
         ARRAY(Text), nullable=True, default=None
     )
     help_provided: Mapped[Optional[list[str]]] = mapped_column(
-    ARRAY(Text), nullable=True, default=None
-)
+        ARRAY(Text), nullable=True, default=None
+    )
+    # Session mode: "online" | "in_person" | "both"
+    session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(

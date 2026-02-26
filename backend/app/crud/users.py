@@ -45,6 +45,7 @@ def create_user(db: Session, data: UserCreate) -> User:
             grad_year=data.tutor_profile.grad_year,
             preferred_locations=data.tutor_profile.preferred_locations or None,
             help_provided=data.tutor_profile.help_provided or None,
+            session_mode=data.tutor_profile.session_mode or "both",
         )
         db.add(tutor)
         db.flush()
@@ -113,6 +114,24 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             tutor_embedding_needs_refresh = True
         if t.help_provided is not None:
             user.tutor.help_provided = t.help_provided or None
+            tutor_embedding_needs_refresh = True
+        if t.session_mode is not None:
+            user.tutor.session_mode = t.session_mode
+        if t.classes is not None:
+            for tc in user.tutor.classes_tutoring:
+                db.delete(tc)
+            db.flush()
+            for tc in t.classes:
+                db.add(
+                    TutorClass(
+                        tutor_id=user.tutor.id,
+                        class_id=tc.class_id,
+                        semester=tc.semester,
+                        year_taken=tc.year_taken,
+                        grade_received=tc.grade_received,
+                        has_taed=tc.has_taed,
+                    )
+                )
             tutor_embedding_needs_refresh = True
         if tutor_embedding_needs_refresh:
             refresh_tutor_embeddings(db, user.tutor)

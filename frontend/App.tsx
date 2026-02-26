@@ -12,6 +12,7 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import MatchesScreen from "./src/screens/MatchesScreen";
 import NotificationsTab from "./src/screens/settings/NotificationsTab";
+import HelpScreen from "./src/screens/HelpScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
@@ -38,6 +39,7 @@ type RootStackParamList = {
       }
     | undefined;
   Notifications: undefined;
+  Help: undefined;
   Matches: {
     matches?: Array<{
       rank: number;
@@ -53,7 +55,7 @@ type RootStackParamList = {
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
 type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
-const AUTH_CHECK_TIMEOUT_MS = 5000;
+const AUTH_CHECK_TIMEOUT_MS = 15000;
 type MeResponse = { is_tutor: boolean; is_student: boolean };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -109,9 +111,14 @@ export default function App() {
         if (!cancelled) {
           setInitialRoute(route);
         }
-      } catch {
+      } catch (e) {
         setAuthToken(null);
-        await clearToken();
+        // Only clear token on auth failure (401). For network/timeout errors,
+        // keep the token so a refresh or retry can restore the session.
+        const isAuthError = e instanceof Error && e.message.includes("session has expired");
+        if (isAuthError) {
+          await clearToken();
+        }
         if (!cancelled) {
           setInitialRoute("Login");
         }
@@ -179,6 +186,7 @@ export default function App() {
                 }}
                 onSettingsPress={() => navigation.navigate("Settings")}
                 onNotificationsPress={() => navigation.navigate("Notifications")}
+                onHelpPress={() => navigation.navigate("Help")}
               />
             ),
           })}
@@ -201,6 +209,7 @@ export default function App() {
                 }}
                 onSettingsPress={() => navigation.navigate("Settings")}
                 onNotificationsPress={() => navigation.navigate("Notifications")}
+                onHelpPress={() => navigation.navigate("Help")}
               />
             ),
           })}
@@ -255,6 +264,13 @@ export default function App() {
           name="Notifications"
           component={NotificationsTab}
           options={{ title: "Notifications" }}
+        />
+        <Stack.Screen
+          name="Help"
+          component={HelpScreen}
+          options={({ navigation }) => ({
+            header: () => <GeneralHeader title="Help" />,
+          })}
         />
         <Stack.Screen
           name="Matches"
