@@ -5,23 +5,13 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { logout } from "../auth/logout";
-import { api } from "../api/client";
-
-type MatchItem = {
-  rank: number;
-  tutor_id: number;
-  tutor_first_name: string;
-  tutor_last_name: string;
-  tutor_major: string | null;
-  similarity_score: number;
-};
 
 type RootStackParamList = {
   Login: undefined;
   Messenger: undefined;
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
-  Matches: { matches?: MatchItem[] } | undefined;
+  "Student Reviews": undefined;
 };
 
 type QuickAction = {
@@ -77,12 +67,35 @@ export default function StudentScreen() {
       setComputingMatches(false);
     }
   };
+  
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Welcome Section */}
-      <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>{firstName}</Text></Text>
-        <Text style={styles.dashboardLabel}>Student Dashboard</Text>
+    <View style={styles.container}>
+      <View style={styles.card}>
+        <Text style={styles.title}>BoilerTutors</Text>
+        <Text style={styles.subtitle}>Student Dashboard</Text>
+        
+        <Text style={styles.body}>Welcome! Find tutors and manage your sessions here.</Text>
+
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Student Reviews")}
+        >
+          <Text style={styles.buttonText}>⭐ Leave a Review</Text>
+        </Pressable>
+
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Messenger")}
+        >
+          <Text style={styles.buttonText}>💬 Open Messenger</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
+        >
+          <Text style={styles.buttonText}>👤 My Profile</Text>
+        </Pressable>
       </View>
 
       {/* Quick Actions */}
@@ -135,7 +148,14 @@ const styles = StyleSheet.create({
   },
   welcomeName: {
     fontWeight: "700",
-    color: NAVY,
+    marginBottom: 4,
+    color: "#2F3850",
+  },
+  subtitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 14,
+    color: "#D4AF4A",
   },
   dashboardLabel: {
     fontSize: 14,
@@ -166,14 +186,24 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     marginRight: 6,
+//     marginBottom: 20,
+//     color: "#5D667C",
+  },
+  button: {
+    marginTop: 10,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
   },
   secondaryButton: {
-    marginTop: 10,
     backgroundColor: "#1B2D50",
   },
   buttonText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",
+    fontSize: 15,
   },
 });

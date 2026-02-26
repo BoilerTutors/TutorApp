@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+// src/screens/TutorRegistrationScreen.tsx
+
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,11 +9,11 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { TutorClass, SessionMode } from "../types/models";
@@ -24,100 +26,117 @@ import {
   HELP_TYPE_OPTIONS,
   PURDUE_LOCATIONS,
 } from "../constants/classes";
+import { useAuth } from "../context/AuthContext";
+import { 
+  classesApi, 
+  ClassPublic, 
+  TutorClassCreate,
+  UserCreate,
+} from "../services/api";
 
 type RootStackParamList = {
   Login: undefined;
   "Tutor Dashboard": undefined;
-  "Tutor Registration": {
-    email: string;
-    password: string;
-    role: "tutor" | "student";
-  };
+  "Tutor Registration": undefined;
 };
 
 const AVAILABLE_CLASSES = AVAILABLE_CLASSES_FALLBACK;
+const GRADE_OPTIONS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C"];
 
-type SelectedClass = TutorClass & {
-  hasTAed: boolean;
+type SelectedClass = ClassPublic & {
+  semester: "F" | "S";
+  year_taken: number;
+  grade_received: string;
 };
 
-// Cross-platform alert helper
-const showAlert = (title: string, message: string, onOk?: () => void) => {
+// Helper to show alerts cross-platform
+const showAlert = (title: string, message: string) => {
   if (Platform.OS === "web") {
     window.alert(`${title}\n\n${message}`);
-    if (onOk) onOk();
   } else {
-    Alert.alert(title, message, [{ text: "OK", onPress: onOk }]);
+    // React Native Alert would go here
+    console.log(title, message);
   }
 };
-
-const splitFullName = (full: string): [string, string] => {
-  const parts = full.trim().split(/\s+/);
-  if (parts.length === 1) {
-    return [parts[0], parts[0]];
-  }
-  const first = parts[0];
-  const last = parts.slice(1).join(" ");
-  return [first, last];
-};
-
-/** Map "Fall 2025" / "Spring 2025" to backend semester code and year. */
-function parseSemester(semesterTaken: string): { semester: "F" | "S"; year_taken: number } | null {
-  const match = semesterTaken.match(/^(Fall|Spring)\s+(\d{4})$/);
-  if (!match) return null;
-  const year = parseInt(match[2], 10);
-  const semester = match[1] === "Fall" ? "F" : "S";
-  return { semester, year_taken: year };
-}
 
 export default function TutorRegistrationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<RouteProp<RootStackParamList, "Tutor Registration">>();
-  const { email, password } = route.params;
-  
+  const { register, login, token } = useAuth();
+
   // Step tracking
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
 
-  // Step 1: Basic Info
-  const [fullName, setFullName] = useState("");
-  const [bio, setBio] = useState("");
+  // Loading states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingClasses, setIsLoadingClasses] = useState(false);
 
+  // Step 1: Account Info
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Step 2: Tutor Profile
+  const [bio, setBio] = useState("");
   const [major, setMajor] = useState("");
   const [gradYear, setGradYear] = useState("");
+  const [hourlyRate, setHourlyRate] = useState("");
 
-  // Step 2: Class Selection
+  // Step 3: Class Selection
+  const [availableClasses, setAvailableClasses] = useState<ClassPublic[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<SelectedClass[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showClassPicker, setShowClassPicker] = useState(false);
 
-  // Step 3: Session Preferences
-  const [sessionMode, setSessionMode] = useState<SessionMode | "both">("both");
-  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
-  const [weeklySessionCap, setWeeklySessionCap] = useState("5");
-  const [helpProvided, setHelpProvided] = useState<string[]>([]);
-
   // Success state
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+
+  // Fetch available classes on mount
+  useEffect(() => {
+    fetchClasses();
+  }, []);
+
+  const fetchClasses = async () => {
+    setIsLoadingClasses(true);
+    
+    // Use mock data for demo - replace with API call when backend has classes
+    const mockClasses = [
+      { id: 1, subject: "CS", class_number: 180, professor: "Dunsmore" },
+      { id: 2, subject: "CS", class_number: 182, professor: "Adams" },
+      { id: 3, subject: "CS", class_number: 240, professor: "Turkstra" },
+      { id: 4, subject: "CS", class_number: 251, professor: "Turkstra" },
+      { id: 5, subject: "CS", class_number: 307, professor: "Hashemi" },
+      { id: 6, subject: "CS", class_number: 354, professor: "Gustafson" },
+      { id: 7, subject: "MA", class_number: 161, professor: "Chen" },
+      { id: 8, subject: "MA", class_number: 162, professor: "Chen" },
+      { id: 9, subject: "MA", class_number: 265, professor: "Dey" },
+      { id: 10, subject: "PHYS", class_number: 172, professor: "Bhatt" },
+    ];
+  
+    setAvailableClasses(mockClasses);
+    setIsLoadingClasses(false);
+  };
 
   // Filter classes based on search
-  const filteredClasses = AVAILABLE_CLASSES.filter(
+  const filteredClasses = availableClasses.filter(
     (c) =>
       !selectedClasses.find((sc) => sc.id === c.id) &&
-      (c.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+      (`${c.subject} ${c.class_number}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.professor.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Add a class to selection
-  const addClass = (classItem: typeof AVAILABLE_CLASSES[0]) => {
+  const addClass = (classItem: ClassPublic) => {
+    const currentYear = new Date().getFullYear();
     setSelectedClasses([
       ...selectedClasses,
       {
         ...classItem,
-        semesterTaken: "",
-        gradeReceived: "",
-        hasTAed: false,
+        semester: "F",
+        year_taken: currentYear - 1,
+        grade_received: "",
       },
     ]);
     setShowClassPicker(false);
@@ -132,8 +151,8 @@ export default function TutorRegistrationScreen() {
   // Update class details
   const updateClassDetails = (
     classId: number,
-    field: "semesterTaken" | "gradeReceived" | "hasTAed",
-    value: string | boolean
+    field: "semester" | "year_taken" | "grade_received",
+    value: string | number
   ) => {
     setSelectedClasses(
       selectedClasses.map((c) =>
@@ -142,49 +161,44 @@ export default function TutorRegistrationScreen() {
     );
   };
 
-  // Toggle location selection
-  const toggleLocation = (location: string) => {
-    if (selectedLocations.includes(location)) {
-      setSelectedLocations(selectedLocations.filter((l) => l !== location));
-    } else {
-      setSelectedLocations([...selectedLocations, location]);
-    }
-  };
-
   // Validation
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        if (!fullName.trim()) {
-          showAlert("Required", "Please enter your full name");
+        if (!firstName.trim()) {
+          showAlert("Required", "Please enter your first name");
           return false;
         }
-        if (gradYear.trim()) {
-          const n = parseInt(gradYear.trim(), 10);
-          if (Number.isNaN(n) || n < 1900 || n > 2100) {
-            showAlert("Invalid", "Please enter a valid graduation year (e.g. 2026).");
-            return false;
-          }
+        if (!lastName.trim()) {
+          showAlert("Required", "Please enter your last name");
+          return false;
         }
-
+        if (!email.trim() || !email.includes("@purdue.edu")) {
+          showAlert("Required", "Please enter a valid Purdue email (@purdue.edu)");
+          return false;
+        }
+        if (password.length < 8) {
+          showAlert("Required", "Password must be at least 8 characters");
+          return false;
+        }
+        if (password !== confirmPassword) {
+          showAlert("Error", "Passwords do not match");
+          return false;
+        }
         return true;
-        
       case 2:
+        // Bio and other fields are optional
+        return true;
+      case 3:
         if (selectedClasses.length === 0) {
           showAlert("Required", "Please select at least one class to tutor");
           return false;
         }
         for (const c of selectedClasses) {
-          if (!c.gradeReceived || !c.semesterTaken) {
-            showAlert("Required", `Please complete all details for ${c.courseCode}`);
+          if (!c.grade_received) {
+            showAlert("Required", `Please select a grade for ${c.subject} ${c.class_number}`);
             return false;
           }
-        }
-        return true;
-      case 3:
-        if ((sessionMode === "in_person" || sessionMode === "both") && selectedLocations.length === 0) {
-          showAlert("Required", "Please select at least one tutoring location");
-          return false;
         }
         return true;
       default:
@@ -203,79 +217,44 @@ export default function TutorRegistrationScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(currentStep)) return;
-    if (!email?.trim() || !password) {
-      showAlert("Error", "Missing email or password from the previous step.");
-      return;
-    }
-
-    const [firstName, lastName] = splitFullName(fullName);
-
-    const gradYearNum = gradYear.trim() ? parseInt(gradYear.trim(), 10) : undefined;
-
-    const tutorClasses = selectedClasses
-      .map((c) => {
-        const parsed = parseSemester(c.semesterTaken ?? "");
-        const grade = c.gradeReceived;
-        if (!parsed || !grade) return null;
-        return {
-          class_id: c.id,
-          semester: parsed.semester,
-          year_taken: parsed.year_taken,
-          grade_received: grade,
-          has_taed: c.hasTAed,
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
-
-      const payload = {
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        password,
+    setIsSubmitting(true);
+    
+    try {
+      console.log("Starting registration...");
+      
+      // For demo: Skip API call and show success
+      // TODO: Re-enable when backend is ready
+      /*
+      const userData: UserCreate = {
+        email: email.toLowerCase().trim(),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        password: password,
         is_tutor: true,
-        is_student: false,
+        is_student: true,
         tutor_profile: {
-          bio: bio || undefined,
+          bio: bio.trim() || undefined,
           major: major.trim() || undefined,
-          grad_year: gradYearNum,
-          preferred_locations: selectedLocations.length > 0 ? selectedLocations : undefined,
-          help_provided: helpProvided.length > 0 ? helpProvided : undefined,
-          classes: tutorClasses.length > 0 ? tutorClasses : undefined,
-          session_mode: sessionMode === "both" ? undefined : sessionMode,
+          grad_year: gradYear ? parseInt(gradYear) : undefined,
+          hourly_rate_cents: hourlyRate ? Math.round(parseFloat(hourlyRate) * 100) : undefined,
         },
       };
-
-    setSubmitting(true);
-    try {
-      await api.post("/users/", payload);
+  
+      await register(userData);
+      await login({ email: userData.email, password: password });
+      */
+      
+      // Simulate success for demo
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       setIsSubmitted(true);
-    } catch (e) {
-      const message =
-        e instanceof Error
-          ? e.message
-          : "Registration failed. Please check your details and try again.";
-      showAlert("Registration failed", message);
+      
+    } catch (err) {
+      console.error("Registration error:", err);
+      const message = err instanceof Error ? err.message : "Registration failed";
+      showAlert("Error", message);
     } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const goToDashboard = async () => {
-    try {
-      const data = await api.post<{ access_token: string; token_type: string }>(
-        "/auth/login",
-        { email: email.trim().toLowerCase(), password }
-      );
-      setAuthToken(data.access_token);
-      await saveToken(data.access_token);
-      navigation.navigate("Tutor Dashboard");
-    } catch (e) {
-      showAlert(
-        "Auto-login failed",
-        e instanceof Error ? e.message : "Please sign in from the Login screen."
-      );
-      navigation.navigate("Login");
+      setIsSubmitting(false);
     }
   };
 
@@ -312,29 +291,89 @@ export default function TutorRegistrationScreen() {
     </View>
   );
 
-  // Step 1: Basic Info
+  // Step 1: Account Info
   const renderStep1 = () => (
     <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Basic Information</Text>
-      <Text style={styles.stepSubtitle}>Tell us about yourself</Text>
+      <Text style={styles.stepTitle}>Create Account</Text>
+      <Text style={styles.stepSubtitle}>Enter your Purdue credentials</Text>
 
-      <Text style={styles.label}>Full Name *</Text>
+      <Text style={styles.label}>First Name *</Text>
       <View style={styles.inputWrap}>
         <Ionicons name="person" size={18} color="#8C93A4" />
         <TextInput
           style={styles.input}
-          placeholder="Enter your full name"
+          placeholder="First name"
           placeholderTextColor="#B0B6C3"
-          value={fullName}
-          onChangeText={setFullName}
+          value={firstName}
+          onChangeText={setFirstName}
         />
       </View>
 
-      <Text style={styles.label}>Bio (Optional)</Text>
+      <Text style={styles.label}>Last Name *</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="person" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="Last name"
+          placeholderTextColor="#B0B6C3"
+          value={lastName}
+          onChangeText={setLastName}
+        />
+      </View>
+
+      <Text style={styles.label}>Purdue Email *</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="mail" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="you@purdue.edu"
+          placeholderTextColor="#B0B6C3"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+      </View>
+
+      <Text style={styles.label}>Password *</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="lock-closed" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="At least 8 characters"
+          placeholderTextColor="#B0B6C3"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
+      </View>
+
+      <Text style={styles.label}>Confirm Password *</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="lock-closed" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="Re-enter password"
+          placeholderTextColor="#B0B6C3"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+        />
+      </View>
+    </View>
+  );
+
+  // Step 2: Tutor Profile
+  const renderStep2 = () => (
+    <View style={styles.stepContent}>
+      <Text style={styles.stepTitle}>Tutor Profile</Text>
+      <Text style={styles.stepSubtitle}>Tell students about yourself (optional)</Text>
+
+      <Text style={styles.label}>Bio</Text>
       <View style={[styles.inputWrap, styles.textAreaWrap]}>
         <TextInput
           style={[styles.input, styles.textArea]}
-          placeholder="Tell students about yourself, your teaching style, experience..."
+          placeholder="Tell students about yourself, your teaching style..."
           placeholderTextColor="#B0B6C3"
           value={bio}
           onChangeText={setBio}
@@ -343,42 +382,51 @@ export default function TutorRegistrationScreen() {
         />
       </View>
 
-      <Text style={styles.label}>Major (optional)</Text>
-
+      <Text style={styles.label}>Major</Text>
       <View style={styles.inputWrap}>
         <Ionicons name="school" size={18} color="#8C93A4" />
         <TextInput
           style={styles.input}
-          placeholder="e.g. Computer Science"
+          placeholder="e.g., Computer Science"
           placeholderTextColor="#B0B6C3"
           value={major}
           onChangeText={setMajor}
         />
       </View>
 
-      <Text style={styles.label}>Graduation year (optional)</Text>
+      <Text style={styles.label}>Expected Graduation Year</Text>
       <View style={styles.inputWrap}>
-        <Ionicons name="calendar-outline" size={18} color="#8C93A4" />
+        <Ionicons name="calendar" size={18} color="#8C93A4" />
         <TextInput
           style={styles.input}
-          placeholder="e.g. 2026"
+          placeholder="e.g., 2026"
           placeholderTextColor="#B0B6C3"
           value={gradYear}
           onChangeText={setGradYear}
           keyboardType="number-pad"
-          maxLength={4}
+        />
+      </View>
+
+      <Text style={styles.label}>Hourly Rate ($)</Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="cash" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          placeholder="e.g., 25.00"
+          placeholderTextColor="#B0B6C3"
+          value={hourlyRate}
+          onChangeText={setHourlyRate}
+          keyboardType="decimal-pad"
         />
       </View>
     </View>
   );
 
-  // Step 2: Class Selection
-  const renderStep2 = () => (
+  // Step 3: Class Selection
+  const renderStep3 = () => (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Classes You'll Tutor</Text>
-      <Text style={styles.stepSubtitle}>
-        Select classes and provide your credentials
-      </Text>
+      <Text style={styles.stepSubtitle}>Select classes and provide your credentials</Text>
 
       {/* Add Class Button */}
       <TouchableOpacity
@@ -389,7 +437,7 @@ export default function TutorRegistrationScreen() {
         <Text style={styles.addClassText}>Add a Class</Text>
       </TouchableOpacity>
 
-      {/* Class Picker Modal-like dropdown */}
+      {/* Class Picker */}
       {showClassPicker && (
         <View style={styles.classPickerContainer}>
           <View style={styles.searchWrap}>
@@ -407,16 +455,26 @@ export default function TutorRegistrationScreen() {
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.classListScroll} nestedScrollEnabled>
-            {filteredClasses.map((classItem) => (
-              <TouchableOpacity
-                key={classItem.id}
-                style={styles.classOption}
-                onPress={() => addClass(classItem)}
-              >
-                <Text style={styles.classOptionCode}>{classItem.courseCode}</Text>
-                <Text style={styles.classOptionTitle}>{classItem.title}</Text>
-              </TouchableOpacity>
-            ))}
+            {isLoadingClasses ? (
+              <ActivityIndicator style={{ padding: 20 }} />
+            ) : filteredClasses.length === 0 ? (
+              <Text style={styles.noResultsText}>No classes found</Text>
+            ) : (
+              filteredClasses.map((classItem) => (
+                <TouchableOpacity
+                  key={classItem.id}
+                  style={styles.classOption}
+                  onPress={() => addClass(classItem)}
+                >
+                  <Text style={styles.classOptionCode}>
+                    {classItem.subject} {classItem.class_number}
+                  </Text>
+                  <Text style={styles.classOptionTitle}>
+                    Prof. {classItem.professor}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
           </ScrollView>
         </View>
       )}
@@ -426,8 +484,12 @@ export default function TutorRegistrationScreen() {
         <View key={classItem.id} style={styles.selectedClassCard}>
           <View style={styles.selectedClassHeader}>
             <View>
-              <Text style={styles.selectedClassCode}>{classItem.courseCode}</Text>
-              <Text style={styles.selectedClassTitle}>{classItem.title}</Text>
+              <Text style={styles.selectedClassCode}>
+                {classItem.subject} {classItem.class_number}
+              </Text>
+              <Text style={styles.selectedClassTitle}>
+                Prof. {classItem.professor}
+              </Text>
             </View>
             <TouchableOpacity onPress={() => removeClass(classItem.id)}>
               <Ionicons name="trash-outline" size={20} color="#E74C3C" />
@@ -443,14 +505,14 @@ export default function TutorRegistrationScreen() {
                   key={grade}
                   style={[
                     styles.optionChip,
-                    classItem.gradeReceived === grade && styles.optionChipActive,
+                    classItem.grade_received === grade && styles.optionChipActive,
                   ]}
-                  onPress={() => updateClassDetails(classItem.id, "gradeReceived", grade)}
+                  onPress={() => updateClassDetails(classItem.id, "grade_received", grade)}
                 >
                   <Text
                     style={[
                       styles.optionChipText,
-                      classItem.gradeReceived === grade && styles.optionChipTextActive,
+                      classItem.grade_received === grade && styles.optionChipTextActive,
                     ]}
                   >
                     {grade}
@@ -462,40 +524,52 @@ export default function TutorRegistrationScreen() {
 
           {/* Semester Selection */}
           <Text style={styles.fieldLabel}>Semester Taken *</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.optionRow}>
-              {SEMESTER_OPTIONS.map((sem) => (
-                <Pressable
-                  key={sem}
-                  style={[
-                    styles.optionChip,
-                    classItem.semesterTaken === sem && styles.optionChipActive,
-                  ]}
-                  onPress={() => updateClassDetails(classItem.id, "semesterTaken", sem)}
-                >
-                  <Text
-                    style={[
-                      styles.optionChipText,
-                      classItem.semesterTaken === sem && styles.optionChipTextActive,
-                    ]}
-                  >
-                    {sem}
-                  </Text>
-                </Pressable>
-              ))}
+          <View style={styles.semesterRow}>
+            <Pressable
+              style={[
+                styles.semesterBtn,
+                classItem.semester === "F" && styles.semesterBtnActive,
+              ]}
+              onPress={() => updateClassDetails(classItem.id, "semester", "F")}
+            >
+              <Text
+                style={[
+                  styles.semesterBtnText,
+                  classItem.semester === "F" && styles.semesterBtnTextActive,
+                ]}
+              >
+                Fall
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.semesterBtn,
+                classItem.semester === "S" && styles.semesterBtnActive,
+              ]}
+              onPress={() => updateClassDetails(classItem.id, "semester", "S")}
+            >
+              <Text
+                style={[
+                  styles.semesterBtnText,
+                  classItem.semester === "S" && styles.semesterBtnTextActive,
+                ]}
+              >
+                Spring
+              </Text>
+            </Pressable>
+            <View style={styles.yearInputWrap}>
+              <TextInput
+                style={styles.yearInput}
+                value={classItem.year_taken.toString()}
+                onChangeText={(text) => {
+                  const year = parseInt(text) || new Date().getFullYear();
+                  updateClassDetails(classItem.id, "year_taken", year);
+                }}
+                keyboardType="number-pad"
+                maxLength={4}
+              />
             </View>
-          </ScrollView>
-
-          {/* TA Experience */}
-          <Pressable
-            style={styles.checkboxRow}
-            onPress={() => updateClassDetails(classItem.id, "hasTAed", !classItem.hasTAed)}
-          >
-            <View style={[styles.checkbox, classItem.hasTAed && styles.checkboxActive]}>
-              {classItem.hasTAed && <Ionicons name="checkmark" size={14} color="#FFF" />}
-            </View>
-            <Text style={styles.checkboxLabel}>I have TA'd for this class</Text>
-          </Pressable>
+          </View>
         </View>
       ))}
 
@@ -508,122 +582,6 @@ export default function TutorRegistrationScreen() {
     </View>
   );
 
-  // Step 3: Session Preferences
-  const renderStep3 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Session Preferences</Text>
-      <Text style={styles.stepSubtitle}>How would you like to tutor?</Text>
-
-      {/* Session Mode */}
-      <Text style={styles.label}>Session Mode *</Text>
-      <View style={styles.modeRow}>
-        {[
-          { value: "online", label: "Online Only", icon: "laptop-outline" },
-          { value: "in_person", label: "In-Person Only", icon: "location-outline" },
-          { value: "both", label: "Both", icon: "git-merge-outline" },
-        ].map((mode) => (
-          <Pressable
-            key={mode.value}
-            style={[
-              styles.modeBtn,
-              sessionMode === mode.value && styles.modeBtnActive,
-            ]}
-            onPress={() => setSessionMode(mode.value as SessionMode | "both")}
-          >
-            <Ionicons
-              name={mode.icon as any}
-              size={20}
-              color={sessionMode === mode.value ? "#2E2A1A" : "#5D667C"}
-            />
-            <Text
-              style={[
-                styles.modeBtnText,
-                sessionMode === mode.value && styles.modeBtnTextActive,
-              ]}
-            >
-              {mode.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* Locations (if in-person) */}
-      {(sessionMode === "in_person" || sessionMode === "both") && (
-        <>
-          <Text style={styles.label}>Preferred Locations *</Text>
-          <View style={styles.locationsGrid}>
-            {PURDUE_LOCATIONS.map((location) => (
-              <Pressable
-                key={location}
-                style={[
-                  styles.locationChip,
-                  selectedLocations.includes(location) && styles.locationChipActive,
-                ]}
-                onPress={() => toggleLocation(location)}
-              >
-                <Text
-                  style={[
-                    styles.locationChipText,
-                    selectedLocations.includes(location) && styles.locationChipTextActive,
-                  ]}
-                >
-                  {location}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      )}
-
-      {/* Weekly Session Cap */}
-      <Text style={styles.label}>Weekly Session Cap</Text>
-      <View style={styles.inputWrap}>
-        <Ionicons name="calendar-outline" size={18} color="#8C93A4" />
-        <TextInput
-          style={styles.input}
-          placeholder="Max sessions per week"
-          placeholderTextColor="#B0B6C3"
-          value={weeklySessionCap}
-          onChangeText={setWeeklySessionCap}
-          keyboardType="number-pad"
-        />
-      </View>
-      <Text style={styles.helperText}>
-        Limit how many sessions students can book with you per week
-      </Text>
-
-      <Text style={styles.label}>Type of help you provide (optional)</Text>
-      
-      <View style={styles.locationsGrid}>
-        {HELP_TYPE_OPTIONS.map((option) => (
-          <Pressable
-            key={option}
-            style={[
-              styles.locationChip,
-              helpProvided.includes(option) && styles.locationChipActive,
-            ]}
-            onPress={() =>
-              setHelpProvided((prev) =>
-                prev.includes(option)
-                  ? prev.filter((h) => h !== option)
-                  : [...prev, option]
-              )
-            }
-          >
-            <Text
-              style={[
-                styles.locationChipText,
-                helpProvided.includes(option) && styles.locationChipTextActive,
-              ]}
-            >
-              {option}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-
   // Step 4: Overview
   const renderStep4 = () => (
     <View style={styles.stepContent}>
@@ -631,50 +589,36 @@ export default function TutorRegistrationScreen() {
       <Text style={styles.stepSubtitle}>Make sure everything looks good</Text>
 
       <View style={styles.overviewCard}>
-        <Text style={styles.overviewLabel}>Name</Text>
-        <Text style={styles.overviewValue}>{fullName}</Text>
+        <Text style={styles.overviewLabel}>Account</Text>
+        <Text style={styles.overviewValue}>{firstName} {lastName}</Text>
+        <Text style={styles.overviewValueSmall}>{email}</Text>
 
-        {bio && (
+        {(bio || major || gradYear) && (
           <>
-            <Text style={styles.overviewLabel}>Bio</Text>
-            <Text style={styles.overviewValue}>{bio}</Text>
+            <Text style={styles.overviewLabel}>Profile</Text>
+            {bio && <Text style={styles.overviewValue}>{bio}</Text>}
+            {major && <Text style={styles.overviewValueSmall}>Major: {major}</Text>}
+            {gradYear && <Text style={styles.overviewValueSmall}>Graduation: {gradYear}</Text>}
+            {hourlyRate && <Text style={styles.overviewValueSmall}>Rate: ${hourlyRate}/hr</Text>}
           </>
         )}
 
         <Text style={styles.overviewLabel}>Classes ({selectedClasses.length})</Text>
         {selectedClasses.map((c) => (
           <View key={c.id} style={styles.overviewClassItem}>
-            <Text style={styles.overviewClassCode}>{c.courseCode}</Text>
+            <Text style={styles.overviewClassCode}>
+              {c.subject} {c.class_number}
+            </Text>
             <Text style={styles.overviewClassDetails}>
-              Grade: {c.gradeReceived} • {c.semesterTaken}
-              {c.hasTAed && " • TA Experience"}
+              Grade: {c.grade_received} • {c.semester === "F" ? "Fall" : "Spring"} {c.year_taken}
             </Text>
           </View>
         ))}
-
-        <Text style={styles.overviewLabel}>Session Mode</Text>
-        <Text style={styles.overviewValue}>
-          {sessionMode === "both"
-            ? "Online & In-Person"
-            : sessionMode === "online"
-            ? "Online Only"
-            : "In-Person Only"}
-        </Text>
-
-        {selectedLocations.length > 0 && (
-          <>
-            <Text style={styles.overviewLabel}>Locations</Text>
-            <Text style={styles.overviewValue}>{selectedLocations.join(", ")}</Text>
-          </>
-        )}
-
-        <Text style={styles.overviewLabel}>Weekly Session Cap</Text>
-        <Text style={styles.overviewValue}>{weeklySessionCap} sessions/week</Text>
       </View>
     </View>
   );
 
-  // Success screen after registration
+  // Success screen
   const renderSuccessScreen = () => (
     <View style={styles.successContainer}>
       <View style={styles.successCard}>
@@ -683,16 +627,18 @@ export default function TutorRegistrationScreen() {
         </View>
         <Text style={styles.successTitle}>Registration Complete!</Text>
         <Text style={styles.successMessage}>
-          Your tutor profile has been created successfully. Students can now find you and book tutoring sessions.
+          Your tutor profile has been created. You can now log in and start tutoring!
         </Text>
-        <TouchableOpacity style={styles.dashboardBtn} onPress={goToDashboard}>
+        <TouchableOpacity
+          style={styles.dashboardBtn}
+          onPress={() => navigation.navigate("Tutor Dashboard")}
+        >
           <Text style={styles.dashboardBtnText}>Go to Dashboard</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  // Show success screen if submitted
   if (isSubmitted) {
     return (
       <View style={styles.screen}>
@@ -737,8 +683,16 @@ export default function TutorRegistrationScreen() {
             <Text style={styles.nextBtnText}>Continue</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-            <Text style={styles.submitBtnText}>Complete Registration</Text>
+          <TouchableOpacity
+            style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.submitBtnText}>Complete Registration</Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -916,6 +870,11 @@ const styles = StyleSheet.create({
     color: "#5D667C",
     marginTop: 2,
   },
+  noResultsText: {
+    padding: 20,
+    textAlign: "center",
+    color: "#8C93A4",
+  },
   selectedClassCard: {
     backgroundColor: "#FFF",
     borderRadius: 12,
@@ -939,7 +898,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#5D667C",
     marginTop: 2,
-    maxWidth: 260,
   },
   fieldLabel: {
     fontSize: 13,
@@ -972,28 +930,46 @@ const styles = StyleSheet.create({
   optionChipTextActive: {
     color: "#2E2A1A",
   },
-  checkboxRow: {
+  semesterRow: {
     flexDirection: "row",
+    gap: 10,
     alignItems: "center",
-    marginTop: 14,
   },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#CCD1DC",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
+  semesterBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#F0F2F5",
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
   },
-  checkboxActive: {
-    backgroundColor: "#2E57A2",
-    borderColor: "#2E57A2",
+  semesterBtnActive: {
+    backgroundColor: "#D4AF4A",
+    borderColor: "#C9A23E",
   },
-  checkboxLabel: {
+  semesterBtnText: {
     fontSize: 14,
-    color: "#3A4357",
+    fontWeight: "600",
+    color: "#5D667C",
+  },
+  semesterBtnTextActive: {
+    color: "#2E2A1A",
+  },
+  yearInputWrap: {
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    borderRadius: 8,
+    backgroundColor: "#FFF",
+    paddingHorizontal: 12,
+    height: 40,
+    justifyContent: "center",
+  },
+  yearInput: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2F3850",
+    width: 60,
+    textAlign: "center",
   },
   emptyState: {
     alignItems: "center",
@@ -1003,62 +979,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 15,
     color: "#8C93A4",
-  },
-  modeRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  modeBtn: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
-  },
-  modeBtnActive: {
-    backgroundColor: "#D4AF4A",
-    borderColor: "#C9A23E",
-  },
-  modeBtnText: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#5D667C",
-  },
-  modeBtnTextActive: {
-    color: "#2E2A1A",
-  },
-  locationsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  locationChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
-  },
-  locationChipActive: {
-    backgroundColor: "#E8F4EC",
-    borderColor: "#34A853",
-  },
-  locationChipText: {
-    fontSize: 13,
-    color: "#5D667C",
-  },
-  locationChipTextActive: {
-    color: "#1E7E34",
-    fontWeight: "600",
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#8C93A4",
-    marginTop: 6,
   },
   overviewCard: {
     backgroundColor: "#FFF",
@@ -1078,6 +998,11 @@ const styles = StyleSheet.create({
   overviewValue: {
     fontSize: 15,
     color: "#2F3850",
+  },
+  overviewValueSmall: {
+    fontSize: 13,
+    color: "#5D667C",
+    marginTop: 2,
   },
   overviewClassItem: {
     paddingVertical: 8,
@@ -1141,12 +1066,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  submitBtnDisabled: {
+    backgroundColor: "#9CA3AF",
+  },
   submitBtnText: {
     fontSize: 16,
     fontWeight: "700",
     color: "#FFF",
   },
-  // Success screen styles
   successContainer: {
     flex: 1,
     justifyContent: "center",

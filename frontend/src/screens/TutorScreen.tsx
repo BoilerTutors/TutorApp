@@ -10,6 +10,7 @@ type RootStackParamList = {
   Messenger: undefined;
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
+  "Tutor Reviews": undefined;
 };
 
 type QuickAction = {
@@ -47,34 +48,35 @@ export default function TutorScreen() {
       mounted = false;
     };
   }, []);
-
+  
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Welcome Section */}
-      <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>{firstName}</Text></Text>
-        <Text style={styles.dashboardLabel}>Tutor Dashboard</Text>
-      </View>
+    <View style={styles.container}>
+      <View style={styles.card}>
+        <Text style={styles.title}>BoilerTutors</Text>
+        <Text style={styles.subtitle}>Tutor Dashboard</Text>
+        
+        <Text style={styles.body}>Welcome! Manage your tutoring sessions and reviews here.</Text>
 
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.actionsGrid}>
-        {QUICK_ACTIONS.map((action) => (
-          <Pressable
-            key={action.label}
-            style={styles.actionButton}
-            onPress={() => {
-              if (action.label === "Messages") {
-                navigation.navigate("Messenger");
-              } else if (action.label === "My Profile") {
-                navigation.navigate("Profile", { role: "TUTOR" });
-              }
-            }}
-          >
-            <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
-            <Text style={styles.actionText}>{action.label}</Text>
-          </Pressable>
-        ))}
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Tutor Reviews")}
+        >
+          <Text style={styles.buttonText}>⭐ View My Reviews</Text>
+        </Pressable>
+
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Messenger")}
+        >
+          <Text style={styles.buttonText}>💬 Open Messenger</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Profile", { role: "TUTOR" })}
+        >
+          <Text style={styles.buttonText}>👤 Account & Availability</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -101,7 +103,14 @@ const styles = StyleSheet.create({
   },
   welcomeName: {
     fontWeight: "700",
-    color: NAVY,
+    marginBottom: 4,
+    color: "#2F3850",
+  },
+  subtitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 14,
+    color: "#D4AF4A",
   },
   dashboardLabel: {
     fontSize: 14,
@@ -132,10 +141,24 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     marginRight: 6,
+//     marginBottom: 20,
+//     color: "#5D667C",
+  },
+  button: {
+    marginTop: 10,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  secondaryButton: {
+    backgroundColor: "#1B2D50",
   },
   actionText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",
+    fontSize: 15,
   },
 });

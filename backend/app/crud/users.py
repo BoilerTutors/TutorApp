@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import hash_password
@@ -7,11 +8,11 @@ from app.schemas import ProfileUpdate, UserCreate, SecurityPreferencesUpdate
 
 
 
-def get_user_by_email(db: Session, email: str) -> User | None:
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email.strip().lower()).first()
 
 
-def get_user_by_id(db: Session, user_id: int) -> User | None:
+def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
     return db.get(User, user_id)
 
 
