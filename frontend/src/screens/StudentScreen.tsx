@@ -1,7 +1,9 @@
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 import { logout } from "../auth/logout";
 import { api } from "../api/client";
 
@@ -21,6 +23,20 @@ type RootStackParamList = {
   Settings: undefined;
   Matches: { matches?: MatchItem[] } | undefined;
 };
+
+type QuickAction = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: "Find Tutors", icon: "search" },
+  { label: "Messages", icon: "mail" },
+  { label: "Book Session", icon: "calendar" },
+  { label: "My Schedule", icon: "time" },
+  { label: "My Reviews", icon: "star" },
+  { label: "Profile", icon: "person" },
+];
 
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -42,29 +58,37 @@ export default function StudentScreen() {
       setComputingMatches(false);
     }
   };
-
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>BoilerTutors</Text>
-        <Text style={styles.subtitle}>
-          React Native + TypeScript client scaffold
-        </Text>
-        <Text style={styles.body}>Active dashboard role: This is the student dashboard</Text>
-        <Text style={styles.body}>
-          Next steps: auth, tutor search, scheduling, messaging, reviews.
-        </Text>
-        <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
-          <Text style={styles.buttonText}>Open Messenger</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
-        >
-          <Text style={styles.buttonText}>Account & availability</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.button, styles.matchButton]}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Welcome Section */}
+      <View style={styles.welcomeSection}>
+        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>Gavin</Text></Text>
+        <Text style={styles.dashboardLabel}>Student Dashboard</Text>
+      </View>
+
+      {/* Quick Actions */}
+      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <View style={styles.actionsGrid}>
+        {QUICK_ACTIONS.map((action) => (
+          <Pressable
+            key={action.label}
+            style={styles.actionButton}
+            onPress={() => {
+              if (action.label === "Messages") {
+                navigation.navigate("Messenger");
+              }
+              else if (action.label == "Profile") {
+                navigation.navigate("Profile", { role: "STUDENT" });
+              }
+            }}
+          >
+            <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
+            <Text style={styles.buttonText}>{action.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Pressable
+          style={[styles.actionButton, styles.matchButton]}
           onPress={handleComputeMatches}
           disabled={computingMatches}
         >
@@ -74,55 +98,62 @@ export default function StudentScreen() {
             <Text style={styles.buttonText}>Calculate Matches</Text>
           )}
         </Pressable>
-      </View>
-    </View>
+    </ScrollView>
   );
 }
+
+const NAVY = "#1B2D50";
+const GOLD = "#D4AF4A";
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f2f4f8",
+    backgroundColor: "#F2F4F8",
+  },
+  content: {
+    padding: 20,
+  },
+  welcomeSection: {
     alignItems: "center",
-    justifyContent: "center",
-    padding: 20
+    marginBottom: 24,
   },
-  card: {
-    width: "100%",
-    maxWidth: 560,
-    backgroundColor: "#ffffff",
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2
+  welcomeText: {
+    fontSize: 22,
+    color: "#333",
   },
-  title: {
-    fontSize: 28,
+  welcomeName: {
     fontWeight: "700",
-    marginBottom: 8
+    color: NAVY,
   },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 14
-  },
-  body: {
+  dashboardLabel: {
     fontSize: 14,
-    marginBottom: 12
+    color: "#6B7280",
+    marginTop: 2,
   },
-  button: {
-    marginTop: 8,
-    backgroundColor: "#2E57A2",
-    borderRadius: 10,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 12,
+  },
+  actionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: NAVY,
+    borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    alignSelf: "flex-start",
+    width: "31%",
+    justifyContent: "center",
   },
-  logoutButton: {
-    backgroundColor: "#6B7280",
-    marginTop: 12,
+  actionIcon: {
+    marginRight: 6,
   },
   secondaryButton: {
     marginTop: 10,
@@ -134,6 +165,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "#FFFFFF",
+    fontSize: 12,
     fontWeight: "600",
   },
-});     
+});
