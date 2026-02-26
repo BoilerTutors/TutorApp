@@ -193,6 +193,12 @@ class UserDeviceToken(Base):
 
 class UserNotificationSetting(Base):
     __tablename__ = "user_notification_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "email_digest_frequency IN ('12h', 'daily', 'weekly')",
+            name="ck_email_digest_frequency",
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -204,6 +210,12 @@ class UserNotificationSetting(Base):
         nullable=False,
         default=False,
         server_default="false",
+    )
+    email_digest_frequency: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="daily",
+        server_default="daily",
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

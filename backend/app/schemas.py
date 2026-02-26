@@ -429,11 +429,13 @@ class NotificationPreferencesPublic(BaseModel):
 
     user_id: int
     email_digest_enabled: bool
+    email_digest_frequency: Literal["12h", "daily", "weekly"] = "daily"
     updated_at: datetime
 
 
 class NotificationPreferencesUpdate(BaseModel):
     email_digest_enabled: bool
+    email_digest_frequency: Literal["12h", "daily", "weekly"] = "daily"
 
 
 class MessageAttachmentPublic(BaseModel):
