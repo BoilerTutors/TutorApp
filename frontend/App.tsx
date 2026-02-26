@@ -12,6 +12,7 @@ import { api, setAuthToken } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
+import { AuthProvider } from "./src/context/AuthContext";
 
 const Stack = createNativeStackNavigator();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
@@ -41,11 +42,7 @@ export default function App() {
     let cancelled = false;
 
     const bootstrapAuth = async () => {
-      // uncomment return to test different default screens. Change initialRoute default value to
-      // page you want to test as well.
-      // return;
       try {
-        // If no token exists, render login immediately.
         const token = await loadToken();
         if (!token) {
           if (!cancelled) {
@@ -54,7 +51,6 @@ export default function App() {
           return;
         }
 
-        // Token exists: authenticate it once with /users/me.
         setAuthToken(token);
         const me = await withTimeout(api.get<MeResponse>("/users/me"), AUTH_CHECK_TIMEOUT_MS);
         const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
@@ -87,86 +83,88 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{
-            header: () => (
-              <View style={styles.loginHeader}>
-                <Image
-                  source={require("./src/assets/purdue_logo.png")}
-                  style={styles.loginHeaderImage}
-                  resizeMode="cover"
+    <AuthProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{
+              header: () => (
+                <View style={styles.loginHeader}>
+                  <Image
+                    source={require("./src/assets/purdue_logo.png")}
+                    style={styles.loginHeaderImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              )
+            }}
+          />
+
+          {/* Student Dashboard Screen */}
+          <Stack.Screen
+            name="Student Dashboard"
+            component={StudentScreen}
+            options={({ navigation }) => ({
+              header: () => (
+                <DashboardHeader
+                  role="STUDENT"
+                  onLogout={async () => {
+                    await logout();
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: "Login" }],
+                    });
+                  }}
                 />
-              </View>
-            )
-          }}
-        />
+              ),
+            })}
+          />
 
-        {/* Student Dashboard Screen */}
-        <Stack.Screen
-          name="Student Dashboard"
-          component={StudentScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <DashboardHeader
-                role="STUDENT"
-                onLogout={async () => {
-                  await logout();
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  });
-                }}
-              />
-            ),
-          })}
-        />
+          {/* Tutor Dashboard Screen */}
+          <Stack.Screen
+            name="Tutor Dashboard"
+            component={TutorScreen}
+            options={({ navigation }) => ({
+              header: () => (
+                <DashboardHeader
+                  role="TUTOR"
+                  onLogout={async () => {
+                    await logout();
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: "Login" }],
+                    });
+                  }}
+                />
+              ),
+            })}
+          />
 
-        {/* Tutor Dashboard Screen */}
-        <Stack.Screen
-          name="Tutor Dashboard"
-          component={TutorScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <DashboardHeader
-                role="TUTOR"
-                onLogout={async () => {
-                  await logout();
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  });
-                }}
-              />
-            ),
-          })}
-        />
+          {/* Tutor Registration Screen */}
+          <Stack.Screen 
+            name="Tutor Registration" 
+            component={TutorRegistrationScreen} 
+            options={{ headerShown: false }} 
+          />
 
-        {/* Tutor Registration Screen */}
-        <Stack.Screen 
-          name="Tutor Registration" 
-          component={TutorRegistrationScreen} 
-          options={{ headerShown: false }} 
-        />
+          {/* Student Registration Screen */}
+          <Stack.Screen 
+            name="Student Registration" 
+            component={StudentRegistrationScreen} 
+            options={{ headerShown: false }} 
+          />
 
-        {/* Student Registration Screen */}
-        <Stack.Screen 
-          name="Student Registration" 
-          component={StudentRegistrationScreen} 
-          options={{ headerShown: false }} 
-        />
-
-        {/* Messenger Screen */}
-        <Stack.Screen 
-          name="Messenger" 
-          component={MessengerScreen} 
-          options={{ headerShown: false }} 
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+          {/* Messenger Screen */}
+          <Stack.Screen 
+            name="Messenger" 
+            component={MessengerScreen} 
+            options={{ headerShown: false }} 
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AuthProvider>
   );
 }
 
