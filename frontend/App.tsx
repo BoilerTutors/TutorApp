@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, View, Image, Dimensions, Text } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -10,6 +10,7 @@ import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import MatchesScreen from "./src/screens/MatchesScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
@@ -23,8 +24,27 @@ type RootStackParamList = {
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
   "Student Registration": undefined;
-  Messenger: undefined;
-  Settings: undefined;
+  Messenger:
+    | {
+        openTutorUserId?: number;
+        openTutorName?: string;
+      }
+    | undefined;
+  Settings:
+    | {
+        initialTab?: string;
+      }
+    | undefined;
+  Matches: {
+    matches?: Array<{
+      rank: number;
+      tutor_id: number;
+      tutor_first_name: string;
+      tutor_last_name: string;
+      tutor_major: string | null;
+      similarity_score: number;
+    }>;
+  } | undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -155,6 +175,9 @@ export default function App() {
                   });
                 }}
                 onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() =>
+                  navigation.navigate("Settings", { initialTab: "notifications" })
+                }
               />
             ),
           })}
@@ -176,6 +199,9 @@ export default function App() {
                   });
                 }}
                 onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() =>
+                  navigation.navigate("Settings", { initialTab: "notifications" })
+                }
               />
             ),
           })}
@@ -225,6 +251,11 @@ export default function App() {
               <SettingsHeader onBack={() => navigation.goBack()} />
             ),
           })}
+        />
+        <Stack.Screen
+          name="Matches"
+          component={MatchesScreen}
+          options={{ title: "Your Matches" }}
         />
       </Stack.Navigator>
     </NavigationContainer>

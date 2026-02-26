@@ -148,3 +148,12 @@ def add_match_to_latest_run(
     db.commit()
     db.refresh(row)
     return row
+
+
+def has_student_matched_tutor(db: Session, *, student_id: int, tutor_id: int) -> bool:
+    existing = (
+        db.query(Match.id)
+        .filter(Match.student_id == student_id, Match.tutor_id == tutor_id)
+        .first()
+    )
+    return existing is not None

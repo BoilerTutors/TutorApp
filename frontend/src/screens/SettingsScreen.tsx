@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -6,10 +6,31 @@ import {
   Text,
   View,
 } from "react-native";
+import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import { SETTINGS_TABS } from "./settings/settingsTabs";
 
+type RootStackParamList = {
+  Settings: {
+    initialTab?: string;
+  } | undefined;
+};
+
 export default function SettingsScreen() {
-  const [activeTab, setActiveTab] = useState(SETTINGS_TABS[0].id);
+  const route = useRoute<RouteProp<RootStackParamList, "Settings">>();
+  const validTabIds = useMemo(() => new Set(SETTINGS_TABS.map((tab) => tab.id)), []);
+  const initialTabFromRoute = route.params?.initialTab;
+  const initialTab =
+    initialTabFromRoute && validTabIds.has(initialTabFromRoute)
+      ? initialTabFromRoute
+      : SETTINGS_TABS[0].id;
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (initialTabFromRoute && validTabIds.has(initialTabFromRoute)) {
+      setActiveTab(initialTabFromRoute);
+    }
+  }, [initialTabFromRoute, validTabIds]);
 
   const activeConfig = SETTINGS_TABS.find((t) => t.id === activeTab);
   const TabContent = activeConfig?.component ?? SETTINGS_TABS[0].component;

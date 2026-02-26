@@ -24,6 +24,7 @@ from app.schemas import (
     MessageCreate,
     MessagePublic,
 )
+from app.services.notification_events import build_and_store_notification, emit_notification
 
 router = APIRouter()
 
@@ -53,6 +54,14 @@ class ConnectionManager:
                 await connection.send_json(message)
 
 manager = ConnectionManager()
+
+
+def _get_other_participant_id(user1_id: int, user2_id: int, current_user_id: int) -> int | None:
+    if current_user_id == user1_id:
+        return user2_id
+    if current_user_id == user2_id:
+        return user1_id
+    return None
 
 
 # ---------- REST endpoints ----------
@@ -121,7 +130,7 @@ def list_messages(
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessagePublic)
-def send_message(
+async def send_message(
     conversation_id: int,
     body: MessageCreate,
     db: Session = Depends(get_db),
@@ -131,6 +140,19 @@ def send_message(
     msg = crud_messages.create_message(db, conversation_id, current_user.id, body.content)
     if msg is None:
         raise HTTPException(status_code=404, detail="Conversation not found or you are not a participant")
+    conv = crud_messages.get_conversation_by_id(db, conversation_id, current_user.id)
+    if conv is not None:
+        recipient_id = _get_other_participant_id(conv.user1_id, conv.user2_id, current_user.id)
+        if recipient_id is not None:
+            row = build_and_store_notification(
+                db,
+                user_id=recipient_id,
+                event_type="notification",
+                title="New message",
+                body=f"{current_user.first_name} sent you a message.",
+                payload_json={"conversation_id": conversation_id, "sender_id": current_user.id},
+            )
+            await emit_notification(recipient_id, row)
     return MessagePublic.model_validate(msg)
 
 
@@ -170,5 +192,16 @@ async def websocket_endpoint(websocket: WebSocket, pairing_id: int, db: Session 
 
             payload = MessagePublic.model_validate(msg).model_dump(mode="json")
             await manager.broadcast(payload, pairing_id)
+            recipient_id = _get_other_participant_id(conv.user1_id, conv.user2_id, current_user.id)
+            if recipient_id is not None:
+                row = build_and_store_notification(
+                    db,
+                    user_id=recipient_id,
+                    event_type="notification",
+                    title="New message",
+                    body=f"{current_user.first_name} sent you a message.",
+                    payload_json={"conversation_id": pairing_id, "sender_id": current_user.id},
+                )
+                await emit_notification(recipient_id, row)
     except WebSocketDisconnect:
         manager.disconnect(websocket, pairing_id)

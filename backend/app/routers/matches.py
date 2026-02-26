@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.crud.matches import add_match_to_latest_run, get_latest_matches_for_student
+from app.crud.matches import (
+    add_match_to_latest_run,
+    get_latest_matches_for_student,
+    has_student_matched_tutor,
+)
 from app.database import get_db
 from app.models import TutorProfile, User
 from app.schemas import MatchResultPublic, MatchSelectRequest
 from app.services.embeddings import knn_retrieve_candidates, rerank_candidates
+from app.services.notification_events import build_and_store_notification, emit_notification
 
 router = APIRouter()
 
@@ -122,7 +127,7 @@ def refresh_my_match_candidates(
 
 
 @router.post("/me/select", response_model=list[MatchResultPublic])
-def select_match(
+async def select_match(
     body: MatchSelectRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -140,6 +145,11 @@ def select_match(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tutor not found in current match candidates.",
         )
+    if has_student_matched_tutor(db, student_id=current_user.id, tutor_id=body.tutor_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You have already matched with this tutor.",
+        )
 
     add_match_to_latest_run(
         db,
@@ -153,6 +163,17 @@ def select_match(
             "location_weight": 0.10,
         },
     )
+    tutor_user = db.get(User, body.tutor_id)
+    if tutor_user is not None:
+        row = build_and_store_notification(
+            db,
+            user_id=tutor_user.id,
+            event_type="notification",
+            title="You got a new match",
+            body=f"{current_user.first_name} matched with you.",
+            payload_json={"student_id": current_user.id, "tutor_id": tutor_user.id},
+        )
+        await emit_notification(tutor_user.id, row)
     return _build_saved_match_payload(db, current_user.id)
 
 
