@@ -22,3 +22,5 @@ build/
 certs/
 backend/dev_schema.sql
 backend/main_schema.sql
+
+backend/dev/backfill_user_embeddings.py

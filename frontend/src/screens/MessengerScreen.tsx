@@ -11,13 +11,10 @@ import {
 } from "react-native";
 import { API_BASE_URL } from "../config";
 import { api, getAuthToken } from "../api/client";
+import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 
-type Conversation = {
-  id: number;
-  user1_id: number;
-  user2_id: number;
-  other_user_id: number;
-};
+type Conversation = { id: number };
 
 type Message = {
   id: number;
@@ -28,35 +25,111 @@ type Message = {
 
 type UserMe = {
   id: number;
+  is_student: boolean;
+};
+
+type MatchListRow = {
+  tutor_id: number;
+  tutor_first_name: string;
+  tutor_last_name: string;
+  similarity_score: number;
+};
+
+type SidebarItem =
+  | {
+      kind: "match";
+      key: string;
+      tutor_id: number;
+      tutor_first_name: string;
+      tutor_last_name: string;
+      similarity_score: number;
+    }
+  | {
+      kind: "conversation";
+      key: string;
+      id: number;
+      other_user_id: number;
+      other_user_first_name?: string | null;
+      other_user_last_name?: string | null;
+    };
+
+type RootStackParamList = {
+  Messenger:
+    | {
+        openTutorUserId?: number;
+        openTutorName?: string;
+      }
+    | undefined;
 };
 
 export default function MessengerScreen() {
+  const route = useRoute<RouteProp<RootStackParamList, "Messenger">>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isStudentAccount, setIsStudentAccount] = useState(false);
+  const [conversations, setConversations] = useState<
+    Array<{
+      id: number;
+      other_user_id: number;
+      other_user_first_name?: string | null;
+      other_user_last_name?: string | null;
+    }>
+  >([]);
+  const [matchedTutors, setMatchedTutors] = useState<MatchListRow[]>([]);
+  const [selectedTutorUserId, setSelectedTutorUserId] = useState<number | null>(null);
+  const [selectedTutorName, setSelectedTutorName] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [partnerId, setPartnerId] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.id === selectedConversationId) ?? null,
-    [conversations, selectedConversationId]
+  const lastOpenedTutorRef = useRef<number | null>(null);
+  const sidebarItems = useMemo<SidebarItem[]>(
+    () =>
+      isStudentAccount
+        ? matchedTutors.map((m) => ({
+            kind: "match" as const,
+            key: String(m.tutor_id),
+            tutor_id: m.tutor_id,
+            tutor_first_name: m.tutor_first_name,
+            tutor_last_name: m.tutor_last_name,
+            similarity_score: m.similarity_score,
+          }))
+        : conversations.map((c) => ({
+            kind: "conversation" as const,
+            key: String(c.id),
+            id: c.id,
+            other_user_id: c.other_user_id,
+            other_user_first_name: c.other_user_first_name,
+            other_user_last_name: c.other_user_last_name,
+          })),
+    [isStudentAccount, matchedTutors, conversations]
   );
 
-  const loadConversations = useCallback(async () => {
+  const loadSidebarItems = useCallback(async () => {
     const me = await api.get<UserMe>("/users/me");
-    const convs = await api.get<Conversation[]>("/messages/conversations");
     setCurrentUserId(me.id);
-    setConversations(convs);
-    if (!selectedConversationId && convs.length > 0) {
-      setSelectedConversationId(convs[0].id);
+    setIsStudentAccount(me.is_student);
+
+    if (!me.is_student) {
+      const convs = await api.get<
+        Array<{
+          id: number;
+          other_user_id: number;
+          other_user_first_name?: string | null;
+          other_user_last_name?: string | null;
+        }>
+      >("/messages/conversations");
+      setConversations(convs);
+      setMatchedTutors([]);
+    } else {
+      const rows = await api.get<MatchListRow[]>("/matches/me");
+      setMatchedTutors(rows);
+      setConversations([]);
     }
-  }, [selectedConversationId]);
+  }, []);
 
   const loadMessages = useCallback(async (conversationId: number) => {
     const rows = await api.get<Message[]>(`/messages/conversations/${conversationId}/messages`);
@@ -66,11 +139,11 @@ export default function MessengerScreen() {
   const initialLoad = useCallback(async () => {
     try {
       setLoading(true);
-      await loadConversations();
+      await loadSidebarItems();
     } finally {
       setLoading(false);
     }
-  }, [loadConversations]);
+  }, [loadSidebarItems]);
 
   useEffect(() => {
     void initialLoad();
@@ -87,7 +160,7 @@ export default function MessengerScreen() {
   const onRefresh = async () => {
     try {
       setRefreshing(true);
-      await loadConversations();
+      await loadSidebarItems();
       if (selectedConversationId) {
         await loadMessages(selectedConversationId);
       }
@@ -96,18 +169,22 @@ export default function MessengerScreen() {
     }
   };
 
-  const onCreateOrOpenConversation = async () => {
-    const otherUserId = Number(partnerId);
-    if (!Number.isInteger(otherUserId) || otherUserId <= 0) {
-      return;
-    }
+  const onOpenConversationForTutor = async (otherUserId: number) => {
     const conv = await api.post<Conversation>("/messages/conversations", {
       other_user_id: otherUserId,
     });
-    setPartnerId("");
-    await loadConversations();
+    setSelectedTutorUserId(otherUserId);
+    if (route.params?.openTutorName) {
+      setSelectedTutorName(route.params.openTutorName);
+    }
     setSelectedConversationId(conv.id);
     await loadMessages(conv.id);
+  };
+
+  const onOpenExistingConversation = async (conversationId: number, otherUserId: number) => {
+    setSelectedTutorUserId(otherUserId);
+    setSelectedConversationId(conversationId);
+    await loadMessages(conversationId);
   };
 
   const onSend = async () => {
@@ -131,6 +208,16 @@ export default function MessengerScreen() {
       setSending(false);
     }
   };
+
+  useEffect(() => {
+    const tutorId = route.params?.openTutorUserId;
+    if (!tutorId || !isStudentAccount || tutorId === lastOpenedTutorRef.current) {
+      return;
+    }
+    lastOpenedTutorRef.current = tutorId;
+    setSelectedTutorName(route.params?.openTutorName ?? null);
+    void onOpenConversationForTutor(tutorId);
+  }, [isStudentAccount, route.params?.openTutorName, route.params?.openTutorUserId]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -210,46 +297,69 @@ export default function MessengerScreen() {
         </View>
       </View>
 
-      <View style={styles.newRow}>
-        <TextInput
-          style={styles.partnerInput}
-          value={partnerId}
-          onChangeText={setPartnerId}
-          placeholder="User ID to message"
-          keyboardType="number-pad"
-        />
-        <Pressable style={styles.primaryBtn} onPress={onCreateOrOpenConversation}>
-          <Text style={styles.primaryBtnText}>Open Chat</Text>
-        </Pressable>
-      </View>
-
       <View style={styles.content}>
         <View style={styles.listPane}>
-          <Text style={styles.sectionTitle}>Conversations</Text>
+          <Text style={styles.sectionTitle}>{isStudentAccount ? "Matched Tutors" : "Conversations"}</Text>
           <FlatList
-            data={conversations}
-            keyExtractor={(item) => String(item.id)}
+            data={sidebarItems}
+            keyExtractor={(item) => item.key}
             renderItem={({ item }) => {
+              if (item.kind === "match") {
+                const selected = item.tutor_id === selectedTutorUserId;
+                return (
+                  <Pressable
+                    style={[styles.conversationRow, selected && styles.conversationSelected]}
+                    onPress={() => {
+                      void onOpenConversationForTutor(item.tutor_id);
+                      setSelectedTutorName(`${item.tutor_first_name} ${item.tutor_last_name}`);
+                    }}
+                  >
+                    <Text style={styles.conversationTitle}>
+                      {item.tutor_first_name} {item.tutor_last_name}
+                    </Text>
+                    <Text style={styles.conversationSub}>
+                      Similarity {(item.similarity_score * 100).toFixed(1)}%
+                    </Text>
+                  </Pressable>
+                );
+              }
+
               const selected = item.id === selectedConversationId;
               return (
                 <Pressable
                   style={[styles.conversationRow, selected && styles.conversationSelected]}
-                  onPress={() => setSelectedConversationId(item.id)}
+                  onPress={() => {
+                    void onOpenExistingConversation(item.id, item.other_user_id);
+                  }}
                 >
-                  <Text style={styles.conversationTitle}>Chat #{item.id}</Text>
-                  <Text style={styles.conversationSub}>with user {item.other_user_id}</Text>
+                  <Text style={styles.conversationTitle}>
+                    {(item.other_user_first_name || item.other_user_last_name)
+                      ? `${item.other_user_first_name ?? ""} ${item.other_user_last_name ?? ""}`.trim()
+                      : `User ${item.other_user_id}`}
+                  </Text>
+                  <Text style={styles.conversationSub}>User ID {item.other_user_id}</Text>
                 </Pressable>
               );
             }}
-            ListEmptyComponent={<Text style={styles.helperText}>No conversations yet.</Text>}
+            ListEmptyComponent={
+              <Text style={styles.helperText}>
+                {isStudentAccount ? "No matches yet." : "No conversations yet."}
+              </Text>
+            }
           />
         </View>
 
         <View style={styles.chatPane}>
           <Text style={styles.sectionTitle}>
-            {selectedConversation
-              ? `Conversation #${selectedConversation.id}`
-              : "Select a conversation"}
+            {selectedConversationId
+              ? selectedTutorName
+                ? `Chat with ${selectedTutorName}`
+                : selectedTutorUserId
+                  ? `Chat with tutor ${selectedTutorUserId}`
+                  : `Conversation #${selectedConversationId}`
+              : isStudentAccount
+                ? "Select a matched tutor"
+                : "Select a conversation"}
           </Text>
           <FlatList
             data={messages}
@@ -258,7 +368,9 @@ export default function MessengerScreen() {
               const mine = currentUserId != null && item.sender_id === currentUserId;
               return (
                 <View style={[styles.messageBubble, mine ? styles.myMessage : styles.otherMessage]}>
-                  <Text style={styles.messageText}>{item.content}</Text>
+                  <Text style={[styles.messageText, mine ? styles.sentMessageText : styles.receivedMessageText]}>
+                    {item.content}
+                  </Text>
                 </View>
               );
             }}
@@ -396,6 +508,12 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   messageText: {
+    color: "#111827",
+  },
+  sentMessageText: {
+    color: "#FFFFFF",
+  },
+  receivedMessageText: {
     color: "#111827",
   },
   composeRow: {

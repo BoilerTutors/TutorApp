@@ -33,20 +33,41 @@ type RootStackParamList = {
   };
 };
 
-export default function LoginScreen() {
+// Simple email format check (local@domain)
+const isValidEmailFormat = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+const isPurdueEmail = (s: string): boolean => s.trim().toLowerCase().endsWith("@purdue.edu");
 
+function validateEmailForSignUp(value: string): string | null {
+  const t = value.trim();
+  if (!t) return "Please enter your email.";
+  if (!isValidEmailFormat(t)) return "Please enter a valid email address.";
+  if (!isPurdueEmail(t)) return "Email must be a Purdue email (@purdue.edu).";
+  return null;
+}
+
+function validatePasswordForSignUp(value: string): string | null {
+  if (!value) return "Please enter a password.";
+  if (value.length < 8) return "Password must be at least 8 characters.";
+  return null;
+}
+
+export default function LoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [role, setRole] = useState<Role>("tutor");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const onLogin = async () => {
     if (!email.trim() || !password) {
       Alert.alert("Error", "Please enter email and password.");
       return;
     }
+    setLoginError(null);
     setLoading(true);
     try {
       const data = await api.post<{ access_token: string; token_type: string }>(
@@ -67,22 +88,20 @@ export default function LoginScreen() {
         navigation.navigate("Tutor Dashboard");
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Login failed. Check email and password.";
-      Alert.alert("Login failed", message);
+      const message = e instanceof Error ? e.message : "Invalid email or password.";
+      setLoginError(message);
     } finally {
       setLoading(false);
     }
   };
 
   const onSignUp = () => {
-    if (!email.trim() || !password) {
-      Alert.alert("Error", "Please enter email and password to create an account.");
-      return;
-    }
-    if (password.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters long.");
-      return;
-    }
+    const eErr = validateEmailForSignUp(email);
+    const pErr = validatePasswordForSignUp(password);
+    setEmailError(eErr);
+    setPasswordError(pErr);
+    if (eErr || pErr) return;
+
     if (role === "tutor") {
       navigation.navigate("Tutor Registration", {
         email: email.trim().toLowerCase(),
@@ -113,29 +132,35 @@ export default function LoginScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{isSignUp ? "Create Your Account" : "Login to Your Account"}</Text>
 
-        <View style={styles.inputWrap}>
-          <Ionicons name="mail" size={16} color="#8C93A4" />
-          <TextInput
-            placeholder="your.email@purdue.edu"
-            placeholderTextColor="#B0B6C3"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-            style={styles.input}
-          />
+        <View style={styles.inputGroup}>
+          <View style={[styles.inputWrap, emailError && styles.inputWrapError]}>
+            <Ionicons name="mail" size={16} color={emailError ? "#B91C1C" : "#8C93A4"} />
+            <TextInput
+              placeholder="your.email@purdue.edu"
+              placeholderTextColor="#B0B6C3"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={(v) => { setEmail(v); if (emailError) setEmailError(null); if (loginError) setLoginError(null); }}
+              style={styles.input}
+            />
+          </View>
+          {emailError ? <Text style={styles.fieldError}>{emailError}</Text> : null}
         </View>
 
-        <View style={styles.inputWrap}>
-          <Ionicons name="lock-closed" size={16} color="#8C93A4" />
-          <TextInput
-            placeholder="PASSWORD"
-            placeholderTextColor="#B0B6C3"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            style={styles.input}
-          />
+        <View style={styles.inputGroup}>
+          <View style={[styles.inputWrap, passwordError && styles.inputWrapError]}>
+            <Ionicons name="lock-closed" size={16} color={passwordError ? "#B91C1C" : "#8C93A4"} />
+            <TextInput
+              placeholder="PASSWORD"
+              placeholderTextColor="#B0B6C3"
+              secureTextEntry
+              value={password}
+              onChangeText={(v) => { setPassword(v); if (passwordError) setPasswordError(null); if (loginError) setLoginError(null); }}
+              style={styles.input}
+            />
+          </View>
+          {passwordError ? <Text style={styles.fieldError}>{passwordError}</Text> : null}
         </View>
 
         <View style={styles.roleRow}>
@@ -158,15 +183,21 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
+        {!isSignUp && loginError ? (
+          <View style={styles.loginErrorWrap}>
+            <Text style={styles.loginErrorText}>{loginError}</Text>
+          </View>
+        ) : null}
+
         {isSignUp ? (
           <Text style={styles.helperText}>
             Already have an account?{" "}
-            <Text style={styles.link} onPress={() => setIsSignUp(false)}>Sign In!</Text>
+            <Text style={styles.link} onPress={() => { setIsSignUp(false); setEmailError(null); setPasswordError(null); setLoginError(null); }}>Sign In!</Text>
           </Text>
         ) : (
           <Text style={styles.helperText}>
             Don't have an account?{" "}
-            <Text style={styles.link} onPress={() => setIsSignUp(true)}>Sign Up Now!</Text>
+            <Text style={styles.link} onPress={() => { setIsSignUp(true); setEmailError(null); setPasswordError(null); setLoginError(null); }}>Sign Up Now!</Text>
           </Text>
         )}
         
@@ -239,6 +270,9 @@ const styles = StyleSheet.create({
     color: "#3A4357",
     marginBottom: 14
   },
+  inputGroup: {
+    marginBottom: 10,
+  },
   inputWrap: {
     borderWidth: 1,
     borderColor: "#E1E5EE",
@@ -247,7 +281,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10
+  },
+  inputWrapError: {
+    borderColor: "#B91C1C",
+  },
+  fieldError: {
+    fontSize: 12,
+    color: "#B91C1C",
+    marginTop: 4,
+    marginLeft: 2,
   },
   input: {
     flex: 1,
@@ -297,6 +339,21 @@ const styles = StyleSheet.create({
   },
   roleTextActive: {
     color: "#2E2A1A"
+  },
+  loginErrorWrap: {
+    marginTop: 4,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#B91C1C",
+  },
+  loginErrorText: {
+    fontSize: 14,
+    color: "#B91C1C",
+    fontWeight: "500",
   },
   helperText: {
     textAlign: "center",

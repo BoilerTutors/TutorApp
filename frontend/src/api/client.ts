@@ -1,6 +1,14 @@
 import { API_BASE_URL } from "../config";
+import { clearToken } from "../auth/storage";
 
 type RequestInitWithBody = Omit<RequestInit, "body"> & { body?: unknown };
+
+/** Called when a request returns 401 (after clearing token). Use to show a message and navigate to Login. */
+let onUnauthorized: (() => void) | null = null;
+
+export function setOnUnauthorized(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
 
 /**
  * Base URL for all backend requests. Use request() or get/post/etc. so every
@@ -50,12 +58,35 @@ async function request<T>(
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      // Had a token → session expired: clear and notify so app can redirect to Login.
+      if (authToken) {
+        authToken = null;
+        await clearToken();
+        onUnauthorized?.();
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+      // No token (e.g. wrong login credentials): show message on the login screen.
+      throw new Error("Invalid email or password.");
+    }
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
   }
+  // 204 No Content (or empty body): do not call res.json() or it throws
+  if (res.status === 204) {
+    return undefined as T;
+  }
   const contentType = res.headers.get("content-type");
+  const contentLength = res.headers.get("content-length");
+  if (contentLength === "0" || !res.body) {
+    return undefined as T;
+  }
   if (contentType?.includes("application/json")) {
-    return res.json() as Promise<T>;
+    const text = await res.text();
+    if (!text || text.trim() === "") {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
   return undefined as T;
 }
