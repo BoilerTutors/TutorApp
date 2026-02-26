@@ -1,5 +1,6 @@
+
 import React from "react";
-import NotificationsTab from "./NotificationsTab";
+import NotificationPreferencesTab from "./NotificationPreferencesTab";
 
 export type SettingsTabConfig = {
   id: string;
@@ -9,7 +10,11 @@ export type SettingsTabConfig = {
 
 /** Add new tabs here and create a corresponding component in this folder. */
 export const SETTINGS_TABS: SettingsTabConfig[] = [
-  { id: "notifications", label: "Notifications", component: NotificationsTab },
+  {
+    id: "notification-preferences",
+    label: "Notification Settings",
+    component: NotificationPreferencesTab,
+  },
 ];
 
 export type SettingsTabId = (typeof SETTINGS_TABS)[number]["id"];

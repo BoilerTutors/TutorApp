@@ -3,15 +3,6 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "
 
 import { api } from "../../api/client";
 
-type NotificationRow = {
-  id: number;
-  title: string;
-  body: string;
-  payload_json?: Record<string, unknown> | null;
-  is_read: boolean;
-  created_at: string;
-};
-
 export default function NotificationsTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,6 +82,15 @@ export default function NotificationsTab() {
     </View>
   );
 }
+
+type NotificationRow = {
+  id: number;
+  title: string;
+  body: string;
+  payload_json?: Record<string, unknown> | null;
+  is_read: boolean;
+  created_at: string;
+};
 
 const styles = StyleSheet.create({
   container: {

@@ -11,6 +11,7 @@ import MessengerScreen from "./src/screens/MessengerScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import MatchesScreen from "./src/screens/MatchesScreen";
+import NotificationsTab from "./src/screens/settings/NotificationsTab";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
@@ -35,6 +36,7 @@ type RootStackParamList = {
         initialTab?: string;
       }
     | undefined;
+  Notifications: undefined;
   Matches: {
     matches?: Array<{
       rank: number;
@@ -175,9 +177,7 @@ export default function App() {
                   });
                 }}
                 onSettingsPress={() => navigation.navigate("Settings")}
-                onNotificationsPress={() =>
-                  navigation.navigate("Settings", { initialTab: "notifications" })
-                }
+                onNotificationsPress={() => navigation.navigate("Notifications")}
               />
             ),
           })}
@@ -199,9 +199,7 @@ export default function App() {
                   });
                 }}
                 onSettingsPress={() => navigation.navigate("Settings")}
-                onNotificationsPress={() =>
-                  navigation.navigate("Settings", { initialTab: "notifications" })
-                }
+                onNotificationsPress={() => navigation.navigate("Notifications")}
               />
             ),
           })}
@@ -251,6 +249,11 @@ export default function App() {
               <SettingsHeader onBack={() => navigation.goBack()} />
             ),
           })}
+        />
+        <Stack.Screen
+          name="Notifications"
+          component={NotificationsTab}
+          options={{ title: "Notifications" }}
         />
         <Stack.Screen
           name="Matches"
