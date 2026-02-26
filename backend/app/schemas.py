@@ -361,6 +361,23 @@ class ConversationWithPartner(BaseModel):
     other_user_id: int
     last_message: Optional[MessagePublic] = None
 
+
+# ===========================================================
+# ---- Matching schemas ----
+# ===========================================================
+class MatchResultPublic(BaseModel):
+    rank: int
+    tutor_id: int
+    tutor_first_name: str
+    tutor_last_name: str
+    tutor_major: Optional[str] = None
+    similarity_score: float
+    embedding_similarity: Optional[float] = None
+    class_strength: Optional[float] = None
+    availability_overlap: Optional[float] = None
+    location_match: Optional[float] = None
+
+
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
 
