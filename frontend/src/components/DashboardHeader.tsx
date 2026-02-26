@@ -14,6 +14,40 @@ type DashboardHeaderProps = {
   onLogout: () => void;
 };
 
+export type AccountType = "STUDENT" | "TUTOR" | "ADMINISTRATOR";
+
+type ProfileHeaderProps = {
+  onBack: () => void;
+  role?: AccountType;
+};
+
+export function ProfileHeader({ onBack, role = "STUDENT" }: ProfileHeaderProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.row}>
+        <Pressable style={styles.logoutBtn} onPress={onBack} hitSlop={8}>
+          <Ionicons name="chevron-back" size={18} color="#FFFFFF" />
+          <Text style={styles.logoutText}>Back</Text>
+        </Pressable>
+
+        <View style={styles.logoWrap}>
+          <Text style={styles.logoText}>
+            Boiler<Text style={styles.logoAccent}>Tutors</Text>
+          </Text>
+        </View>
+
+        <View style={styles.badgeWrap}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{role}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function DashboardHeader({ role, onLogout }: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
 

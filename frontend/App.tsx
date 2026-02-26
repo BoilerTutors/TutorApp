@@ -8,9 +8,10 @@ import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
 import StudentRegistrationScreen from "./src/screens/StudentRegistrationScreen";
 import MessengerScreen from "./src/screens/MessengerScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
-import DashboardHeader from "./src/components/DashboardHeader";
+import DashboardHeader, { ProfileHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 
 const Stack = createNativeStackNavigator();
@@ -108,8 +109,17 @@ export default function App() {
     );
   }
 
+  const linking = {
+    prefixes: [],
+    config: {
+      screens: {
+        Profile: "profile",
+      },
+    },
+  };
+
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer linking={linking} ref={navigationRef}>
       <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
         <Stack.Screen
           name="Login"
@@ -186,6 +196,20 @@ export default function App() {
           name="Messenger" 
           component={MessengerScreen} 
           options={{ headerShown: false }} 
+        />
+
+        {/* Profile Screen - accessible at route "Profile" (/profile in deep linking) */}
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+          options={({ navigation, route }) => ({
+            header: () => (
+              <ProfileHeader
+                onBack={() => navigation.goBack()}
+                role={(route.params as { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" } | undefined)?.role ?? "STUDENT"}
+              />
+            ),
+          })}
         />
       </Stack.Navigator>
     </NavigationContainer>

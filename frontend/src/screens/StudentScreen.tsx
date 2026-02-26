@@ -6,6 +6,7 @@ import { logout } from "../auth/logout";
 type RootStackParamList = {
   Login: undefined;
   Messenger: undefined;
+  Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
 };
 
 export default function StudentScreen() {
@@ -30,6 +31,8 @@ export default function StudentScreen() {
         <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
           <Text style={styles.buttonText}>Open Messenger</Text>
         </Pressable>
+
+
       </View>
     </View>
   );
