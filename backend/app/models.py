@@ -98,6 +98,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    notification_settings: Mapped[Optional["UserNotificationSetting"]] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class UserEmbedding(Base):
@@ -184,6 +189,30 @@ class UserDeviceToken(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="device_tokens")
+
+
+class UserNotificationSetting(Base):
+    __tablename__ = "user_notification_settings"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    email_digest_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="notification_settings")
 
 
 class TutorProfile(Base):

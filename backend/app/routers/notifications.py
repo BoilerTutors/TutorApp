@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_user_from_token
 from app.crud.notifications import (
+    get_or_create_notification_settings,
     list_notifications_for_user,
     mark_notification_read,
+    update_notification_settings,
     upsert_device_token,
 )
 from app.database import get_db
@@ -13,6 +15,8 @@ from app.schemas import (
     DeviceTokenPublic,
     DeviceTokenRegisterRequest,
     NotificationPublic,
+    NotificationPreferencesPublic,
+    NotificationPreferencesUpdate,
 )
 from app.services.notification_ws import notification_ws_manager
 
@@ -52,6 +56,29 @@ def read_notification(
     row = mark_notification_read(db, notification_id=notification_id, user_id=current_user.id)
     if row is None:
         raise HTTPException(status_code=404, detail="Notification not found")
+    return row
+
+
+@router.get("/preferences/me", response_model=NotificationPreferencesPublic)
+def get_my_notification_preferences(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NotificationPreferencesPublic:
+    row = get_or_create_notification_settings(db, user_id=current_user.id)
+    return row
+
+
+@router.put("/preferences/me", response_model=NotificationPreferencesPublic)
+def put_my_notification_preferences(
+    body: NotificationPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NotificationPreferencesPublic:
+    row = update_notification_settings(
+        db,
+        user_id=current_user.id,
+        email_digest_enabled=body.email_digest_enabled,
+    )
     return row
 
 
