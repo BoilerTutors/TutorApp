@@ -12,6 +12,7 @@ import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
+import GeneralHeader from "./src/components/GeneralHeader";
 
 const Stack = createNativeStackNavigator();
 
@@ -178,14 +179,14 @@ export default function App() {
         <Stack.Screen 
           name="Student Registration" 
           component={StudentRegistrationScreen} 
-          options={{ headerShown: false }} 
+          options={{ header: () => <GeneralHeader title="Student Registration" /> }} 
         />
 
         {/* Messenger Screen */}
         <Stack.Screen 
           name="Messenger" 
-          component={MessengerScreen} 
-          options={{ headerShown: false }} 
+          component={MessengerScreen}
+          options={{ header: () => <GeneralHeader title="Messenger" /> }} 
         />
       </Stack.Navigator>
     </NavigationContainer>

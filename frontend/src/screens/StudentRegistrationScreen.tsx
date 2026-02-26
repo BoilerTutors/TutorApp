@@ -65,8 +65,8 @@ export default function StudentRegistrationScreen() {
     }
 
     const [firstName, lastName] = splitFullName(trimmed);
-    const gradYearNum = gradYear.trim() ? parseInt(gradYear.trim(), 10) : undefined;
-    if (gradYear.trim() && (Number.isNaN(gradYearNum) || gradYearNum < 1900 || gradYearNum > 2100)) {
+    const gradYearNum: number | undefined = gradYear.trim() ? parseInt(gradYear.trim(), 10) : undefined;
+    if (gradYearNum !== undefined && (Number.isNaN(gradYearNum) || gradYearNum < 1900 || gradYearNum > 2100)) {
       showAlert("Error", "Please enter a valid graduation year (e.g. 2026).");
       return;
     }
