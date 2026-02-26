@@ -82,6 +82,15 @@ const splitFullName = (full: string): [string, string] => {
   return [first, last];
 };
 
+/** Map "Fall 2025" / "Spring 2025" to backend semester code and year. */
+function parseSemester(semesterTaken: string): { semester: "F" | "S"; year_taken: number } | null {
+  const match = semesterTaken.match(/^(Fall|Spring)\s+(\d{4})$/);
+  if (!match) return null;
+  const year = parseInt(match[2], 10);
+  const semester = match[1] === "Fall" ? "F" : "S";
+  return { semester, year_taken: year };
+}
+
 export default function TutorRegistrationScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "Tutor Registration">>();
@@ -210,6 +219,20 @@ export default function TutorRegistrationScreen() {
 
     const [firstName, lastName] = splitFullName(fullName);
 
+    const tutorClasses = selectedClasses
+      .map((c) => {
+        const parsed = parseSemester(c.semesterTaken ?? "");
+        const grade = c.gradeReceived;
+        if (!parsed || !grade) return null;
+        return {
+          class_id: c.id,
+          semester: parsed.semester,
+          year_taken: parsed.year_taken,
+          grade_received: grade,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
     const payload = {
       email,
       first_name: firstName,
@@ -219,6 +242,9 @@ export default function TutorRegistrationScreen() {
       is_student: false,
       tutor_profile: {
         bio: bio || undefined,
+        preferred_locations:
+          selectedLocations.length > 0 ? selectedLocations : undefined,
+        classes: tutorClasses.length > 0 ? tutorClasses : undefined,
       },
     };
 

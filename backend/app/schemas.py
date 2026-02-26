@@ -68,6 +68,8 @@ class TutorProfileCreate(BaseModel):
     hourly_rate_cents: Optional[int] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    classes: Optional[list["TutorClassCreate"]] = None
 
 
 class TutorProfileUpdate(BaseModel):
@@ -75,6 +77,7 @@ class TutorProfileUpdate(BaseModel):
     hourly_rate_cents: Optional[int] = None
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
 
 
 class TutorProfilePublic(BaseModel):
@@ -86,6 +89,7 @@ class TutorProfilePublic(BaseModel):
     hourly_rate_cents: Optional[int] = None
     major: Optional[str] = None
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
     average_rating: Optional[float] = None
 
 # ===========================================================
@@ -95,11 +99,14 @@ class TutorProfilePublic(BaseModel):
 class StudentProfileCreate(BaseModel):
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
+    classes: Optional[list["StudentClassCreate"]] = None
 
 
 class StudentProfileUpdate(BaseModel):
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
 
 
 class StudentProfilePublic(BaseModel):
@@ -109,6 +116,7 @@ class StudentProfilePublic(BaseModel):
     user_id: int
     major: Optional[str] = None
     grad_year: Optional[int] = None
+    preferred_locations: Optional[list[str]] = None
 
 # ===========================================================
 # ---- Availability schemas ----
@@ -321,3 +329,5 @@ class ConversationWithPartner(BaseModel):
 
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
+TutorProfileCreate.model_rebuild()
+StudentProfileCreate.model_rebuild()
