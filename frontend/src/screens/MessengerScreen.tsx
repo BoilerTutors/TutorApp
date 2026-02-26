@@ -48,6 +48,10 @@ type MatchListRow = {
   tutor_last_name: string;
   similarity_score: number;
 };
+type MatchRefreshRow = {
+  tutor_id: number;
+  similarity_score: number;
+};
 type AvailabilitySlot = {
   id: number;
   user_id: number;
@@ -152,7 +156,26 @@ export default function MessengerScreen() {
       setMatchedTutors([]);
     } else {
       const rows = await api.get<MatchListRow[]>("/matches/me");
-      setMatchedTutors(rows);
+      if (rows.length === 0) {
+        setMatchedTutors([]);
+      } else {
+        try {
+          // Keep the matched tutor set from /matches/me, but update displayed scores
+          // from freshly recomputed rankings when the same tutor appears there.
+          const refreshed = await api.post<MatchRefreshRow[]>("/matches/me/refresh");
+          const refreshedScoreByTutorId = new Map<number, number>(
+            refreshed.map((row) => [row.tutor_id, row.similarity_score])
+          );
+          setMatchedTutors(
+            rows.map((row) => ({
+              ...row,
+              similarity_score: refreshedScoreByTutorId.get(row.tutor_id) ?? row.similarity_score,
+            }))
+          );
+        } catch {
+          setMatchedTutors(rows);
+        }
+      }
       setConversations([]);
     }
   }, []);
