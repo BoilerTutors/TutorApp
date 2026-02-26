@@ -78,6 +78,7 @@ def put_my_notification_preferences(
         db,
         user_id=current_user.id,
         email_digest_enabled=body.email_digest_enabled,
+        email_digest_frequency=body.email_digest_frequency,
     )
     return row
 
