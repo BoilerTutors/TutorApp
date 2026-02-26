@@ -81,6 +81,15 @@ class UserPublic(BaseModel):
     tutor: Optional["TutorProfilePublic"] = None
     student: Optional["StudentProfilePublic"] = None
 
+
+class UserLookupPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
+
 # ===========================================================
 # ---- Tutor profile schemas ----
 # ===========================================================
@@ -331,6 +340,7 @@ class MessagePublic(BaseModel):
     conversation_id: int
     sender_id: int
     content: str
+    attachment: Optional["MessageAttachmentPublic"] = None
     created_at: datetime
 
 
@@ -426,8 +436,20 @@ class NotificationPreferencesUpdate(BaseModel):
     email_digest_enabled: bool
 
 
+class MessageAttachmentPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    message_id: int
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime
+
+
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
+MessagePublic.model_rebuild()
 
 ProfileUpdate.model_rebuild()
 

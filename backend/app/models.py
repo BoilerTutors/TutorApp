@@ -466,6 +466,34 @@ class Message(Base):
         foreign_keys=[sender_id],
         back_populates="messages_sent",
     )
+    attachment: Mapped[Optional["MessageAttachment"]] = relationship(
+        back_populates="message",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+    __table_args__ = (
+        UniqueConstraint("message_id", name="uq_message_attachments_message_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    message: Mapped["Message"] = relationship(back_populates="attachment")
 
 
 # ============================================
