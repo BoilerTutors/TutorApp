@@ -45,6 +45,8 @@ export default function TutorScreen() {
             onPress={() => {
               if (action.label === "Messages") {
                 navigation.navigate("Messenger");
+              } else if (action.label === "My Profile") {
+                navigation.navigate("Profile", { role: "TUTOR" });
               }
             }}
           >

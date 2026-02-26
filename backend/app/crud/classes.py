@@ -1,16 +1,23 @@
-"""CRUD operations for Class, StudentClass, and TutorClass.
+"""CRUD operations for Class, StudentClass, and TutorClass."""
+from sqlalchemy.orm import Session, joinedload  # type: ignore[import]
 
-- create_class (create a new class entry)
-- get_class_by_id
-- list_classes (with optional subject/professor filters)
+from app.models import Class, TutorClass, StudentClass, TutorProfile, StudentProfile
 
-- add_student_class (enroll student in a class)
-- get_student_classes_by_student_id
-- update_student_class
-- delete_student_class
 
-- add_tutor_class (tutor declares they can teach a class)
-- get_tutor_classes_by_tutor_id
-- update_tutor_class
-- delete_tutor_class
-"""
+def list_classes(
+    db: Session,
+    subject: str | None = None,
+    professor: str | None = None,
+) -> list[Class]:
+    """List classes with optional filters."""
+    q = db.query(Class)
+    if subject:
+        q = q.filter(Class.subject.ilike(f"%{subject}%"))
+    if professor:
+        q = q.filter(Class.professor.ilike(f"%{professor}%"))
+    return list(q.order_by(Class.subject, Class.class_number).all())
+
+
+def get_class_by_id(db: Session, class_id: int) -> Class | None:
+    """Get a class by id."""
+    return db.get(Class, class_id)

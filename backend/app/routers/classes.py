@@ -1,16 +1,21 @@
-"""API routes for Class, StudentClass, and TutorClass.
+"""API routes for Class, StudentClass, and TutorClass."""
+from fastapi import APIRouter, Depends, Query
 
-- POST   /classes/                    - create a new class
-- GET    /classes/                    - list/search classes
-- GET    /classes/{class_id}          - get class details
+from sqlalchemy.orm import Session
 
-- POST   /classes/student/            - student enrolls in a class
-- GET    /classes/student/me          - get current student's classes
-- DELETE /classes/student/{id}        - remove student class enrollment
+from app.crud.classes import list_classes
+from app.database import get_db
+from app.schemas import ClassPublic
 
-- POST   /classes/tutor/              - tutor adds a class they can teach
-- GET    /classes/tutor/me            - get current tutor's classes
-- DELETE /classes/tutor/{id}          - remove tutor class entry
-"""
-from fastapi import APIRouter
 router = APIRouter()
+
+
+@router.get("/", response_model=list[ClassPublic])
+def get_classes(
+    subject: str | None = Query(default=None, description="Filter by subject (e.g. CS)"),
+    professor: str | None = Query(default=None, description="Filter by professor"),
+    db: Session = Depends(get_db),
+) -> list[ClassPublic]:
+    """List all available classes, optionally filtered by subject or professor."""
+    classes = list_classes(db, subject=subject, professor=professor)
+    return [ClassPublic.model_validate(c) for c in classes]
