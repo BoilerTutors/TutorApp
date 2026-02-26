@@ -1,10 +1,9 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { logout } from "../auth/logout";
+import { api } from "../api/client";
 
 type RootStackParamList = {
   Login: undefined;
@@ -12,6 +11,20 @@ type RootStackParamList = {
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
   "Student Reviews": undefined;
+  Matches:
+    | {
+        matches?: MatchItem[];
+      }
+    | undefined;
+};
+
+type MatchItem = {
+  rank: number;
+  tutor_id: number;
+  tutor_first_name: string;
+  tutor_last_name: string;
+  tutor_major: string | null;
+  similarity_score: number;
 };
 
 type QuickAction = {
@@ -31,7 +44,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [computingMatches, setComputingMatches] = useState(false);
-  const [firstName, setFirstName] = useState("there");
+  const [firstName, setFirstName] = useState("Student");
 
   useEffect(() => {
     let mounted = true;
@@ -51,11 +64,6 @@ export default function StudentScreen() {
     };
   }, []);
 
-  const handleLogout = async () => {
-    await logout();
-    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-  };
-
   const handleComputeMatches = async () => {
     setComputingMatches(true);
     try {
@@ -71,20 +79,18 @@ export default function StudentScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>BoilerTutors</Text>
-        <Text style={styles.subtitle}>Student Dashboard</Text>
-        
-        <Text style={styles.body}>Welcome! Find tutors and manage your sessions here.</Text>
+        <Text style={styles.title}>Welcome, {firstName}</Text>
+        <Text style={styles.subtitle}>Find tutors and manage your sessions.</Text>
 
-        <Pressable 
-          style={styles.button} 
+        <Pressable
+          style={styles.button}
           onPress={() => navigation.navigate("Student Reviews")}
         >
           <Text style={styles.buttonText}>⭐ Leave a Review</Text>
         </Pressable>
 
-        <Pressable 
-          style={styles.button} 
+        <Pressable
+          style={styles.button}
           onPress={() => navigation.navigate("Messenger")}
         >
           <Text style={styles.buttonText}>💬 Open Messenger</Text>
@@ -123,7 +129,7 @@ export default function StudentScreen() {
           </Pressable>
         ))}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -134,33 +140,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F2F4F8",
-  },
-  content: {
     padding: 20,
   },
-  welcomeSection: {
-    alignItems: "center",
-    marginBottom: 24,
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
   },
-  welcomeText: {
-    fontSize: 22,
-    color: "#333",
-  },
-  welcomeName: {
+  title: {
+    fontSize: 24,
     fontWeight: "700",
-    marginBottom: 4,
-    color: "#2F3850",
+    color: "#1B2D50",
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 14,
-    color: "#D4AF4A",
-  },
-  dashboardLabel: {
     fontSize: 14,
-    color: "#6B7280",
-    marginTop: 2,
+    color: "#4B5563",
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -186,8 +183,6 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     marginRight: 6,
-//     marginBottom: 20,
-//     color: "#5D667C",
   },
   button: {
     marginTop: 10,
@@ -202,7 +197,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "#FFFFFF",
-    fontSize: 12,
     fontWeight: "600",
     fontSize: 15,
   },

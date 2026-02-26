@@ -55,6 +55,11 @@ type RootStackParamList = {
       similarity_score: number;
     }>;
   } | undefined;
+  Profile:
+    | {
+        role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
+      }
+    | undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -169,8 +174,6 @@ export default function App() {
               )
             }}
           />
-
-          {/* Student Dashboard Screen */}
           <Stack.Screen
             name="Student Dashboard"
             component={StudentScreen}
@@ -180,21 +183,15 @@ export default function App() {
                   role="STUDENT"
                   onLogout={async () => {
                     await logout();
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: "Login" }],
-                    });
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
                   }}
                   onSettingsPress={() => navigation.navigate("Settings")}
-                  onNotificationsPress={() =>
-                    navigation.navigate("Settings", { initialTab: "notifications" })
-                  }
+                  onNotificationsPress={() => navigation.navigate("Notifications")}
+                  onHelpPress={() => navigation.navigate("Help")}
                 />
               ),
             })}
           />
-
-          {/* Tutor Dashboard Screen */}
           <Stack.Screen
             name="Tutor Dashboard"
             component={TutorScreen}
@@ -204,168 +201,75 @@ export default function App() {
                   role="TUTOR"
                   onLogout={async () => {
                     await logout();
-                    navigation.reset({
-                      index: 0,
-                      routes: [{ name: "Login" }],
-                    });
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
                   }}
                   onSettingsPress={() => navigation.navigate("Settings")}
-                  onNotificationsPress={() =>
-                    navigation.navigate("Settings", { initialTab: "notifications" })
+                  onNotificationsPress={() => navigation.navigate("Notifications")}
+                  onHelpPress={() => navigation.navigate("Help")}
+                />
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="Tutor Registration"
+            component={TutorRegistrationScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Student Registration"
+            component={StudentRegistrationScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Student Reviews"
+            component={StudentReviewsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Tutor Reviews"
+            component={TutorReviewsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Messenger"
+            component={MessengerScreen}
+            options={{ header: () => <GeneralHeader title="Messenger" /> }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={({ navigation, route }) => ({
+              header: () => (
+                <ProfileHeader
+                  onBack={() => navigation.goBack()}
+                  role={
+                    (
+                      route.params as
+                        | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
+                        | undefined
+                    )?.role ?? "STUDENT"
                   }
                 />
               ),
             })}
           />
-
-        {/* Student Dashboard Screen */}
-        <Stack.Screen
-          name="Student Dashboard"
-          component={StudentScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <DashboardHeader
-                role="STUDENT"
-                onLogout={async () => {
-                  await logout();
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  });
-                }}
-                onSettingsPress={() => navigation.navigate("Settings")}
-                onNotificationsPress={() => navigation.navigate("Notifications")}
-                onHelpPress={() => navigation.navigate("Help")}
-              />
-            ),
-          })}
-        />
-
-        {/* Tutor Dashboard Screen */}
-        <Stack.Screen
-          name="Tutor Dashboard"
-          component={TutorScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <DashboardHeader
-                role="TUTOR"
-                onLogout={async () => {
-                  await logout();
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  });
-                }}
-                onSettingsPress={() => navigation.navigate("Settings")}
-                onNotificationsPress={() => navigation.navigate("Notifications")}
-                onHelpPress={() => navigation.navigate("Help")}
-              />
-            ),
-          })}
-        />
-          {/* Tutor Registration Screen */}
-          <Stack.Screen 
-            name="Tutor Registration" 
-            component={TutorRegistrationScreen} 
-            options={{ headerShown: false }} 
-          />
-
-          {/* Student Registration Screen */}
-          <Stack.Screen 
-            name="Student Registration" 
-            component={StudentRegistrationScreen} 
-            options={{ headerShown: false }} 
-          />
-
-          {/* Student Reviews Screen */}
-          <Stack.Screen 
-            name="Student Reviews" 
-            component={StudentReviewsScreen} 
-            options={{ headerShown: false }} 
-          />
-
-        {/* Student Registration Screen */}
-        <Stack.Screen 
-          name="Student Registration" 
-          component={StudentRegistrationScreen} 
-          options={{ header: () => <GeneralHeader title="Student Registration" /> }} 
-        />
-
-        {/* Messenger Screen */}
-        <Stack.Screen 
-          name="Messenger" 
-          component={MessengerScreen}
-          options={{ header: () => <GeneralHeader title="Messenger" /> }} 
-        />
-          {/* Tutor Reviews Screen */}
-          <Stack.Screen 
-            name="Tutor Reviews" 
-            component={TutorReviewsScreen} 
-            options={{ headerShown: false }} 
-          />
-
-          {/* Messenger Screen */}
-          <Stack.Screen 
-            name="Messenger" 
-            component={MessengerScreen} 
-            options={{ headerShown: false }} 
-          />
-
-          {/* Profile Screen */}
-          <Stack.Screen 
-            name="Profile" 
-            component={ProfileScreen} 
-            options={({ navigation, route }) => ({
-              header: () => (
-                <ProfileHeader
-                  onBack={() => navigation.goBack()}
-                  role={(route.params as { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" } | undefined)?.role ?? "STUDENT"}
-                />
-              ),
-            })}
-          />
-
-          {/* Settings Screen */}
           <Stack.Screen
             name="Settings"
             component={SettingsScreen}
             options={({ navigation }) => ({
-              header: () => (
-                <SettingsHeader onBack={() => navigation.goBack()} />
-              ),
+              header: () => <SettingsHeader onBack={() => navigation.goBack()} />,
             })}
           />
-
-        {/* Settings Screen */}
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <SettingsHeader onBack={() => navigation.goBack()} />
-            ),
-          })}
-        />
-        <Stack.Screen
-          name="Notifications"
-          component={NotificationsTab}
-          options={{ title: "Notifications" }}
-        />
-        <Stack.Screen
-          name="Help"
-          component={HelpScreen}
-          options={({ navigation }) => ({
-            header: () => <GeneralHeader title="Help" />,
-          })}
-        />
-        <Stack.Screen
-          name="Matches"
-          component={MatchesScreen}
-          options={{ title: "Your Matches" }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
-          {/* Matches Screen */}
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsTab}
+            options={{ title: "Notifications" }}
+          />
+          <Stack.Screen
+            name="Help"
+            component={HelpScreen}
+            options={{ header: () => <GeneralHeader title="Help" /> }}
+          />
           <Stack.Screen
             name="Matches"
             component={MatchesScreen}

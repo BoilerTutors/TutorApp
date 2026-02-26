@@ -41,7 +41,6 @@ type RootStackParamList = {
 };
 
 const AVAILABLE_CLASSES = AVAILABLE_CLASSES_FALLBACK;
-const GRADE_OPTIONS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C"];
 
 type SelectedClass = ClassPublic & {
   semester: "F" | "S";

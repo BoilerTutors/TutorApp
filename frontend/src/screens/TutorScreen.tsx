@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -29,7 +29,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [firstName, setFirstName] = useState("there");
+  const [firstName, setFirstName] = useState("Tutor");
 
   useEffect(() => {
     let mounted = true;
@@ -52,10 +52,8 @@ export default function TutorScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>BoilerTutors</Text>
-        <Text style={styles.subtitle}>Tutor Dashboard</Text>
-        
-        <Text style={styles.body}>Welcome! Manage your tutoring sessions and reviews here.</Text>
+        <Text style={styles.title}>Welcome, {firstName}</Text>
+        <Text style={styles.subtitle}>Manage tutoring sessions and reviews.</Text>
 
         <Pressable 
           style={styles.button} 
@@ -78,7 +76,28 @@ export default function TutorScreen() {
           <Text style={styles.buttonText}>👤 Account & Availability</Text>
         </Pressable>
       </View>
-    </ScrollView>
+      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <View style={styles.actionsGrid}>
+        {QUICK_ACTIONS.map((action) => (
+          <Pressable
+            key={action.label}
+            style={styles.actionButton}
+            onPress={() => {
+              if (action.label === "My Profile") {
+                navigation.navigate("Profile", { role: "TUTOR" });
+              } else if (action.label === "Messages") {
+                navigation.navigate("Messenger");
+              } else if (action.label === "Reviews") {
+                navigation.navigate("Tutor Reviews");
+              }
+            }}
+          >
+            <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
+            <Text style={styles.buttonText}>{action.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -89,33 +108,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F2F4F8",
-  },
-  content: {
     padding: 20,
   },
-  welcomeSection: {
-    alignItems: "center",
-    marginBottom: 24,
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
   },
-  welcomeText: {
-    fontSize: 22,
-    color: "#333",
-  },
-  welcomeName: {
+  title: {
+    fontSize: 24,
     fontWeight: "700",
-    marginBottom: 4,
-    color: "#2F3850",
+    color: "#1B2D50",
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 14,
-    color: "#D4AF4A",
-  },
-  dashboardLabel: {
     fontSize: 14,
-    color: "#6B7280",
-    marginTop: 2,
+    color: "#4B5563",
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -141,8 +151,6 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     marginRight: 6,
-//     marginBottom: 20,
-//     color: "#5D667C",
   },
   button: {
     marginTop: 10,
@@ -155,9 +163,8 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: "#1B2D50",
   },
-  actionText: {
+  buttonText: {
     color: "#FFFFFF",
-    fontSize: 12,
     fontWeight: "600",
     fontSize: 15,
   },
