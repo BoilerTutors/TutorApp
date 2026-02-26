@@ -15,7 +15,8 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { TutorClass, SessionMode } from "../types/models";
-import { api } from "../api/client";
+import { api, setAuthToken } from "../api/client";
+import { saveToken } from "../auth/storage";
 
 type RootStackParamList = {
   Login: undefined;
@@ -237,8 +238,22 @@ export default function TutorRegistrationScreen() {
     }
   };
 
-  const goToDashboard = () => {
-    navigation.navigate("Tutor Dashboard");
+  const goToDashboard = async () => {
+    try {
+      const data = await api.post<{ access_token: string; token_type: string }>(
+        "/auth/login",
+        { email: email.trim().toLowerCase(), password }
+      );
+      setAuthToken(data.access_token);
+      await saveToken(data.access_token);
+      navigation.navigate("Tutor Dashboard");
+    } catch (e) {
+      showAlert(
+        "Auto-login failed",
+        e instanceof Error ? e.message : "Please sign in from the Login screen."
+      );
+      navigation.navigate("Login");
+    }
   };
 
   // Render step indicator

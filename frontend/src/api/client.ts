@@ -72,9 +72,21 @@ async function request<T>(
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
   }
+  // 204 No Content (or empty body): do not call res.json() or it throws
+  if (res.status === 204) {
+    return undefined as T;
+  }
   const contentType = res.headers.get("content-type");
+  const contentLength = res.headers.get("content-length");
+  if (contentLength === "0" || !res.body) {
+    return undefined as T;
+  }
   if (contentType?.includes("application/json")) {
-    return res.json() as Promise<T>;
+    const text = await res.text();
+    if (!text || text.trim() === "") {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
   return undefined as T;
 }

@@ -45,6 +45,28 @@ class UserStatusUpdate(BaseModel):
     status: int = Field(ge=0, le=2)
 
 
+class ProfileUpdate(BaseModel):
+    """Update current user profile (name + optional tutor/student profile fields)."""
+
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    tutor_profile: Optional["TutorProfileUpdate"] = None
+    student_profile: Optional["StudentProfileUpdate"] = None
+
+
+class DeleteAccountRequest(BaseModel):
+    """Confirm account deletion by typing DELETE."""
+
+    confirmation: str = Field(min_length=1)
+
+    @field_validator("confirmation")
+    @classmethod
+    def must_be_delete(cls, v: str) -> str:
+        if v.strip().upper() != "DELETE":
+            raise ValueError('You must type DELETE to confirm permanent account deletion')
+        return v.strip().upper()
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -321,3 +343,4 @@ class ConversationWithPartner(BaseModel):
 
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
+ProfileUpdate.model_rebuild()
