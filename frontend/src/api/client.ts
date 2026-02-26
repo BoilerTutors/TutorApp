@@ -16,10 +16,16 @@ let authToken: string | null = null;
 
 export function setAuthToken(token: string | null): void {
   authToken = token;
+  console.log("[Auth] token", token ? `set (length ${token.length})` : "cleared");
 }
 
 export function getAuthToken(): string | null {
   return authToken;
+}
+
+// Dev only: from browser console you can run getAuthToken() to inspect the token
+if (typeof globalThis !== "undefined" && "window" in globalThis) {
+  (globalThis as { getAuthToken?: () => string | null }).getAuthToken = getAuthToken;
 }
 
 function headers(init?: RequestInitWithBody): HeadersInit {

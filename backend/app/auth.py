@@ -20,6 +20,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def hash_password(password: str) -> str:
+    print("HASH password:", repr(password), "len:", len(password))
     return pwd_context.hash(password)
 
 
