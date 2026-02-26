@@ -88,26 +88,23 @@ export default function TutorRegistrationScreen() {
 
   const fetchClasses = async () => {
     setIsLoadingClasses(true);
-    try {
-      const classes = await classesApi.list();
-      setAvailableClasses(classes);
-    } catch (err) {
-      console.error("Failed to fetch classes:", err);
-      // Use some default classes if API fails
-      setAvailableClasses([
-        { id: 1, subject: "CS", class_number: 180, professor: "Dunsmore" },
-        { id: 2, subject: "CS", class_number: 182, professor: "Adams" },
-        { id: 3, subject: "CS", class_number: 240, professor: "Turkstra" },
-        { id: 4, subject: "CS", class_number: 251, professor: "Turkstra" },
-        { id: 5, subject: "CS", class_number: 307, professor: "Hashemi" },
-        { id: 6, subject: "MA", class_number: 161, professor: "Chen" },
-        { id: 7, subject: "MA", class_number: 162, professor: "Chen" },
-        { id: 8, subject: "MA", class_number: 265, professor: "Dey" },
-        { id: 9, subject: "PHYS", class_number: 172, professor: "Bhatt" },
-      ]);
-    } finally {
-      setIsLoadingClasses(false);
-    }
+    
+    // Use mock data for demo - replace with API call when backend has classes
+    const mockClasses = [
+      { id: 1, subject: "CS", class_number: 180, professor: "Dunsmore" },
+      { id: 2, subject: "CS", class_number: 182, professor: "Adams" },
+      { id: 3, subject: "CS", class_number: 240, professor: "Turkstra" },
+      { id: 4, subject: "CS", class_number: 251, professor: "Turkstra" },
+      { id: 5, subject: "CS", class_number: 307, professor: "Hashemi" },
+      { id: 6, subject: "CS", class_number: 354, professor: "Gustafson" },
+      { id: 7, subject: "MA", class_number: 161, professor: "Chen" },
+      { id: 8, subject: "MA", class_number: 162, professor: "Chen" },
+      { id: 9, subject: "MA", class_number: 265, professor: "Dey" },
+      { id: 10, subject: "PHYS", class_number: 172, professor: "Bhatt" },
+    ];
+  
+    setAvailableClasses(mockClasses);
+    setIsLoadingClasses(false);
   };
 
   // Filter classes based on search
@@ -211,7 +208,11 @@ export default function TutorRegistrationScreen() {
     setIsSubmitting(true);
     
     try {
-      // Step 1: Register the user
+      console.log("Starting registration...");
+      
+      // For demo: Skip API call and show success
+      // TODO: Re-enable when backend is ready
+      /*
       const userData: UserCreate = {
         email: email.toLowerCase().trim(),
         first_name: firstName.trim(),
@@ -226,18 +227,18 @@ export default function TutorRegistrationScreen() {
           hourly_rate_cents: hourlyRate ? Math.round(parseFloat(hourlyRate) * 100) : undefined,
         },
       };
-
+  
       await register(userData);
-
-      // Step 2: Login to get token
       await login({ email: userData.email, password: password });
-
-      // Step 3: Add tutor classes (need fresh token)
-      // We need to wait for the token to be set
-      // For now, we'll show success - classes can be added from dashboard
+      */
+      
+      // Simulate success for demo
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       setIsSubmitted(true);
+      
     } catch (err) {
+      console.error("Registration error:", err);
       const message = err instanceof Error ? err.message : "Registration failed";
       showAlert("Error", message);
     } finally {

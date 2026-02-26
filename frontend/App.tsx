@@ -11,6 +11,8 @@ import MessengerScreen from "./src/screens/MessengerScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import MatchesScreen from "./src/screens/MatchesScreen";
+import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
+import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
@@ -25,6 +27,8 @@ type RootStackParamList = {
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
   "Student Registration": undefined;
+  "Student Reviews": undefined;
+  "Tutor Reviews": undefined;
   Messenger:
     | {
         openTutorUserId?: number;
@@ -215,6 +219,20 @@ export default function App() {
           <Stack.Screen 
             name="Student Registration" 
             component={StudentRegistrationScreen} 
+            options={{ headerShown: false }} 
+          />
+
+          {/* Student Reviews Screen */}
+          <Stack.Screen 
+            name="Student Reviews" 
+            component={StudentReviewsScreen} 
+            options={{ headerShown: false }} 
+          />
+
+          {/* Tutor Reviews Screen */}
+          <Stack.Screen 
+            name="Tutor Reviews" 
+            component={TutorReviewsScreen} 
             options={{ headerShown: false }} 
           />
 

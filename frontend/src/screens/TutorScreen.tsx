@@ -8,35 +8,39 @@ type RootStackParamList = {
   Messenger: undefined;
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
+  "Tutor Reviews": undefined;
 };
 
 export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const handleLogout = async () => {
-    await logout();
-    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>BoilerTutors</Text>
-        <Text style={styles.subtitle}>
-          React Native + TypeScript client scaffold
-        </Text>
-        <Text style={styles.body}>Active dashboard role: This is the tutor dashboard</Text>
-        <Text style={styles.body}>
-          Next steps: auth, tutor search, scheduling, messaging, reviews.
-        </Text>
-        <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
-          <Text style={styles.buttonText}>Open Messenger</Text>
+        <Text style={styles.subtitle}>Tutor Dashboard</Text>
+        
+        <Text style={styles.body}>Welcome! Manage your tutoring sessions and reviews here.</Text>
+
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Tutor Reviews")}
+        >
+          <Text style={styles.buttonText}>⭐ View My Reviews</Text>
         </Pressable>
+
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Messenger")}
+        >
+          <Text style={styles.buttonText}>💬 Open Messenger</Text>
+        </Pressable>
+
         <Pressable
           style={[styles.button, styles.secondaryButton]}
           onPress={() => navigation.navigate("Profile", { role: "TUTOR" })}
         >
-          <Text style={styles.buttonText}>Account & availability</Text>
+          <Text style={styles.buttonText}>👤 Account & Availability</Text>
         </Pressable>
       </View>
     </View>
@@ -66,34 +70,34 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    marginBottom: 8
+    marginBottom: 4,
+    color: "#2F3850",
   },
   subtitle: {
-    fontSize: 16,
-    marginBottom: 14
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 14,
+    color: "#D4AF4A",
   },
   body: {
     fontSize: 14,
-    marginBottom: 12
+    marginBottom: 20,
+    color: "#5D667C",
   },
   button: {
-    marginTop: 8,
+    marginTop: 10,
     backgroundColor: "#2E57A2",
     borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignSelf: "flex-start",
-  },
-  logoutButton: {
-    backgroundColor: "#6B7280",
-    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
   },
   secondaryButton: {
-    marginTop: 10,
     backgroundColor: "#1B2D50",
   },
   buttonText: {
     color: "#FFFFFF",
     fontWeight: "600",
+    fontSize: 15,
   },
-});     
+});
