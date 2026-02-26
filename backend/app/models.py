@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import (
+    ARRAY,
     String,
     Integer,
     Boolean,
@@ -106,6 +107,9 @@ class TutorProfile(Base):
     hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     major: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     grad_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    preferred_locations: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True, default=None
+    )
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(
@@ -142,8 +146,9 @@ class StudentProfile(Base):
 
     major: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     grad_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-
+    preferred_locations: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True, default=None
+    )
 
     user: Mapped["User"] = relationship(back_populates="student")
     classes_enrolled: Mapped[list["StudentClass"]] = relationship(

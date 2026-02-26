@@ -31,12 +31,8 @@ export default function StudentScreen() {
         <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
           <Text style={styles.buttonText}>Open Messenger</Text>
         </Pressable>
-        <Pressable style={styles.button} onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}>
-          <Text style={styles.buttonText}>Profile</Text>
-        </Pressable>
-        <Pressable style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
-          <Text style={styles.buttonText}>Log out</Text>
-        </Pressable>
+
+
       </View>
     </View>
   );
