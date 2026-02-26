@@ -1,21 +1,46 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { logout } from "../auth/logout";
+import { api } from "../api/client";
+
+type MatchItem = {
+  rank: number;
+  tutor_id: number;
+  tutor_first_name: string;
+  tutor_last_name: string;
+  tutor_major: string | null;
+  similarity_score: number;
+};
 
 type RootStackParamList = {
   Login: undefined;
   Messenger: undefined;
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
+  Matches: { matches?: MatchItem[] } | undefined;
 };
 
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [computingMatches, setComputingMatches] = useState(false);
 
   const handleLogout = async () => {
     await logout();
     navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
+
+  const handleComputeMatches = async () => {
+    setComputingMatches(true);
+    try {
+      const matches = await api.post<MatchItem[]>("/matches/me/refresh");
+      navigation.navigate("Matches", { matches });
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to compute matches");
+    } finally {
+      setComputingMatches(false);
+    }
   };
 
   return (
@@ -37,6 +62,17 @@ export default function StudentScreen() {
           onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
         >
           <Text style={styles.buttonText}>Account & availability</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.button, styles.matchButton]}
+          onPress={handleComputeMatches}
+          disabled={computingMatches}
+        >
+          {computingMatches ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Calculate Matches</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -91,6 +127,10 @@ const styles = StyleSheet.create({
   secondaryButton: {
     marginTop: 10,
     backgroundColor: "#1B2D50",
+  },
+  matchButton: {
+    marginTop: 10,
+    backgroundColor: "#1F7A4C",
   },
   buttonText: {
     color: "#FFFFFF",

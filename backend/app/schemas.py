@@ -385,6 +385,35 @@ class MatchSelectRequest(BaseModel):
     tutor_id: int
 
 
+class DeviceTokenRegisterRequest(BaseModel):
+    token: str
+    platform: Optional[str] = None
+
+
+class DeviceTokenPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    token: str
+    platform: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    event_type: str
+    title: str
+    body: str
+    payload_json: Optional[dict] = None
+    is_read: bool
+    created_at: datetime
+
+
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
 
