@@ -1,22 +1,51 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { api } from "../../api/client";
+
+type NotificationPreferences = {
+  user_id: number;
+  email_digest_enabled: boolean;
+  updated_at: string;
+};
 
 export default function NotificationPreferencesTab() {
-  const [messageAlerts, setMessageAlerts] = useState(true);
-  const [matchAlerts, setMatchAlerts] = useState(true);
-  const [inAppBanners, setInAppBanners] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(false);
   const [emailDigest, setEmailDigest] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const allEnabledCount = useMemo(
-    () =>
-      [messageAlerts, matchAlerts, inAppBanners, pushNotifications, emailDigest].filter(Boolean).length,
-    [emailDigest, inAppBanners, matchAlerts, messageAlerts, pushNotifications]
+    () => [emailDigest].filter(Boolean).length,
+    [emailDigest]
   );
 
-  const onSave = () => {
-    // Placeholder save until backend preference endpoints are added.
-    Alert.alert("Preferences updated", `Enabled ${allEnabledCount} notification options.`);
+  React.useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const prefs = await api.get<NotificationPreferences>("/notifications/preferences/me");
+        if (!mounted) return;
+        setEmailDigest(!!prefs.email_digest_enabled);
+      } catch {
+        // Keep default UI state if preferences are unavailable.
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const onSave = async () => {
+    try {
+      setSaving(true);
+      await api.put<NotificationPreferences>("/notifications/preferences/me", {
+        email_digest_enabled: emailDigest,
+      });
+      Alert.alert("Preferences updated", `Enabled ${allEnabledCount} notification options.`);
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save preferences");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -28,38 +57,14 @@ export default function NotificationPreferencesTab() {
         </Text>
 
         <PreferenceRow
-          label="Message notifications"
-          helper="Get alerted when you receive a new message."
-          enabled={messageAlerts}
-          onToggle={() => setMessageAlerts((v) => !v)}
-        />
-        <PreferenceRow
-          label="New match notifications"
-          helper="Get alerted when a student matches with you."
-          enabled={matchAlerts}
-          onToggle={() => setMatchAlerts((v) => !v)}
-        />
-        <PreferenceRow
-          label="In-app banners"
-          helper="Show banners while using the app."
-          enabled={inAppBanners}
-          onToggle={() => setInAppBanners((v) => !v)}
-        />
-        <PreferenceRow
-          label="Push notifications"
-          helper="Receive phone push notifications in the background."
-          enabled={pushNotifications}
-          onToggle={() => setPushNotifications((v) => !v)}
-        />
-        <PreferenceRow
           label="Email digest"
           helper="Get a daily summary of unread activity."
           enabled={emailDigest}
           onToggle={() => setEmailDigest((v) => !v)}
         />
 
-        <Pressable style={styles.saveBtn} onPress={onSave}>
-          <Text style={styles.saveBtnText}>Save preferences</Text>
+        <Pressable style={styles.saveBtn} onPress={() => void onSave()} disabled={saving}>
+          <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save preferences"}</Text>
         </Pressable>
       </View>
     </View>

@@ -1,7 +1,7 @@
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.models import Notification, UserDeviceToken
+from app.models import Notification, UserDeviceToken, UserNotificationSetting
 
 
 def create_notification(
@@ -63,6 +63,45 @@ def upsert_device_token(
     else:
         row.user_id = user_id
         row.platform = platform
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_or_create_notification_settings(db: Session, *, user_id: int) -> UserNotificationSetting:
+    row = (
+        db.query(UserNotificationSetting)
+        .filter(UserNotificationSetting.user_id == user_id)
+        .first()
+    )
+    if row is not None:
+        return row
+    row = UserNotificationSetting(user_id=user_id, email_digest_enabled=False)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_notification_settings(
+    db: Session,
+    *,
+    user_id: int,
+    email_digest_enabled: bool,
+) -> UserNotificationSetting:
+    row = (
+        db.query(UserNotificationSetting)
+        .filter(UserNotificationSetting.user_id == user_id)
+        .first()
+    )
+    if row is None:
+        row = UserNotificationSetting(
+            user_id=user_id,
+            email_digest_enabled=email_digest_enabled,
+        )
+        db.add(row)
+    else:
+        row.email_digest_enabled = email_digest_enabled
     db.commit()
     db.refresh(row)
     return row

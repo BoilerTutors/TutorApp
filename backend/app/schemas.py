@@ -414,6 +414,18 @@ class NotificationPublic(BaseModel):
     created_at: datetime
 
 
+class NotificationPreferencesPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    email_digest_enabled: bool
+    updated_at: datetime
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    email_digest_enabled: bool
+
+
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
 
