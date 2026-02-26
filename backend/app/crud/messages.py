@@ -1,3 +1,4 @@
+from typing import Optional
 """CRUD for messaging: conversations and messages.
 
 - get_or_create_conversation(user1_id, user2_id)
@@ -36,7 +37,7 @@ def get_or_create_conversation(db: Session, user1_id: int, user2_id: int) -> Con
     return conv
 
 
-def get_conversation_by_id(db: Session, conversation_id: int, user_id: int) -> Conversation | None:
+def get_conversation_by_id(db: Session, conversation_id: int, user_id: int) -> Optional[Conversation]:
     """Return conversation if it exists and user_id is user1 or user2."""
     conv = db.get(Conversation, conversation_id)
     if conv is None:
@@ -104,7 +105,7 @@ def create_message(
     conversation_id: int,
     sender_id: int,
     content: str,
-) -> Message | None:
+) -> Optional[Message]:
     """Add a message. Returns None if conversation doesn't exist or sender is not a participant."""
     conv = get_conversation_by_id(db, conversation_id, sender_id)
     if conv is None:
