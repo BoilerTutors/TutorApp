@@ -2,13 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
+  Modal,
+  Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
 import { API_BASE_URL } from "../config";
 import { api, getAuthToken } from "../api/client";
 import { useRoute } from "@react-navigation/native";
@@ -20,6 +25,14 @@ type Message = {
   id: number;
   sender_id: number;
   content: string;
+  attachment?: {
+    id: number;
+    message_id: number;
+    file_name: string;
+    mime_type: string;
+    size_bytes: number;
+    created_at: string;
+  } | null;
   created_at: string;
 };
 
@@ -33,6 +46,17 @@ type MatchListRow = {
   tutor_first_name: string;
   tutor_last_name: string;
   similarity_score: number;
+};
+type MatchRefreshRow = {
+  tutor_id: number;
+  similarity_score: number;
+};
+type AvailabilitySlot = {
+  id: number;
+  user_id: number;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
 };
 
 type SidebarItem =
@@ -84,6 +108,10 @@ export default function MessengerScreen() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const [availabilityModalVisible, setAvailabilityModalVisible] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityStudentName, setAvailabilityStudentName] = useState<string>("");
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const lastOpenedTutorRef = useRef<number | null>(null);
   const sidebarItems = useMemo<SidebarItem[]>(
@@ -126,7 +154,26 @@ export default function MessengerScreen() {
       setMatchedTutors([]);
     } else {
       const rows = await api.get<MatchListRow[]>("/matches/me");
-      setMatchedTutors(rows);
+      if (rows.length === 0) {
+        setMatchedTutors([]);
+      } else {
+        try {
+          // Keep the matched tutor set from /matches/me, but update displayed scores
+          // from freshly recomputed rankings when the same tutor appears there.
+          const refreshed = await api.post<MatchRefreshRow[]>("/matches/me/refresh");
+          const refreshedScoreByTutorId = new Map<number, number>(
+            refreshed.map((row) => [row.tutor_id, row.similarity_score])
+          );
+          setMatchedTutors(
+            rows.map((row) => ({
+              ...row,
+              similarity_score: refreshedScoreByTutorId.get(row.tutor_id) ?? row.similarity_score,
+            }))
+          );
+        } catch {
+          setMatchedTutors(rows);
+        }
+      }
       setConversations([]);
     }
   }, []);
@@ -181,8 +228,13 @@ export default function MessengerScreen() {
     await loadMessages(conv.id);
   };
 
-  const onOpenExistingConversation = async (conversationId: number, otherUserId: number) => {
+  const onOpenExistingConversation = async (
+    conversationId: number,
+    otherUserId: number,
+    otherUserName?: string | null
+  ) => {
     setSelectedTutorUserId(otherUserId);
+    setSelectedTutorName(otherUserName?.trim() ? otherUserName : null);
     setSelectedConversationId(conversationId);
     await loadMessages(conversationId);
   };
@@ -208,6 +260,111 @@ export default function MessengerScreen() {
       setSending(false);
     }
   };
+
+  const onAttachPdf = async () => {
+    if (!selectedConversationId || sending) {
+      return;
+    }
+    const token = getAuthToken();
+    if (!token) {
+      return;
+    }
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "application/pdf",
+      multiple: false,
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled) {
+      return;
+    }
+    const asset = result.assets[0];
+    if (!asset?.uri) {
+      return;
+    }
+
+    try {
+      setSending(true);
+      const formData = new FormData();
+      formData.append("content", draft.trim());
+      if (Platform.OS === "web") {
+        // Web FormData requires a real Blob/File, not RN's { uri, name, type } object.
+        const webResponse = await fetch(asset.uri);
+        const fileBlob = await webResponse.blob();
+        (formData as any).append("file", fileBlob, asset.name || "document.pdf");
+      } else {
+        formData.append("file", {
+          uri: asset.uri,
+          name: asset.name || "document.pdf",
+          type: asset.mimeType || "application/pdf",
+        } as any);
+      }
+
+      const res = await fetch(
+        `${API_BASE_URL}/messages/conversations/${selectedConversationId}/messages/attachment`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const msg = (await res.json()) as Message;
+      setDraft("");
+      setMessages((prev) => [...prev, msg].sort((a, b) => a.id - b.id));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatDay = (dayOfWeek: number) => {
+    const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return names[dayOfWeek] ?? `Day ${dayOfWeek}`;
+  };
+
+  const formatTime = (value: string) => {
+    const [rawHour = "0", rawMinute = "0"] = value.split(":");
+    const hour24 = Number.parseInt(rawHour, 10);
+    const minute = Number.parseInt(rawMinute, 10);
+    if (Number.isNaN(hour24) || Number.isNaN(minute)) {
+      return value;
+    }
+    const suffix = hour24 >= 12 ? "PM" : "AM";
+    const hour12 = ((hour24 + 11) % 12) + 1;
+    const minuteStr = String(minute).padStart(2, "0");
+    return `${hour12}:${minuteStr} ${suffix}`;
+  };
+
+  const onViewStudentAvailability = async (studentUserId: number, studentName: string) => {
+    setAvailabilityStudentName(studentName);
+    setAvailabilitySlots([]);
+    setAvailabilityLoading(true);
+    setAvailabilityModalVisible(true);
+    try {
+      const slots = await api.get<AvailabilitySlot[]>(`/availability/users/${studentUserId}`);
+      setAvailabilitySlots(slots);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  };
+
+  const groupedAvailability = useMemo(() => {
+    const groups = new Map<number, string[]>();
+    for (const slot of availabilitySlots) {
+      const formattedRange = `${formatTime(slot.start_time)} - ${formatTime(slot.end_time)}`;
+      const existing = groups.get(slot.day_of_week) ?? [];
+      existing.push(formattedRange);
+      groups.set(slot.day_of_week, existing);
+    }
+    return Array.from(groups.entries()).map(([dayOfWeek, timeRanges]) => ({
+      dayOfWeek,
+      timeRanges,
+    }));
+  }, [availabilitySlots]);
 
   useEffect(() => {
     const tutorId = route.params?.openTutorUserId;
@@ -287,13 +444,20 @@ export default function MessengerScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Messenger</Text>
-        <View style={styles.headerActions}>
-          <View style={[styles.statusDot, wsConnected ? styles.statusOnline : styles.statusOffline]} />
-          <Pressable style={styles.secondaryBtn} onPress={onRefresh} disabled={refreshing}>
-            <Text style={styles.secondaryBtnText}>{refreshing ? "Refreshing..." : "Refresh"}</Text>
-          </Pressable>
+      <View style={styles.headerCard}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerControls}>
+            <View style={[styles.statusDot, wsConnected ? styles.statusOnline : styles.statusOffline]} />
+            <Pressable style={styles.secondaryBtn} onPress={onRefresh} disabled={refreshing}>
+              <Text style={styles.secondaryBtnText}>{refreshing ? "Refreshing..." : "Refresh"}</Text>
+            </Pressable>
+          </View>
+        </View>
+        <View style={styles.headerTextBlock}>
+          <Text style={styles.title}>Messenger</Text>
+          <Text style={styles.subtitle}>
+            {isStudentAccount ? "Chat with matched tutors" : "Chat with students"}
+          </Text>
         </View>
       </View>
 
@@ -325,20 +489,30 @@ export default function MessengerScreen() {
               }
 
               const selected = item.id === selectedConversationId;
+              const personName = (item.other_user_first_name || item.other_user_last_name)
+                ? `${item.other_user_first_name ?? ""} ${item.other_user_last_name ?? ""}`.trim()
+                : `User ${item.other_user_id}`;
               return (
-                <Pressable
-                  style={[styles.conversationRow, selected && styles.conversationSelected]}
-                  onPress={() => {
-                    void onOpenExistingConversation(item.id, item.other_user_id);
-                  }}
-                >
-                  <Text style={styles.conversationTitle}>
-                    {(item.other_user_first_name || item.other_user_last_name)
-                      ? `${item.other_user_first_name ?? ""} ${item.other_user_last_name ?? ""}`.trim()
-                      : `User ${item.other_user_id}`}
-                  </Text>
-                  <Text style={styles.conversationSub}>User ID {item.other_user_id}</Text>
-                </Pressable>
+                <View style={[styles.conversationRow, selected && styles.conversationSelected]}>
+                  <Pressable
+                    onPress={() => {
+                      void onOpenExistingConversation(item.id, item.other_user_id, personName);
+                    }}
+                  >
+                    <Text style={styles.conversationTitle}>{personName}</Text>
+                    <Text style={styles.conversationSub}>User ID: {item.other_user_id}</Text>
+                  </Pressable>
+                  {!isStudentAccount ? (
+                    <Pressable
+                      style={styles.availabilityBtn}
+                      onPress={() => {
+                        void onViewStudentAvailability(item.other_user_id, personName);
+                      }}
+                    >
+                      <Text style={styles.availabilityBtnText}>View Availability</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               );
             }}
             ListEmptyComponent={
@@ -366,11 +540,33 @@ export default function MessengerScreen() {
             keyExtractor={(item) => String(item.id)}
             renderItem={({ item }) => {
               const mine = currentUserId != null && item.sender_id === currentUserId;
+              const attachment = item.attachment ?? null;
+              const hasText = item.content.trim().length > 0;
               return (
                 <View style={[styles.messageBubble, mine ? styles.myMessage : styles.otherMessage]}>
-                  <Text style={[styles.messageText, mine ? styles.sentMessageText : styles.receivedMessageText]}>
-                    {item.content}
-                  </Text>
+                  {hasText ? (
+                    <Text style={[styles.messageText, mine ? styles.sentMessageText : styles.receivedMessageText]}>
+                      {item.content}
+                    </Text>
+                  ) : null}
+                  {attachment ? (
+                    <Pressable
+                      style={[styles.attachmentCard, mine ? styles.attachmentCardMine : styles.attachmentCardOther]}
+                      onPress={() => {
+                        const token = getAuthToken();
+                        if (!token) return;
+                        const url = `${API_BASE_URL}/messages/attachments/${attachment.id}/download?token=${encodeURIComponent(token)}`;
+                        void Linking.openURL(url);
+                      }}
+                    >
+                      <Text style={[styles.attachmentTitle, mine ? styles.attachmentTitleMine : styles.attachmentTitleOther]}>
+                        {attachment.file_name}
+                      </Text>
+                      <Text style={[styles.attachmentSub, mine ? styles.attachmentSubMine : styles.attachmentSubOther]}>
+                        Open PDF
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               );
             }}
@@ -386,6 +582,15 @@ export default function MessengerScreen() {
               editable={selectedConversationId != null && !sending}
             />
             <Pressable
+              style={[styles.secondaryBtn, !selectedConversationId && styles.disabledSecondaryBtn]}
+              onPress={() => {
+                void onAttachPdf();
+              }}
+              disabled={!selectedConversationId || sending}
+            >
+              <Text style={styles.secondaryBtnText}>Attach PDF</Text>
+            </Pressable>
+            <Pressable
               style={[styles.primaryBtn, !selectedConversationId && styles.disabledBtn]}
               onPress={onSend}
               disabled={!selectedConversationId || sending}
@@ -395,6 +600,36 @@ export default function MessengerScreen() {
           </View>
         </View>
       </View>
+      <Modal visible={availabilityModalVisible} transparent animationType="fade" onRequestClose={() => setAvailabilityModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{availabilityStudentName || "Student"} Availability</Text>
+            {availabilityLoading ? (
+              <ActivityIndicator size="small" color="#2E57A2" />
+            ) : availabilitySlots.length === 0 ? (
+              <Text style={styles.modalEmpty}>No availability slots found.</Text>
+            ) : (
+              <ScrollView style={styles.modalList}>
+                {groupedAvailability.map((group) => (
+                  <View key={group.dayOfWeek} style={styles.modalRow}>
+                    <Text style={styles.modalRowDay}>{formatDay(group.dayOfWeek)}</Text>
+                    <View style={styles.modalRowTimes}>
+                      {group.timeRanges.map((range, index) => (
+                        <Text key={`${group.dayOfWeek}-${index}-${range}`} style={styles.modalRowTime}>
+                          {range}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <Pressable style={styles.modalCloseBtn} onPress={() => setAvailabilityModalVisible(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -402,7 +637,7 @@ export default function MessengerScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F4F6FA",
+    backgroundColor: "#F2F4F8",
     padding: 16,
     gap: 12,
   },
@@ -412,20 +647,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F4F6FA",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1B1F2B",
+  headerCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  header: {
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  headerActions: {
+  title: {
+    marginTop: 10,
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1B2D50",
+  },
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#5D667C",
+  },
+  headerControls: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  headerTextBlock: {
+    justifyContent: "center",
   },
   statusDot: {
     width: 10,
@@ -440,32 +696,32 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    gap: 10,
+    gap: 12,
   },
   listPane: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#DFE4EE",
+    borderColor: "#E1E5EE",
   },
   chatPane: {
     flex: 2,
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#DFE4EE",
+    borderColor: "#E1E5EE",
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#2B3345",
-    marginBottom: 8,
+    color: "#1B2D50",
+    marginBottom: 10,
   },
   conversationRow: {
-    padding: 10,
+    padding: 12,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E5EAF2",
@@ -485,6 +741,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#606B81",
   },
+  availabilityBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2E57A2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  availabilityBtnText: {
+    color: "#2E57A2",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   helperText: {
     marginTop: 8,
     color: "#6F7890",
@@ -494,10 +764,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   messageBubble: {
-    maxWidth: "85%",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    maxWidth: "88%",
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 12,
   },
   myMessage: {
     backgroundColor: "#2E57A2",
@@ -520,7 +790,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
   composeInput: {
     flex: 1,
@@ -548,8 +818,8 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: "#2E57A2",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
   primaryBtnText: {
     color: "#FFFFFF",
@@ -566,7 +836,101 @@ const styles = StyleSheet.create({
     color: "#2E57A2",
     fontWeight: "600",
   },
+  disabledSecondaryBtn: {
+    borderColor: "#94A3C2",
+  },
   disabledBtn: {
     backgroundColor: "#94A3C2",
+  },
+  attachmentCard: {
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  attachmentCardMine: {
+    borderColor: "rgba(255,255,255,0.35)",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  attachmentCardOther: {
+    borderColor: "#C8D0E0",
+    backgroundColor: "#F9FBFF",
+  },
+  attachmentTitle: {
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  attachmentTitleMine: {
+    color: "#FFFFFF",
+  },
+  attachmentTitleOther: {
+    color: "#1B2D50",
+  },
+  attachmentSub: {
+    marginTop: 2,
+    fontSize: 12,
+  },
+  attachmentSubMine: {
+    color: "#E5E7EB",
+  },
+  attachmentSubOther: {
+    color: "#4B5563",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    maxHeight: "70%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1B2D50",
+    marginBottom: 12,
+  },
+  modalEmpty: {
+    color: "#6F7890",
+    marginBottom: 10,
+  },
+  modalList: {
+    marginBottom: 12,
+  },
+  modalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF1F7",
+  },
+  modalRowDay: {
+    fontWeight: "600",
+    color: "#1B2D50",
+  },
+  modalRowTime: {
+    color: "#475569",
+    textAlign: "right",
+    marginBottom: 2,
+  },
+  modalRowTimes: {
+    alignItems: "flex-end",
+  },
+  modalCloseBtn: {
+    alignSelf: "flex-end",
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modalCloseText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 });

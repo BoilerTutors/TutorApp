@@ -37,6 +37,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     is_tutor: Optional[bool] = None
     is_student: Optional[bool] = None
+    mfa_enabled: Optional[bool] = None
 
 
 class UserStatusUpdate(BaseModel):
@@ -77,9 +78,19 @@ class UserPublic(BaseModel):
     is_tutor: bool
     is_student: bool
     created_at: datetime
+    mfa_enabled: bool
 
     tutor: Optional["TutorProfilePublic"] = None
     student: Optional["StudentProfilePublic"] = None
+
+
+class UserLookupPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
 
 # ===========================================================
 # ---- Tutor profile schemas ----
@@ -379,6 +390,8 @@ class TokenPayload(BaseModel):
 class Message(BaseModel):
     message: str
 
+class SecurityPreferencesUpdate(BaseModel):
+    mfa_enabled: bool
 
 # ===========================================================
 # ---- Messaging schemas ----
@@ -395,6 +408,7 @@ class MessagePublic(BaseModel):
     conversation_id: int
     sender_id: int
     content: str
+    attachment: Optional["MessageAttachmentPublic"] = None
     created_at: datetime
 
 
@@ -483,15 +497,29 @@ class NotificationPreferencesPublic(BaseModel):
 
     user_id: int
     email_digest_enabled: bool
+    email_digest_frequency: Literal["12h", "daily", "weekly"] = "daily"
     updated_at: datetime
 
 
 class NotificationPreferencesUpdate(BaseModel):
     email_digest_enabled: bool
+    email_digest_frequency: Literal["12h", "daily", "weekly"] = "daily"
+
+
+class MessageAttachmentPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    message_id: int
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime
 
 
 UserCreate.model_rebuild()
 UserPublic.model_rebuild()
+MessagePublic.model_rebuild()
 
 ProfileUpdate.model_rebuild()
 
