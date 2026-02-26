@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import hash_password
-
+from app.crud.embeddings import refresh_student_embeddings, refresh_tutor_embeddings
 from app.models import User, TutorProfile, StudentProfile, TutorClass, StudentClass
 from app.schemas import ProfileUpdate, UserCreate
 
@@ -60,6 +60,7 @@ def create_user(db: Session, data: UserCreate) -> User:
                         has_taed=tc.has_taed,
                     )
                 )
+        refresh_tutor_embeddings(db, tutor)
 
     if data.student_profile is not None:
         student = StudentProfile(
@@ -82,6 +83,7 @@ def create_user(db: Session, data: UserCreate) -> User:
                         estimated_grade=sc.estimated_grade,
                     )
                 )
+        refresh_student_embeddings(db, student)
 
     db.commit()
     db.refresh(user)
@@ -96,26 +98,42 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
         user.last_name = data.last_name
     if data.tutor_profile is not None and user.tutor is not None:
         t = data.tutor_profile
+        tutor_embedding_needs_refresh = False
         if t.bio is not None:
             user.tutor.bio = t.bio
+            tutor_embedding_needs_refresh = True
         if t.hourly_rate_cents is not None:
             user.tutor.hourly_rate_cents = t.hourly_rate_cents
         if t.major is not None:
             user.tutor.major = t.major
         if t.grad_year is not None:
             user.tutor.grad_year = t.grad_year
+        if t.preferred_locations is not None:
+            user.tutor.preferred_locations = t.preferred_locations or None
+            tutor_embedding_needs_refresh = True
+        if t.help_provided is not None:
+            user.tutor.help_provided = t.help_provided or None
+            tutor_embedding_needs_refresh = True
+        if tutor_embedding_needs_refresh:
+            refresh_tutor_embeddings(db, user.tutor)
     if data.student_profile is not None and user.student is not None:
         s = data.student_profile
+        student_embedding_needs_refresh = False
         if s.bio is not None:
             user.student.bio = s.bio
+            student_embedding_needs_refresh = True
         if s.major is not None:
             user.student.major = s.major
         if s.grad_year is not None:
             user.student.grad_year = s.grad_year
         if s.preferred_locations is not None:
             user.student.preferred_locations = s.preferred_locations or None
+            student_embedding_needs_refresh = True
         if s.help_needed is not None:
             user.student.help_needed = s.help_needed or None
+            student_embedding_needs_refresh = True
+        if student_embedding_needs_refresh:
+            refresh_student_embeddings(db, user.student)
     db.commit()
     db.refresh(user)
     return user
