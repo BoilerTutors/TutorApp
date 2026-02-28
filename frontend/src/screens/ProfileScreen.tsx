@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -126,9 +126,9 @@ export default function ProfileScreen() {
   const [editHelpProvided, setEditHelpProvided] = useState<string[]>([]);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [classSearchQuery, setClassSearchQuery] = useState("");
-  const [availableClasses, setAvailableClasses] = useState<
-    { id: number; courseCode: string; title?: string }[]
-  >(AVAILABLE_CLASSES_FALLBACK);
+
+  // Same class list as tutor registration (no backend fetch)
+  const availableClasses = AVAILABLE_CLASSES_FALLBACK;
 
   const loadMe = useCallback(async () => {
     try {
@@ -165,36 +165,6 @@ export default function ProfileScreen() {
       run();
     }, [loadMe])
   );
-
-  // Fetch available classes from backend (fallback to mock)
-  useEffect(() => {
-    let cancelled = false;
-    const loadClasses = async () => {
-      try {
-        const data = await api.get<{ id: number; subject: string; class_number: number; professor?: string; course_code?: string }[]>(
-          "/classes/"
-        );
-        if (cancelled) return;
-        if (Array.isArray(data) && data.length > 0) {
-          setAvailableClasses(
-            data.map((c) => ({
-              id: c.id,
-              courseCode: c.course_code ?? `${c.subject} ${c.class_number}`,
-              title: c.professor ?? "",
-            }))
-          );
-        } else {
-          setAvailableClasses(AVAILABLE_CLASSES_FALLBACK);
-        }
-      } catch {
-        if (!cancelled) setAvailableClasses(AVAILABLE_CLASSES_FALLBACK);
-      }
-    };
-    void loadClasses();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const startEditingPrefs = useCallback(() => {
     const t = me?.tutor;
