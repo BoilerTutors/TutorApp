@@ -329,6 +329,9 @@ class Message(BaseModel):
 class SecurityPreferencesUpdate(BaseModel):
     mfa_enabled: bool
 
+class MfaVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
 # ===========================================================
 # ---- Messaging schemas ----
 # ===========================================================

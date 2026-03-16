@@ -1,11 +1,15 @@
 """POST /auth/login - login with email + password, return JWT."""
+import random
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth import verify_password, create_access_token
 from app.crud.users import get_user_by_email
 from app.database import get_db
-from app.schemas import LoginRequest, Token
+from app.schemas import LoginRequest, MfaVerifyRequest, Token
+from app.services.email import send_email
 
 router = APIRouter()
 
