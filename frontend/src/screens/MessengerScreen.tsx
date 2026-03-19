@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Linking,
   Modal,
@@ -16,9 +17,9 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import { API_BASE_URL } from "../config";
 import { api, getAuthToken } from "../api/client";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import ViewProfileModal from "../components/ViewProfileModal";
+import { useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
 
 type Conversation = { id: number };
 
@@ -59,7 +60,6 @@ type AvailabilitySlot = {
   start_time: string;
   end_time: string;
 };
-
 type SidebarItem =
   | {
       kind: "match";
@@ -88,7 +88,6 @@ type RootStackParamList = {
 };
 
 export default function MessengerScreen() {
-  const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, "Messenger">>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -114,6 +113,8 @@ export default function MessengerScreen() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityStudentName, setAvailabilityStudentName] = useState<string>("");
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const lastOpenedTutorRef = useRef<number | null>(null);
   const sidebarItems = useMemo<SidebarItem[]>(
@@ -354,6 +355,11 @@ export default function MessengerScreen() {
     }
   };
 
+  const onViewUserProfile = (userId: number) => {
+    setSelectedProfileUserId(userId);
+    setProfileModalVisible(true);
+  };
+
   const groupedAvailability = useMemo(() => {
     const groups = new Map<number, string[]>();
     for (const slot of availabilitySlots) {
@@ -448,10 +454,6 @@ export default function MessengerScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.headerCard}>
         <View style={styles.headerRow}>
-          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={20} color="#1B2D50" />
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
           <View style={styles.headerControls}>
             <View style={[styles.statusDot, wsConnected ? styles.statusOnline : styles.statusOffline]} />
             <Pressable style={styles.secondaryBtn} onPress={onRefresh} disabled={refreshing}>
@@ -477,20 +479,29 @@ export default function MessengerScreen() {
               if (item.kind === "match") {
                 const selected = item.tutor_id === selectedTutorUserId;
                 return (
-                  <Pressable
-                    style={[styles.conversationRow, selected && styles.conversationSelected]}
-                    onPress={() => {
-                      void onOpenConversationForTutor(item.tutor_id);
-                      setSelectedTutorName(`${item.tutor_first_name} ${item.tutor_last_name}`);
-                    }}
-                  >
-                    <Text style={styles.conversationTitle}>
-                      {item.tutor_first_name} {item.tutor_last_name}
-                    </Text>
-                    <Text style={styles.conversationSub}>
-                      Similarity {(item.similarity_score * 100).toFixed(1)}%
-                    </Text>
-                  </Pressable>
+                  <View style={[styles.conversationRow, selected && styles.conversationSelected]}>
+                    <Pressable
+                      onPress={() => {
+                        void onOpenConversationForTutor(item.tutor_id);
+                        setSelectedTutorName(`${item.tutor_first_name} ${item.tutor_last_name}`);
+                      }}
+                    >
+                      <Text style={styles.conversationTitle}>
+                        {item.tutor_first_name} {item.tutor_last_name}
+                      </Text>
+                      <Text style={styles.conversationSub}>
+                        Similarity {(item.similarity_score * 100).toFixed(1)}%
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.infoBtn}
+                      onPress={() => {
+                        onViewUserProfile(item.tutor_id);
+                      }}
+                    >
+                      <Text style={styles.infoBtnText}>View Profile</Text>
+                    </Pressable>
+                  </View>
                 );
               }
 
@@ -507,6 +518,14 @@ export default function MessengerScreen() {
                   >
                     <Text style={styles.conversationTitle}>{personName}</Text>
                     <Text style={styles.conversationSub}>User ID: {item.other_user_id}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.infoBtn}
+                    onPress={() => {
+                      onViewUserProfile(item.other_user_id);
+                    }}
+                  >
+                    <Text style={styles.infoBtnText}>View Profile</Text>
                   </Pressable>
                   {!isStudentAccount ? (
                     <Pressable
@@ -606,6 +625,17 @@ export default function MessengerScreen() {
           </View>
         </View>
       </View>
+      <ViewProfileModal
+        visible={profileModalVisible}
+        userId={selectedProfileUserId}
+        onClose={() => {
+          setProfileModalVisible(false);
+          setSelectedProfileUserId(null);
+        }}
+        onLoadError={(message) => {
+          Alert.alert("Error", message);
+        }}
+      />
       <Modal visible={availabilityModalVisible} transparent animationType="fade" onRequestClose={() => setAvailabilityModalVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -689,19 +719,6 @@ const styles = StyleSheet.create({
   headerTextBlock: {
     justifyContent: "center",
   },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 36,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    backgroundColor: "#EEF3FF",
-  },
-  backText: {
-    marginLeft: 2,
-    color: "#1B2D50",
-    fontWeight: "600",
-  },
   statusDot: {
     width: 10,
     height: 10,
@@ -770,6 +787,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   availabilityBtnText: {
+    color: "#2E57A2",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  infoBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2E57A2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  infoBtnText: {
     color: "#2E57A2",
     fontSize: 12,
     fontWeight: "600",

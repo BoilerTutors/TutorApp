@@ -21,6 +21,7 @@ from app.schemas import (
     ProfileUpdate,
     DeleteAccountRequest,
     UserLookupPublic,
+    UserProfileDetailsPublic,
     SecurityPreferencesUpdate,
 )
 
@@ -143,3 +144,31 @@ def get_user_public_lookup(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserLookupPublic.model_validate(user)
+
+
+@router.get("/{user_id}/profile", response_model=UserProfileDetailsPublic)
+def get_user_profile_details(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserProfileDetailsPublic:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    avg_help_level: float | None = None
+    if user.student and user.student.classes_enrolled:
+        levels = [c.help_level for c in user.student.classes_enrolled if c.help_level is not None]
+        if levels:
+            avg_help_level = sum(levels) / len(levels)
+
+    return UserProfileDetailsPublic(
+        id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        is_tutor=user.is_tutor,
+        is_student=user.is_student,
+        tutor=user.tutor,
+        student=user.student,
+        student_average_help_level=avg_help_level,
+    )

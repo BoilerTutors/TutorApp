@@ -2,11 +2,15 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { api } from "../../api/client";
+import ViewProfileModal from "../../components/ViewProfileModal";
 
 export default function NotificationsTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
 
   const loadRows = useCallback(async () => {
     const data = await api.get<NotificationRow[]>("/notifications/me?limit=100");
@@ -18,7 +22,13 @@ export default function NotificationsTab() {
     const run = async () => {
       try {
         setLoading(true);
-        await loadRows();
+        const [data, me] = await Promise.all([
+          api.get<NotificationRow[]>("/notifications/me?limit=100"),
+          api.get<{ id: number }>("/users/me"),
+        ]);
+        if (!mounted) return;
+        setRows(data ?? []);
+        setCurrentUserId(me.id);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -39,11 +49,37 @@ export default function NotificationsTab() {
   const onRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
-      await loadRows();
+      const [data, me] = await Promise.all([
+        api.get<NotificationRow[]>("/notifications/me?limit=100"),
+        api.get<{ id: number }>("/users/me"),
+      ]);
+      setRows(data ?? []);
+      setCurrentUserId(me.id);
     } finally {
       setRefreshing(false);
     }
-  }, [loadRows]);
+  }, []);
+
+  const parseMatchNotificationProfileTarget = useCallback(
+    (row: NotificationRow): number | null => {
+      const payload = row.payload_json ?? {};
+      const tutorIdRaw = payload.tutor_id;
+      const studentIdRaw = payload.student_id;
+      const tutorId = typeof tutorIdRaw === "number" ? tutorIdRaw : null;
+      const studentId = typeof studentIdRaw === "number" ? studentIdRaw : null;
+      if (tutorId == null || studentId == null || currentUserId == null) {
+        return null;
+      }
+      if (currentUserId === tutorId) {
+        return studentId;
+      }
+      if (currentUserId === studentId) {
+        return tutorId;
+      }
+      return null;
+    },
+    [currentUserId]
+  );
 
   if (loading) {
     return (
@@ -69,16 +105,37 @@ export default function NotificationsTab() {
               <Text style={styles.itemTitle}>{item.title}</Text>
               <Text style={styles.itemBody}>{item.body}</Text>
               <Text style={styles.itemMeta}>{new Date(item.created_at).toLocaleString()}</Text>
-              {!item.is_read && (
-                <Pressable style={styles.markReadBtn} onPress={() => void onMarkRead(item.id)}>
-                  <Text style={styles.markReadBtnText}>Mark as read</Text>
-                </Pressable>
-              )}
+              <View style={styles.actionsRow}>
+                {parseMatchNotificationProfileTarget(item) != null ? (
+                  <Pressable
+                    style={styles.viewProfileBtn}
+                    onPress={() => {
+                      setSelectedProfileUserId(parseMatchNotificationProfileTarget(item));
+                      setProfileModalVisible(true);
+                    }}
+                  >
+                    <Text style={styles.viewProfileBtnText}>View Profile</Text>
+                  </Pressable>
+                ) : null}
+                {!item.is_read && (
+                  <Pressable style={styles.markReadBtn} onPress={() => void onMarkRead(item.id)}>
+                    <Text style={styles.markReadBtnText}>Mark as read</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           )}
           ListEmptyComponent={<Text style={styles.subtitle}>No notifications yet.</Text>}
         />
       </View>
+      <ViewProfileModal
+        visible={profileModalVisible}
+        userId={selectedProfileUserId}
+        onClose={() => {
+          setProfileModalVisible(false);
+          setSelectedProfileUserId(null);
+        }}
+      />
     </View>
   );
 }
@@ -162,8 +219,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6A738A",
   },
-  markReadBtn: {
+  actionsRow: {
     marginTop: 8,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  viewProfileBtn: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#2E57A2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  viewProfileBtnText: {
+    color: "#2E57A2",
+    fontWeight: "600",
+  },
+  markReadBtn: {
     alignSelf: "flex-start",
     backgroundColor: "#2E57A2",
     borderRadius: 8,

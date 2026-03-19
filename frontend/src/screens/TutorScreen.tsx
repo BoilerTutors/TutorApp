@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -10,6 +10,7 @@ type RootStackParamList = {
   Messenger: undefined;
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
+  "Tutor Reviews": undefined;
 };
 
 type QuickAction = {
@@ -28,7 +29,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [firstName, setFirstName] = useState("there");
+  const [firstName, setFirstName] = useState("Tutor");
 
   useEffect(() => {
     let mounted = true;
@@ -47,16 +48,34 @@ export default function TutorScreen() {
       mounted = false;
     };
   }, []);
-
+  
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Welcome Section */}
-      <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>{firstName}</Text></Text>
-        <Text style={styles.dashboardLabel}>Tutor Dashboard</Text>
-      </View>
+    <View style={styles.container}>
+      <View style={styles.card}>
+        <Text style={styles.title}>Welcome, {firstName}</Text>
+        <Text style={styles.subtitle}>Manage tutoring sessions and reviews.</Text>
 
-      {/* Quick Actions */}
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Tutor Reviews")}
+        >
+          <Text style={styles.buttonText}>⭐ View My Reviews</Text>
+        </Pressable>
+
+        <Pressable 
+          style={styles.button} 
+          onPress={() => navigation.navigate("Messenger")}
+        >
+          <Text style={styles.buttonText}>💬 Open Messenger</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Profile", { role: "TUTOR" })}
+        >
+          <Text style={styles.buttonText}>👤 Account & Availability</Text>
+        </Pressable>
+      </View>
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.actionsGrid}>
         {QUICK_ACTIONS.map((action) => (
@@ -64,19 +83,21 @@ export default function TutorScreen() {
             key={action.label}
             style={styles.actionButton}
             onPress={() => {
-              if (action.label === "Messages") {
-                navigation.navigate("Messenger");
-              } else if (action.label === "My Profile") {
+              if (action.label === "My Profile") {
                 navigation.navigate("Profile", { role: "TUTOR" });
+              } else if (action.label === "Messages") {
+                navigation.navigate("Messenger");
+              } else if (action.label === "Reviews") {
+                navigation.navigate("Tutor Reviews");
               }
             }}
           >
             <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
-            <Text style={styles.actionText}>{action.label}</Text>
+            <Text style={styles.buttonText}>{action.label}</Text>
           </Pressable>
         ))}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -87,26 +108,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F2F4F8",
-  },
-  content: {
     padding: 20,
   },
-  welcomeSection: {
-    alignItems: "center",
-    marginBottom: 24,
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
   },
-  welcomeText: {
-    fontSize: 22,
-    color: "#333",
-  },
-  welcomeName: {
+  title: {
+    fontSize: 24,
     fontWeight: "700",
-    color: NAVY,
+    color: "#1B2D50",
+    marginBottom: 6,
   },
-  dashboardLabel: {
+  subtitle: {
     fontSize: 14,
-    color: "#6B7280",
-    marginTop: 2,
+    color: "#4B5563",
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -133,9 +152,20 @@ const styles = StyleSheet.create({
   actionIcon: {
     marginRight: 6,
   },
-  actionText: {
+  button: {
+    marginTop: 10,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  secondaryButton: {
+    backgroundColor: "#1B2D50",
+  },
+  buttonText: {
     color: "#FFFFFF",
-    fontSize: 12,
     fontWeight: "600",
+    fontSize: 15,
   },
 });

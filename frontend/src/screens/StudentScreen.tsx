@@ -1,11 +1,22 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { logout } from "../auth/logout";
 import { api } from "../api/client";
+
+type RootStackParamList = {
+  Login: undefined;
+  Messenger: undefined;
+  Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
+  Settings: undefined;
+  "Student Reviews": undefined;
+  Matches:
+    | {
+        matches?: MatchItem[];
+      }
+    | undefined;
+};
 
 type MatchItem = {
   rank: number;
@@ -14,14 +25,6 @@ type MatchItem = {
   tutor_last_name: string;
   tutor_major: string | null;
   similarity_score: number;
-};
-
-type RootStackParamList = {
-  Login: undefined;
-  Messenger: undefined;
-  Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
-  Settings: undefined;
-  Matches: { matches?: MatchItem[] } | undefined;
 };
 
 type QuickAction = {
@@ -41,7 +44,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [computingMatches, setComputingMatches] = useState(false);
-  const [firstName, setFirstName] = useState("there");
+  const [firstName, setFirstName] = useState("Student");
 
   useEffect(() => {
     let mounted = true;
@@ -61,11 +64,6 @@ export default function StudentScreen() {
     };
   }, []);
 
-  const handleLogout = async () => {
-    await logout();
-    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-  };
-
   const handleComputeMatches = async () => {
     setComputingMatches(true);
     try {
@@ -77,12 +75,33 @@ export default function StudentScreen() {
       setComputingMatches(false);
     }
   };
+  
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Welcome Section */}
-      <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>{firstName}</Text></Text>
-        <Text style={styles.dashboardLabel}>Student Dashboard</Text>
+    <View style={styles.container}>
+      <View style={styles.card}>
+        <Text style={styles.title}>Welcome, {firstName}</Text>
+        <Text style={styles.subtitle}>Find tutors and manage your sessions.</Text>
+
+        <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate("Student Reviews")}
+        >
+          <Text style={styles.buttonText}>⭐ Leave a Review</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate("Messenger")}
+        >
+          <Text style={styles.buttonText}>💬 Open Messenger</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
+        >
+          <Text style={styles.buttonText}>👤 My Profile</Text>
+        </Pressable>
       </View>
 
       {/* Quick Actions */}
@@ -110,7 +129,7 @@ export default function StudentScreen() {
           </Pressable>
         ))}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -121,26 +140,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F2F4F8",
-  },
-  content: {
     padding: 20,
   },
-  welcomeSection: {
-    alignItems: "center",
-    marginBottom: 24,
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
   },
-  welcomeText: {
-    fontSize: 22,
-    color: "#333",
-  },
-  welcomeName: {
+  title: {
+    fontSize: 24,
     fontWeight: "700",
-    color: NAVY,
+    color: "#1B2D50",
+    marginBottom: 6,
   },
-  dashboardLabel: {
+  subtitle: {
     fontSize: 14,
-    color: "#6B7280",
-    marginTop: 2,
+    color: "#4B5563",
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -167,13 +184,20 @@ const styles = StyleSheet.create({
   actionIcon: {
     marginRight: 6,
   },
-  secondaryButton: {
+  button: {
     marginTop: 10,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  secondaryButton: {
     backgroundColor: "#1B2D50",
   },
   buttonText: {
     color: "#FFFFFF",
-    fontSize: 12,
     fontWeight: "600",
+    fontSize: 15,
   },
 });

@@ -16,6 +16,7 @@ type DashboardHeaderProps = {
   onLogout: () => void;
   onSettingsPress?: () => void;
   onNotificationsPress?: () => void;
+  onHelpPress?: () => void;
 };
 
 export type AccountType = "STUDENT" | "TUTOR" | "ADMINISTRATOR";
@@ -82,6 +83,7 @@ export default function DashboardHeader({
   onLogout,
   onSettingsPress,
   onNotificationsPress,
+  onHelpPress,
 }: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -134,13 +136,19 @@ export default function DashboardHeader({
         onPress: onSettingsPress,
       },
       {
+        key: "help",
+        label: "Help",
+        icon: "help-circle-outline" as const,
+        onPress: onHelpPress,
+      },
+      {
         key: "logout",
         label: "Logout",
         icon: "arrow-back" as const,
         onPress: onLogout,
       },
     ].filter((item) => typeof item.onPress === "function"),
-    [onLogout, onNotificationsPress, onSettingsPress]
+    [onLogout, onNotificationsPress, onSettingsPress, onHelpPress]
   );
 
   const handleMenuItemPress = (action?: () => void) => {

@@ -12,11 +12,15 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import MatchesScreen from "./src/screens/MatchesScreen";
 import NotificationsTab from "./src/screens/settings/NotificationsTab";
+import HelpScreen from "./src/screens/HelpScreen";
+import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
+import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
+import { AuthProvider } from "./src/context/AuthContext";
 
 const Stack = createNativeStackNavigator();
 
@@ -26,6 +30,8 @@ type RootStackParamList = {
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
   "Student Registration": undefined;
+  "Student Reviews": undefined;
+  "Tutor Reviews": undefined;
   Messenger:
     | {
         openTutorUserId?: number;
@@ -38,6 +44,7 @@ type RootStackParamList = {
       }
     | undefined;
   Notifications: undefined;
+  Help: undefined;
   Matches: {
     matches?: Array<{
       rank: number;
@@ -48,12 +55,17 @@ type RootStackParamList = {
       similarity_score: number;
     }>;
   } | undefined;
+  Profile:
+    | {
+        role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
+      }
+    | undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
 type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
-const AUTH_CHECK_TIMEOUT_MS = 5000;
+const AUTH_CHECK_TIMEOUT_MS = 15000;
 type MeResponse = { is_tutor: boolean; is_student: boolean };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -89,11 +101,7 @@ export default function App() {
     let cancelled = false;
 
     const bootstrapAuth = async () => {
-      // uncomment return to test different default screens. Change initialRoute default value to
-      // page you want to test as well.
-      // return;
       try {
-        // If no token exists, render login immediately.
         const token = await loadToken();
         if (!token) {
           if (!cancelled) {
@@ -102,16 +110,20 @@ export default function App() {
           return;
         }
 
-        // Token exists: authenticate it once with /users/me.
         setAuthToken(token);
         const me = await withTimeout(api.get<MeResponse>("/users/me"), AUTH_CHECK_TIMEOUT_MS);
         const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
         if (!cancelled) {
           setInitialRoute(route);
         }
-      } catch {
+      } catch (e) {
         setAuthToken(null);
-        await clearToken();
+        // Only clear token on auth failure (401). For network/timeout errors,
+        // keep the token so a refresh or retry can restore the session.
+        const isAuthError = e instanceof Error && e.message.includes("session has expired");
+        if (isAuthError) {
+          await clearToken();
+        }
         if (!cancelled) {
           setInitialRoute("Login");
         }
@@ -144,125 +156,128 @@ export default function App() {
   };
 
   return (
-    <NavigationContainer linking={linking as any} ref={navigationRef}>
-      <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{
-            header: () => (
-              <View style={styles.loginHeader}>
-                <Image
-                  source={require("./src/assets/purdue_logo.png")}
-                  style={styles.loginHeaderImage}
-                  resizeMode="cover"
+    <AuthProvider>
+      <NavigationContainer linking={linking as any} ref={navigationRef}>
+        <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{
+              header: () => (
+                <View style={styles.loginHeader}>
+                  <Image
+                    source={require("./src/assets/purdue_logo.png")}
+                    style={styles.loginHeaderImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              )
+            }}
+          />
+          <Stack.Screen
+            name="Student Dashboard"
+            component={StudentScreen}
+            options={({ navigation }) => ({
+              header: () => (
+                <DashboardHeader
+                  role="STUDENT"
+                  onLogout={async () => {
+                    await logout();
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                  }}
+                  onSettingsPress={() => navigation.navigate("Settings")}
+                  onNotificationsPress={() => navigation.navigate("Notifications")}
+                  onHelpPress={() => navigation.navigate("Help")}
                 />
-              </View>
-            )
-          }}
-        />
-
-        {/* Student Dashboard Screen */}
-        <Stack.Screen
-          name="Student Dashboard"
-          component={StudentScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <DashboardHeader
-                role="STUDENT"
-                onLogout={async () => {
-                  await logout();
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  });
-                }}
-                onSettingsPress={() => navigation.navigate("Settings")}
-                onNotificationsPress={() => navigation.navigate("Notifications")}
-              />
-            ),
-          })}
-        />
-
-        {/* Tutor Dashboard Screen */}
-        <Stack.Screen
-          name="Tutor Dashboard"
-          component={TutorScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <DashboardHeader
-                role="TUTOR"
-                onLogout={async () => {
-                  await logout();
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  });
-                }}
-                onSettingsPress={() => navigation.navigate("Settings")}
-                onNotificationsPress={() => navigation.navigate("Notifications")}
-              />
-            ),
-          })}
-        />
-
-        {/* Tutor Registration Screen */}
-        <Stack.Screen 
-          name="Tutor Registration" 
-          component={TutorRegistrationScreen} 
-          options={{ headerShown: false }} 
-        />
-
-        {/* Student Registration Screen */}
-        <Stack.Screen 
-          name="Student Registration" 
-          component={StudentRegistrationScreen} 
-          options={{ header: () => <GeneralHeader title="Student Registration" /> }} 
-        />
-
-        {/* Messenger Screen */}
-        <Stack.Screen 
-          name="Messenger" 
-          component={MessengerScreen}
-          options={{ header: () => <GeneralHeader title="Messenger" /> }} 
-        />
-
-        {/* Profile Screen - accessible at route "Profile" (/profile in deep linking) */}
-        <Stack.Screen 
-          name="Profile" 
-          component={ProfileScreen} 
-          options={({ navigation, route }) => ({
-            header: () => (
-              <ProfileHeader
-                onBack={() => navigation.goBack()}
-                role={(route.params as { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" } | undefined)?.role ?? "STUDENT"}
-              />
-            ),
-          })}
-        />
-
-        {/* Settings Screen */}
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={({ navigation }) => ({
-            header: () => (
-              <SettingsHeader onBack={() => navigation.goBack()} />
-            ),
-          })}
-        />
-        <Stack.Screen
-          name="Notifications"
-          component={NotificationsTab}
-          options={{ title: "Notifications" }}
-        />
-        <Stack.Screen
-          name="Matches"
-          component={MatchesScreen}
-          options={{ title: "Your Matches" }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="Tutor Dashboard"
+            component={TutorScreen}
+            options={({ navigation }) => ({
+              header: () => (
+                <DashboardHeader
+                  role="TUTOR"
+                  onLogout={async () => {
+                    await logout();
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                  }}
+                  onSettingsPress={() => navigation.navigate("Settings")}
+                  onNotificationsPress={() => navigation.navigate("Notifications")}
+                  onHelpPress={() => navigation.navigate("Help")}
+                />
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="Tutor Registration"
+            component={TutorRegistrationScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Student Registration"
+            component={StudentRegistrationScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Student Reviews"
+            component={StudentReviewsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Tutor Reviews"
+            component={TutorReviewsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Messenger"
+            component={MessengerScreen}
+            options={{ header: () => <GeneralHeader title="Messenger" /> }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={({ navigation, route }) => ({
+              header: () => (
+                <ProfileHeader
+                  onBack={() => navigation.goBack()}
+                  role={
+                    (
+                      route.params as
+                        | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
+                        | undefined
+                    )?.role ?? "STUDENT"
+                  }
+                />
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={({ navigation }) => ({
+              header: () => <SettingsHeader onBack={() => navigation.goBack()} />,
+            })}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsTab}
+            options={{ title: "Notifications" }}
+          />
+          <Stack.Screen
+            name="Help"
+            component={HelpScreen}
+            options={{ header: () => <GeneralHeader title="Help" /> }}
+          />
+          <Stack.Screen
+            name="Matches"
+            component={MatchesScreen}
+            options={{ title: "Your Matches" }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AuthProvider>
   );
 }
 
