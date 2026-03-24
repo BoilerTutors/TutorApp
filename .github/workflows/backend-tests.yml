@@ -9,27 +9,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: tutorapp_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d tutorapp_test"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-
     env:
-      # Your tests read this in tests/conftest.py
-      LOCAL_TESTING_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/tutorapp_test
+      TEST_DB_HOST: ${{ secrets.TEST_DB_HOST }}
+      TEST_DB_PORT: ${{ secrets.TEST_DB_PORT }}
+      TEST_DB_NAME: ${{ secrets.TEST_DB_NAME }}
+      TEST_DB_USERNAME: ${{ secrets.TEST_DB_USERNAME }}
+      TEST_DB_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+      TEST_DB_SSL_MODE: ${{ secrets.TEST_DB_SSL_MODE }}
+      TEST_DB_SSL_ROOT_CERT: ${{ secrets.TEST_DB_SSL_ROOT_CERT }}
 
       # app/config.py requires these at import time
-      secret_key: ci_only_secret_key_change_me
+      secret_key: ${{ secrets.SECRET_KEY }}
       algorithm: HS256
       access_token_expire_minutes: "30"
 
