@@ -6,11 +6,28 @@ REST:
 - GET    /messages/conversations/{id}      - get conversation (metadata)
 - GET    /messages/conversations/{id}/messages - list messages (paginated)
 - POST   /messages/conversations/{id}/messages - send a message
+- POST   /messages/conversations/{id}/messages/attachment - send message with PDF attachment
+- GET    /messages/attachments/{id}/download - download message attachment
 
 WebSocket:
 - WS     /messages/ws/chat/{pairing_id}    - real-time chat (pairing_id = conversation_id)
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, status
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import (
+    APIRouter,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+    UploadFile,
+    File,
+    Form,
+)
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_user_from_token
@@ -27,6 +44,9 @@ from app.schemas import (
 from app.services.notification_events import build_and_store_notification, emit_notification
 
 router = APIRouter()
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
+ALLOWED_ATTACHMENT_MIME_TYPES = {"application/pdf"}
+ATTACHMENTS_DIR = Path(__file__).resolve().parents[2] / "uploads" / "message_attachments"
 
 
 class ConnectionManager:
@@ -154,6 +174,91 @@ async def send_message(
             )
             await emit_notification(recipient_id, row)
     return MessagePublic.model_validate(msg)
+
+
+@router.post("/conversations/{conversation_id}/messages/attachment", response_model=MessagePublic)
+async def send_message_with_attachment(
+    conversation_id: int,
+    file: UploadFile = File(...),
+    content: str = Form(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MessagePublic:
+    conv = crud_messages.get_conversation_by_id(db, conversation_id, current_user.id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Conversation not found or you are not a participant")
+
+    if file.content_type not in ALLOWED_ATTACHMENT_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Only PDF attachments are supported for this MVP.")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Attachment file is empty.")
+    if len(file_bytes) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=400, detail="Attachment exceeds 10MB max size.")
+
+    safe_name = (file.filename or "document.pdf").replace("/", "_").replace("\\", "_")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = f"{safe_name}.pdf"
+
+    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    storage_name = f"{uuid4().hex}_{safe_name}"
+    storage_path = ATTACHMENTS_DIR / storage_name
+    storage_path.write_bytes(file_bytes)
+
+    raw_content = content.strip()
+    message_content = raw_content
+    msg = crud_messages.create_message(db, conversation_id, current_user.id, message_content)
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Conversation not found or you are not a participant")
+
+    crud_messages.create_message_attachment(
+        db,
+        message_id=msg.id,
+        file_name=safe_name,
+        mime_type=file.content_type or "application/pdf",
+        size_bytes=len(file_bytes),
+        storage_path=str(storage_path),
+    )
+    db.refresh(msg)
+
+    recipient_id = _get_other_participant_id(conv.user1_id, conv.user2_id, current_user.id)
+    if recipient_id is not None:
+        row = build_and_store_notification(
+            db,
+            user_id=recipient_id,
+            event_type="notification",
+            title="New message",
+            body=f"{current_user.first_name} sent you a message.",
+            payload_json={"conversation_id": conversation_id, "sender_id": current_user.id},
+        )
+        await emit_notification(recipient_id, row)
+
+    return MessagePublic.model_validate(msg)
+
+
+@router.get("/attachments/{attachment_id}/download")
+def download_attachment(
+    attachment_id: int,
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    current_user = get_user_from_token(token, db)
+    attachment = crud_messages.get_attachment_for_user(
+        db,
+        attachment_id=attachment_id,
+        user_id=current_user.id,
+    )
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    path = Path(attachment.storage_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Attachment file not found on server")
+    return FileResponse(
+        path=str(path),
+        media_type=attachment.mime_type,
+        filename=attachment.file_name,
+    )
 
 
 # ---------- WebSocket ----------

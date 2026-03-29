@@ -26,6 +26,26 @@ def get_my_availability(
     return [AvailabilityPublic.model_validate(s) for s in slots]
 
 
+@router.get("/users/{user_id}", response_model=list[AvailabilityPublic])
+def get_user_availability(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[AvailabilityPublic]:
+    """
+    Return availability slots for a specific user.
+    Used by tutor-side messaging to inspect a student's availability.
+    """
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    slots = get_availability_by_user_id(db, user_id)
+    return [AvailabilityPublic.model_validate(s) for s in slots]
+
+
 @router.post("/", response_model=AvailabilityPublic, status_code=status.HTTP_201_CREATED)
 def add_availability(
     data: AvailabilityCreate,

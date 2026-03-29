@@ -10,10 +10,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import get_current_user
-from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user
+from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user, update_user_security_preferences
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserPublic, UserStatusUpdate, Message, ProfileUpdate, DeleteAccountRequest
+from app.schemas import (
+    UserCreate,
+    UserPublic,
+    UserStatusUpdate,
+    Message,
+    ProfileUpdate,
+    DeleteAccountRequest,
+    UserLookupPublic,
+    UserProfileDetailsPublic,
+    SecurityPreferencesUpdate,
+)
 
 router = APIRouter()
 
@@ -101,3 +111,64 @@ def update_user_status(
     db.commit()
 
     return Message(message="User status updated")
+
+
+"""
+- GET    /users/me/security-preferences - get current authenticated user's security preferences
+- PUT    /users/me/security-preferences - update current user's security preferences
+"""
+@router.get("/me/security-preferences", status_code=status.HTTP_200_OK)
+def get_security_preferences(current_user: User = Depends(get_current_user)) -> dict:
+    """Return the current user's security preferences."""
+    return {"mfa_enabled": current_user.mfa_enabled}
+
+
+@router.put("/me/security-preferences", status_code=status.HTTP_200_OK)
+def update_security_preferences(
+    data: SecurityPreferencesUpdate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+    ) -> dict:
+
+    user = update_user_security_preferences(db, current_user, data)
+    mfa_enabled = user.mfa_enabled
+    return {"mfa_enabled": mfa_enabled}
+
+@router.get("/{user_id}", response_model=UserLookupPublic)
+def get_user_public_lookup(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserLookupPublic:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserLookupPublic.model_validate(user)
+
+
+@router.get("/{user_id}/profile", response_model=UserProfileDetailsPublic)
+def get_user_profile_details(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserProfileDetailsPublic:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    avg_help_level: float | None = None
+    if user.student and user.student.classes_enrolled:
+        levels = [c.help_level for c in user.student.classes_enrolled if c.help_level is not None]
+        if levels:
+            avg_help_level = sum(levels) / len(levels)
+
+    return UserProfileDetailsPublic(
+        id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        is_tutor=user.is_tutor,
+        is_student=user.is_student,
+        tutor=user.tutor,
+        student=user.student,
+        student_average_help_level=avg_help_level,
+    )

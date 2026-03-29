@@ -76,7 +76,11 @@ def get_or_create_notification_settings(db: Session, *, user_id: int) -> UserNot
     )
     if row is not None:
         return row
-    row = UserNotificationSetting(user_id=user_id, email_digest_enabled=False)
+    row = UserNotificationSetting(
+        user_id=user_id,
+        email_digest_enabled=False,
+        email_digest_frequency="daily",
+    )
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -88,6 +92,7 @@ def update_notification_settings(
     *,
     user_id: int,
     email_digest_enabled: bool,
+    email_digest_frequency: str,
 ) -> UserNotificationSetting:
     row = (
         db.query(UserNotificationSetting)
@@ -98,10 +103,12 @@ def update_notification_settings(
         row = UserNotificationSetting(
             user_id=user_id,
             email_digest_enabled=email_digest_enabled,
+            email_digest_frequency=email_digest_frequency,
         )
         db.add(row)
     else:
         row.email_digest_enabled = email_digest_enabled
+        row.email_digest_frequency = email_digest_frequency
     db.commit()
     db.refresh(row)
     return row

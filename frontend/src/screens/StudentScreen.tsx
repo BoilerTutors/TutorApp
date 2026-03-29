@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -41,6 +41,25 @@ const QUICK_ACTIONS: QuickAction[] = [
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [computingMatches, setComputingMatches] = useState(false);
+  const [firstName, setFirstName] = useState("there");
+
+  useEffect(() => {
+    let mounted = true;
+    const loadMe = async () => {
+      try {
+        const me = await api.get<{ first_name: string }>("/users/me");
+        if (mounted && me.first_name?.trim()) {
+          setFirstName(me.first_name.trim());
+        }
+      } catch {
+        // Keep friendly fallback if profile fetch fails.
+      }
+    };
+    void loadMe();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -62,7 +81,7 @@ export default function StudentScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Welcome Section */}
       <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>Gavin</Text></Text>
+        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>{firstName}</Text></Text>
         <Text style={styles.dashboardLabel}>Student Dashboard</Text>
       </View>
 
@@ -73,31 +92,24 @@ export default function StudentScreen() {
           <Pressable
             key={action.label}
             style={styles.actionButton}
+            disabled={action.label === "Find Tutors" && computingMatches}
             onPress={() => {
-              if (action.label === "Messages") {
+              if (action.label === "Find Tutors") {
+                void handleComputeMatches();
+              } else if (action.label === "Messages") {
                 navigation.navigate("Messenger");
-              }
-              else if (action.label == "Profile") {
+              } else if (action.label === "Profile") {
                 navigation.navigate("Profile", { role: "STUDENT" });
               }
             }}
           >
             <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
-            <Text style={styles.buttonText}>{action.label}</Text>
+            <Text style={styles.buttonText}>
+              {action.label === "Find Tutors" && computingMatches ? "Finding..." : action.label}
+            </Text>
           </Pressable>
         ))}
       </View>
-      <Pressable
-          style={[styles.actionButton, styles.matchButton]}
-          onPress={handleComputeMatches}
-          disabled={computingMatches}
-        >
-          {computingMatches ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Calculate Matches</Text>
-          )}
-        </Pressable>
     </ScrollView>
   );
 }
@@ -158,10 +170,6 @@ const styles = StyleSheet.create({
   secondaryButton: {
     marginTop: 10,
     backgroundColor: "#1B2D50",
-  },
-  matchButton: {
-    marginTop: 10,
-    backgroundColor: "#1F7A4C",
   },
   buttonText: {
     color: "#FFFFFF",

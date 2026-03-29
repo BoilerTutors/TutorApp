@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api, setAuthToken } from "../api/client";
-import { saveToken } from "../auth/storage";
+import { clearToken, saveToken } from "../auth/storage";
 
 type Role = "tutor" | "student";
 type RootStackParamList = {
@@ -75,6 +75,17 @@ export default function LoginScreen() {
         { email: email.trim().toLowerCase(), password }
       );
       setAuthToken(data.access_token);
+      const me = await api.get<{ is_tutor: boolean; is_student: boolean }>("/users/me");
+      const roleMismatch =
+        (role === "student" && !me.is_student) ||
+        (role === "tutor" && !me.is_tutor);
+      if (roleMismatch) {
+        setAuthToken(null);
+        await clearToken();
+        setLoginError("Invalid username or password.");
+        return;
+      }
+
       await saveToken(data.access_token);
       console.log("[Auth] login ok", {
         email: email.trim().toLowerCase(),

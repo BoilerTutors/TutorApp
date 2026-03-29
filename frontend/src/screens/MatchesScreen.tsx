@@ -14,6 +14,7 @@ import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { api } from "../api/client";
+import ViewProfileModal from "../components/ViewProfileModal";
 
 type MatchItem = {
   rank: number;
@@ -24,7 +25,12 @@ type MatchItem = {
   tutor_major: string | null;
   similarity_score: number;
 };
-
+type UserLookup = {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+};
 type RootStackParamList = {
   Matches: { matches?: MatchItem[] } | undefined;
   Messenger:
@@ -45,11 +51,38 @@ export default function MatchesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [matchingTutorIds, setMatchingTutorIds] = useState<Record<number, boolean>>({});
   const [matchedTutorIds, setMatchedTutorIds] = useState<Record<number, boolean>>({});
+  const [tutorEmailsById, setTutorEmailsById] = useState<Record<number, string>>({});
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
+
+  const loadTutorEmails = async (rows: MatchItem[]) => {
+    const uniqueTutorIds = Array.from(new Set(rows.map((row) => row.tutor_id)));
+    if (uniqueTutorIds.length === 0) {
+      setTutorEmailsById({});
+      return;
+    }
+    const pairs = await Promise.all(
+      uniqueTutorIds.map(async (id) => {
+        try {
+          const user = await api.get<UserLookup>(`/users/${id}`);
+          return [id, user.email] as const;
+        } catch {
+          return [id, ""] as const;
+        }
+      })
+    );
+    const next: Record<number, string> = {};
+    for (const [id, email] of pairs) {
+      next[id] = email;
+    }
+    setTutorEmailsById(next);
+  };
 
   const loadLatestMatches = async () => {
     try {
       const data = await api.get<MatchItem[]>("/matches/me");
       setMatches(data);
+      await loadTutorEmails(data);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to load matches");
     } finally {
@@ -93,7 +126,15 @@ export default function MatchesScreen() {
     }
   };
 
+  const handleOpenProfile = (userId: number) => {
+    setSelectedProfileUserId(userId);
+    setProfileModalVisible(true);
+  };
+
   useEffect(() => {
+    if (initialMatches.length > 0) {
+      void loadTutorEmails(initialMatches);
+    }
     void loadSavedMatches();
     if (initialMatches.length === 0) {
       void loadLatestMatches();
@@ -137,8 +178,18 @@ export default function MatchesScreen() {
             </View>
             <Text style={styles.name}>{item.tutor_first_name} {item.tutor_last_name}</Text>
             <Text style={styles.meta}>Tutor ID: {item.tutor_profile_id ?? "—"}</Text>
+            {/* TESTING ONLY: easy to remove once no longer needed */}
+            <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
             <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
             <View style={styles.actionsRow}>
+              <Pressable
+                style={[styles.actionBtn, styles.viewProfileBtn]}
+                onPress={() => {
+                  handleOpenProfile(item.tutor_id);
+                }}
+              >
+                <Text style={[styles.actionBtnText, styles.viewProfileBtnText]}>View Profile</Text>
+              </Pressable>
               {(() => {
                 const isMatched = !!matchedTutorIds[item.tutor_id];
                 const isMatching = !!matchingTutorIds[item.tutor_id];
@@ -178,6 +229,17 @@ export default function MatchesScreen() {
             <Text style={styles.refreshButtonText}>Refresh list</Text>
           </Pressable>
         }
+      />
+      <ViewProfileModal
+        visible={profileModalVisible}
+        userId={selectedProfileUserId}
+        onClose={() => {
+          setProfileModalVisible(false);
+          setSelectedProfileUserId(null);
+        }}
+        onLoadError={(message) => {
+          Alert.alert("Error", message);
+        }}
       />
     </View>
   );
@@ -225,6 +287,14 @@ const styles = StyleSheet.create({
   },
   actionBtnText: { color: "#FFFFFF", fontWeight: "600", fontSize: 13 },
   matchBtn: { backgroundColor: "#1F7A4C" },
+  viewProfileBtn: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#2E57A2",
+  },
+  viewProfileBtnText: {
+    color: "#2E57A2",
+  },
   matchBtnMatched: {
     backgroundColor: "transparent",
     borderWidth: 1,

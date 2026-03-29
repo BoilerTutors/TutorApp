@@ -1,7 +1,9 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
+import { api } from "../api/client";
 
 type RootStackParamList = {
   Login: undefined;
@@ -26,12 +28,31 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [firstName, setFirstName] = useState("there");
+
+  useEffect(() => {
+    let mounted = true;
+    const loadMe = async () => {
+      try {
+        const me = await api.get<{ first_name: string }>("/users/me");
+        if (mounted && me.first_name?.trim()) {
+          setFirstName(me.first_name.trim());
+        }
+      } catch {
+        // Keep friendly fallback if profile fetch fails.
+      }
+    };
+    void loadMe();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Welcome Section */}
       <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>Gavin</Text></Text>
+        <Text style={styles.welcomeText}>Welcome back, <Text style={styles.welcomeName}>{firstName}</Text></Text>
         <Text style={styles.dashboardLabel}>Tutor Dashboard</Text>
       </View>
 
