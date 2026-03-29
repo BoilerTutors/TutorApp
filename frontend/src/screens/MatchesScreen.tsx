@@ -14,6 +14,7 @@ import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { api } from "../api/client";
+import ViewProfileModal from "../components/ViewProfileModal";
 
 type MatchItem = {
   rank: number;
@@ -30,7 +31,6 @@ type UserLookup = {
   first_name: string;
   last_name: string;
 };
-
 type RootStackParamList = {
   Matches: { matches?: MatchItem[] } | undefined;
   Messenger:
@@ -52,6 +52,8 @@ export default function MatchesScreen() {
   const [matchingTutorIds, setMatchingTutorIds] = useState<Record<number, boolean>>({});
   const [matchedTutorIds, setMatchedTutorIds] = useState<Record<number, boolean>>({});
   const [tutorEmailsById, setTutorEmailsById] = useState<Record<number, string>>({});
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
 
   const loadTutorEmails = async (rows: MatchItem[]) => {
     const uniqueTutorIds = Array.from(new Set(rows.map((row) => row.tutor_id)));
@@ -124,6 +126,11 @@ export default function MatchesScreen() {
     }
   };
 
+  const handleOpenProfile = (userId: number) => {
+    setSelectedProfileUserId(userId);
+    setProfileModalVisible(true);
+  };
+
   useEffect(() => {
     if (initialMatches.length > 0) {
       void loadTutorEmails(initialMatches);
@@ -175,6 +182,14 @@ export default function MatchesScreen() {
             <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
             <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
             <View style={styles.actionsRow}>
+              <Pressable
+                style={[styles.actionBtn, styles.viewProfileBtn]}
+                onPress={() => {
+                  handleOpenProfile(item.tutor_id);
+                }}
+              >
+                <Text style={[styles.actionBtnText, styles.viewProfileBtnText]}>View Profile</Text>
+              </Pressable>
               {(() => {
                 const isMatched = !!matchedTutorIds[item.tutor_id];
                 const isMatching = !!matchingTutorIds[item.tutor_id];
@@ -214,6 +229,17 @@ export default function MatchesScreen() {
             <Text style={styles.refreshButtonText}>Refresh list</Text>
           </Pressable>
         }
+      />
+      <ViewProfileModal
+        visible={profileModalVisible}
+        userId={selectedProfileUserId}
+        onClose={() => {
+          setProfileModalVisible(false);
+          setSelectedProfileUserId(null);
+        }}
+        onLoadError={(message) => {
+          Alert.alert("Error", message);
+        }}
       />
     </View>
   );
@@ -261,6 +287,14 @@ const styles = StyleSheet.create({
   },
   actionBtnText: { color: "#FFFFFF", fontWeight: "600", fontSize: 13 },
   matchBtn: { backgroundColor: "#1F7A4C" },
+  viewProfileBtn: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#2E57A2",
+  },
+  viewProfileBtnText: {
+    color: "#2E57A2",
+  },
   matchBtnMatched: {
     backgroundColor: "transparent",
     borderWidth: 1,
