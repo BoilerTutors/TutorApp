@@ -279,7 +279,9 @@ export default function ProfileScreen() {
       body.tutor_profile = {
         preferred_locations: editLocations,
         help_provided: editHelpProvided.length > 0 ? editHelpProvided : undefined,
-        session_mode: editSessionMode === "both" ? undefined : editSessionMode,
+        // Always send session_mode; "both" must not be omitted or the backend skips the field
+        // (`if t.session_mode is not None`) and the previous value stays in the database.
+        session_mode: editSessionMode,
         classes,
       };
       await api.patch<MeResponse>("/users/me", body);
