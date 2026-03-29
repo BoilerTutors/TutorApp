@@ -396,6 +396,17 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class LoginResponse(BaseModel):
+    access_token: Optional[str] = None
+    token_type: str = "bearer"
+    mfa_required: bool = False
+
+
+class MfaVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+
+
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
 

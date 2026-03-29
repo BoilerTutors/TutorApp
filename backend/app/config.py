@@ -16,5 +16,13 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from_email: str = ""
+    mfa_code_expire_minutes: int = 10
+    mfa_max_attempts: int = 3
+
 
 settings = Settings()  # type: ignore[call-arg]
