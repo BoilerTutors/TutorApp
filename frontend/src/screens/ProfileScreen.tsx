@@ -92,7 +92,7 @@ function formatSemester(semester: string, year: number): string {
 
 /** Map "Fall 2025" to backend semester and year */
 function parseSemester(s: string): { semester: "F" | "S"; year_taken: number } | null {
-  const m = s.match(/^(Fall|Spring)\s+(\d{4})$/);
+  const m = s.trim().match(/^(Fall|Spring)\s+(\d{4})$/);
   if (!m) return null;
   return {
     semester: m[1] === "Fall" ? "F" : "S",
@@ -130,7 +130,7 @@ export default function ProfileScreen() {
   // Same class list as tutor registration (no backend fetch)
   const availableClasses = AVAILABLE_CLASSES_FALLBACK;
 
-  const loadMe = useCallback(async () => {
+  const loadMe = useCallback(async (opts?: { rethrow?: boolean }) => {
     try {
       const data = await api.get<MeResponse>("/users/me");
       setMe(data);
@@ -149,6 +149,7 @@ export default function ProfileScreen() {
       if (!isSessionExpired) {
         Alert.alert("Error", e instanceof Error ? e.message : "Failed to load profile");
       }
+      if (opts?.rethrow) throw e;
     } finally {
       setLoading(false);
     }
@@ -191,24 +192,26 @@ export default function ProfileScreen() {
   }, []);
 
   const addClass = (c: { id: number; courseCode: string; title?: string }) => {
-    if (editClasses.some((x) => x.class_id === c.id)) return;
-    setEditClasses([
-      ...editClasses,
-      {
-        class_id: c.id,
-        courseCode: c.courseCode,
-        title: c.title,
-        semesterTaken: "",
-        gradeReceived: "",
-        hasTAed: false,
-      },
-    ]);
+    setEditClasses((prev) => {
+      if (prev.some((x) => x.class_id === c.id)) return prev;
+      return [
+        ...prev,
+        {
+          class_id: c.id,
+          courseCode: c.courseCode,
+          title: c.title,
+          semesterTaken: "",
+          gradeReceived: "",
+          hasTAed: false,
+        },
+      ];
+    });
     setShowClassPicker(false);
     setClassSearchQuery("");
   };
 
   const removeClass = (classId: number) => {
-    setEditClasses(editClasses.filter((x) => x.class_id !== classId));
+    setEditClasses((prev) => prev.filter((x) => x.class_id !== classId));
   };
 
   const updateClassField = (
@@ -216,10 +219,8 @@ export default function ProfileScreen() {
     field: "semesterTaken" | "gradeReceived" | "hasTAed",
     value: string | boolean
   ) => {
-    setEditClasses(
-      editClasses.map((x) =>
-        x.class_id === classId ? { ...x, [field]: value } : x
-      )
+    setEditClasses((prev) =>
+      prev.map((x) => (x.class_id === classId ? { ...x, [field]: value } : x))
     );
   };
 
@@ -236,7 +237,10 @@ export default function ProfileScreen() {
   };
 
   const handleSavePrefs = async () => {
-    if (!me?.tutor) return;
+    if (!me?.is_tutor) {
+      Alert.alert("Cannot save", "Only tutor accounts can save tutoring preferences.");
+      return;
+    }
     const valid = editClasses.every((c) => c.gradeReceived && c.semesterTaken);
     if (!valid) {
       Alert.alert("Required", "Please complete grade and semester for each class.");
@@ -278,8 +282,8 @@ export default function ProfileScreen() {
         session_mode: editSessionMode === "both" ? undefined : editSessionMode,
         classes,
       };
-      const updated = await api.patch<MeResponse>("/users/me", body);
-      setMe(updated);
+      await api.patch<MeResponse>("/users/me", body);
+      await loadMe({ rethrow: true });
       setEditingPrefs(false);
       setShowClassPicker(false);
     } catch (e) {
@@ -386,7 +390,12 @@ export default function ProfileScreen() {
   const bio = me.tutor?.bio ?? me.student?.bio ?? "";
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Profile</Text>
         {editing ? (

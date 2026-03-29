@@ -25,6 +25,8 @@ app.add_middleware(
         "http://localhost:19006",
         "http://127.0.0.1:19006",
     ],
+    # Expo web / LAN dev (Metro on 192.168.x.x, various ports)
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
