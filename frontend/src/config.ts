@@ -1,18 +1,8 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
-/** Our app's expo.extra from app.json */
-type ExpoExtra = { apiUrl?: string };
-
-/**
- * Backend API base URL. Set in app.json under expo.extra.apiUrl, or via
- * EXPO_PUBLIC_API_URL at build time (e.g. EAS). No trailing slash.
- */
 const getApiUrl = (): string => {
-  const extra = Constants.expoConfig?.extra as ExpoExtra | undefined;
-  const fromExtra = extra?.apiUrl;
-  if (typeof fromExtra === "string" && fromExtra) {
-    return fromExtra.replace(/\/$/, "");
-  }
+  // 1. Explicit env var (EAS builds, etc.)
   const fromEnv =
     typeof process !== "undefined" &&
     process.env &&
@@ -20,7 +10,19 @@ const getApiUrl = (): string => {
   if (typeof fromEnv === "string" && fromEnv) {
     return fromEnv.replace(/\/$/, "");
   }
-  return "http://127.0.0.1:8000/";
+
+  // 2. Running in Expo Go on a device — derive the PC's IP from the dev server
+  if (__DEV__) {
+    const debuggerHost =
+      Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
+    if (debuggerHost) {
+      const ip = debuggerHost.split(":")[0];
+      return `http://${ip}:8000`;
+    }
+  }
+
+  // 3. Fallback (web browser, etc.)
+  return "http://127.0.0.1:8000";
 };
 
 export const API_BASE_URL = getApiUrl();

@@ -15,6 +15,12 @@ export type UserProfile = {
   bio?: string;
 };
 
+export type LoginResponse = {
+  access_token?: string;
+  token_type: string;
+  mfa_required: boolean;
+};
+
 export type StudentClass = BoilerClass & {
   helpLevel: number;
 };
