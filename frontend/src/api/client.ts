@@ -102,7 +102,7 @@ async function request<T>(
   }
   const contentType = res.headers.get("content-type");
   const contentLength = res.headers.get("content-length");
-  if (contentLength === "0" || !res.body) {
+  if (contentLength === "0") {
     return undefined as T;
   }
   if (contentType?.includes("application/json")) {

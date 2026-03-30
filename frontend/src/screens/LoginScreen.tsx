@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Modal,
   ActivityIndicator,
   Alert,
   Pressable,
@@ -15,6 +16,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api, setAuthToken } from "../api/client";
 import { clearToken, saveToken } from "../auth/storage";
+import { LoginResponse } from "../types/models";
 
 type Role = "tutor" | "student";
 type RootStackParamList = {
@@ -61,6 +63,8 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaPending, setMfaPending] = useState(false);
 
   const onLogin = async () => {
     if (!email.trim() || !password) {
@@ -70,11 +74,26 @@ export default function LoginScreen() {
     setLoginError(null);
     setLoading(true);
     try {
-      const data = await api.post<{ access_token: string; token_type: string }>(
+      const data = await api.post<LoginResponse>(
         "/auth/login",
         { email: email.trim().toLowerCase(), password }
       );
-      setAuthToken(data.access_token);
+      if (!data) {
+        setLoginError("Unexpected response from server.");
+        return;
+      }
+
+      if (data.mfa_required) {
+        setMfaPending(true);
+        return;
+      }
+      if (data.access_token) {
+        setAuthToken(data.access_token);
+      }
+      else {
+        setLoginError("Invalid email or password.");
+        return;
+      }
       const me = await api.get<{ is_tutor: boolean; is_student: boolean }>("/users/me");
       const roleMismatch =
         (role === "student" && !me.is_student) ||
@@ -82,11 +101,11 @@ export default function LoginScreen() {
       if (roleMismatch) {
         setAuthToken(null);
         await clearToken();
-        setLoginError("Invalid username or password.");
+        setLoginError("Invalid email or password.");
         return;
       }
 
-      await saveToken(data.access_token);
+      await saveToken(data.access_token!);
       console.log("[Auth] login ok", {
         email: email.trim().toLowerCase(),
         role,
@@ -105,6 +124,56 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  const onVerifyMfa = async () => {
+    if (!mfaCode.trim()) {
+      Alert.alert("Error", "Please enter the MFA code.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await api.post<LoginResponse>("/auth/verify-mfa", { email: email.trim().toLowerCase(), code: mfaCode.trim() });
+      if (!data) {
+        setLoginError("Unexpected response from server.");
+        return;
+      }
+      if (data.access_token) {
+        setAuthToken(data.access_token);
+        setMfaPending(false);
+        setMfaCode("");
+      }
+      else {
+        setLoginError("Invalid MFA code.");
+        return;
+      }
+      const me = await api.get<{ is_tutor: boolean; is_student: boolean }>("/users/me");
+      const roleMismatch =
+        (role === "student" && !me.is_student) ||
+        (role === "tutor" && !me.is_tutor);
+      if (roleMismatch) {
+        setAuthToken(null);
+        await clearToken();
+        setLoginError("Your account does not match the selected role.");
+        return;
+      }
+
+      await saveToken(data.access_token);
+      console.log("[Auth] verify mfa ok", {
+        email: email.trim().toLowerCase(),
+      });
+      if (role === "student") {
+        navigation.navigate("Student Dashboard");
+      } else {
+        navigation.navigate("Tutor Dashboard");
+      }
+    }
+    catch (e) {
+      const message = e instanceof Error ? e.message : "Invalid MFA code.";
+      setLoginError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const onSignUp = () => {
     const eErr = validateEmailForSignUp(email);
@@ -131,6 +200,48 @@ export default function LoginScreen() {
   return (
     <>
       <StatusBar style="dark" />
+      <Modal visible={mfaPending} transparent animationType="fade">
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalCard}>
+      <Text style={styles.modalTitle}>Verify Your Identity</Text>
+      <Text style={styles.modalSubtitle}>
+        Enter the 6-digit code sent to {email}
+      </Text>
+
+      <TextInput
+        style={styles.mfaInput}
+        placeholder="000000"
+        placeholderTextColor="#B0B6C3"
+        keyboardType="number-pad"
+        maxLength={6}
+        value={mfaCode}
+        onChangeText={setMfaCode}
+        autoFocus
+      />
+
+      {loginError ? <Text style={styles.loginErrorText}>{loginError}</Text> : null}
+
+      <TouchableOpacity
+        style={styles.loginBtn}
+        onPress={onVerifyMfa}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.loginText}>VERIFY</Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => { setMfaPending(false); setMfaCode(""); setLoginError(null); }}
+        style={{ marginTop: 12 }}
+      >
+        <Text style={styles.link}>Back to Login</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
     <View style={styles.screen}>
       <View style={styles.headerWrap}>
         
@@ -394,5 +505,41 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     letterSpacing: 0.6
-  }
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1F36",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#8C93A4",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  mfaInput: {
+    fontSize: 24,
+    letterSpacing: 8,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#E2E5ED",
+    borderRadius: 10,
+    padding: 12,
+    width: "100%",
+    marginBottom: 16,
+  },
 });
