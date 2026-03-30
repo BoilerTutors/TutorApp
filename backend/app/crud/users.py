@@ -94,11 +94,18 @@ def create_user(db: Session, data: UserCreate) -> User:
 
 def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
     """Update user first/last name and optionally tutor/student profile fields."""
+    tutor_classes_were_replaced = False
     if data.first_name is not None:
         user.first_name = data.first_name
     if data.last_name is not None:
         user.last_name = data.last_name
-    if data.tutor_profile is not None and user.tutor is not None:
+    if data.tutor_profile is not None and user.is_tutor:
+        # is_tutor can be true without a tutors row (bad data or legacy accounts); create so PATCH applies.
+        if user.tutor is None:
+            new_tutor = TutorProfile(user_id=user.id)
+            db.add(new_tutor)
+            db.flush()
+            user.tutor = new_tutor
         t = data.tutor_profile
         tutor_embedding_needs_refresh = False
         if t.bio is not None:
@@ -134,6 +141,7 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
                     )
                 )
             tutor_embedding_needs_refresh = True
+            tutor_classes_were_replaced = True
         if tutor_embedding_needs_refresh:
             refresh_tutor_embeddings(db, user.tutor)
     if data.student_profile is not None and user.student is not None:
@@ -156,6 +164,9 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             refresh_student_embeddings(db, user.student)
     db.commit()
     db.refresh(user)
+    # expire_on_commit=False: in-memory classes_tutoring can be stale after replace; force reload on read.
+    if tutor_classes_were_replaced and user.tutor is not None:
+        db.expire(user.tutor, ["classes_tutoring"])
     return user
 
 
