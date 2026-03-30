@@ -70,6 +70,30 @@ async function request<T>(
       throw new Error("Invalid email or password.");
     }
     const text = await res.text();
+    if (text) {
+      try {
+        const parsed = JSON.parse(text) as { detail?: unknown };
+        const d = parsed.detail;
+        if (Array.isArray(d)) {
+          const msg = d
+            .map((x) =>
+              x && typeof x === "object" && "msg" in x
+                ? String((x as { msg: string }).msg)
+                : JSON.stringify(x)
+            )
+            .join("; ");
+          if (msg) throw new Error(msg);
+        } else if (typeof d === "string") {
+          throw new Error(d);
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          // not JSON; fall through to generic error below
+        } else {
+          throw e;
+        }
+      }
+    }
     throw new Error(text || `HTTP ${res.status}`);
   }
   // 204 No Content (or empty body): do not call res.json() or it throws
