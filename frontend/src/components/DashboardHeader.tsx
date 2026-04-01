@@ -224,7 +224,7 @@ const HORIZONTAL_PADDING = 16;
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: NAVY,
+    backgroundColor: "rgb(33, 34, 28)",
     paddingBottom: 14,
     ...Platform.select({
       ios: {

@@ -15,6 +15,7 @@ import NotificationsTab from "./src/screens/settings/NotificationsTab";
 import HelpScreen from "./src/screens/HelpScreen";
 import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
 import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
+import TutorPastSessionsScreen from "./src/screens/TutorPastSessionsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
@@ -32,6 +33,7 @@ type RootStackParamList = {
   "Student Registration": undefined;
   "Student Reviews": undefined;
   "Tutor Reviews": undefined;
+  "Tutor Past Sessions": undefined;
   Messenger:
     | {
         openTutorUserId?: number;
@@ -229,6 +231,11 @@ export default function App() {
             name="Tutor Reviews"
             component={TutorReviewsScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Tutor Past Sessions"
+            component={TutorPastSessionsScreen}
+            options={{ header: () => <GeneralHeader title="Past Sessions" /> }}
           />
           <Stack.Screen
             name="Messenger"
