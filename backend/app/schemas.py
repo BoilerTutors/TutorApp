@@ -298,6 +298,7 @@ class TutoringSessionUpdate(BaseModel):
     scheduled_start: Optional[datetime] = None
     scheduled_end: Optional[datetime] = None
     notes: Optional[str] = None
+    cancel_reason: Optional[str] = None
 
 
 class TutoringSessionPublic(BaseModel):
@@ -540,7 +541,8 @@ class MatchSelectRequest(BaseModel):
 
 
 class MatchUnmatchRequest(BaseModel):
-    student_id: int
+    student_id: Optional[int] = None
+    tutor_id: Optional[int] = None
 
 
 class DeviceTokenRegisterRequest(BaseModel):
@@ -620,6 +622,23 @@ class TutoringSessionStudentPublic(BaseModel):
  
  
 # --- Report schemas ---
+
+
+class AdminMessageCreate(BaseModel):
+    tutor_id: int
+    message: str = Field(min_length=1, max_length=4000)
+    refund_requested: bool = False
+
+
+class AdminMessagePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: int
+    tutor_id: int
+    message: str
+    refund_requested: bool
+    created_at: datetime
  
 class ReportCreate(BaseModel):
     tutor_id: int

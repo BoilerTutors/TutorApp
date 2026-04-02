@@ -129,6 +129,7 @@ export default function MessengerScreen() {
   const [scheduleSlots, setScheduleSlots] = useState<AvailabilitySlot[]>([]);
   const [scheduleSubject, setScheduleSubject] = useState("Tutoring Session");
   const [unmatchingStudentId, setUnmatchingStudentId] = useState<number | null>(null);
+  const [unmatchingTutorId, setUnmatchingTutorId] = useState<number | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -493,6 +494,58 @@ export default function MessengerScreen() {
     );
   };
 
+  const performUnmatchTutor = useCallback(
+    async (tutorUserId: number) => {
+      try {
+        setUnmatchingTutorId(tutorUserId);
+        await api.post<void>("/matches/unmatch", { tutor_id: tutorUserId });
+        if (selectedTutorUserId === tutorUserId) {
+          setSelectedConversationId(null);
+          setSelectedTutorUserId(null);
+          setSelectedTutorName(null);
+          setMessages([]);
+        }
+        await loadSidebarItems();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not unmatch this tutor.";
+        Alert.alert("Unmatch failed", message);
+      } finally {
+        setUnmatchingTutorId(null);
+      }
+    },
+    [loadSidebarItems, selectedTutorUserId]
+  );
+
+  const onUnmatchTutor = (tutorUserId: number, tutorName: string) => {
+    if (unmatchingTutorId != null) {
+      return;
+    }
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Are you sure you want to unmatch?\n\n${tutorName} will be hidden from both Messenger views.`
+      );
+      if (!confirmed) {
+        return;
+      }
+      void performUnmatchTutor(tutorUserId);
+      return;
+    }
+    Alert.alert(
+      "Are you sure you want to unmatch?",
+      `${tutorName} will be hidden from both Messenger views.`,
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: () => {
+            void performUnmatchTutor(tutorUserId);
+          },
+        },
+      ]
+    );
+  };
+
   const groupedAvailability = useMemo(() => {
     const groups = new Map<number, string[]>();
     for (const slot of availabilitySlots) {
@@ -659,6 +712,20 @@ export default function MessengerScreen() {
                       }}
                     >
                       <Text style={styles.scheduleBtnText}>Schedule Session</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.unmatchBtn}
+                      onPress={() => {
+                        onUnmatchTutor(
+                          item.tutor_id,
+                          `${item.tutor_first_name} ${item.tutor_last_name}`
+                        );
+                      }}
+                      disabled={unmatchingTutorId === item.tutor_id}
+                    >
+                      <Text style={styles.unmatchBtnText}>
+                        {unmatchingTutorId === item.tutor_id ? "Unmatching..." : "Unmatch"}
+                      </Text>
                     </Pressable>
                   </View>
                 );

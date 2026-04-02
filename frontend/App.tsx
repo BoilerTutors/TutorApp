@@ -3,9 +3,6 @@ import { ActivityIndicator, Alert, StyleSheet, View, Image, Dimensions, Text } f
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "./src/screens/LoginScreen";
-import AdminLoginScreen from "./src/screens/AdminLoginScreen";
-import AdminDashboard from "./src/screens/AdminDashboard";
-import AdminSessionsScreen from "./src/screens/AdminSessionsScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
@@ -25,20 +22,16 @@ import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
 import { AuthProvider } from "./src/context/AuthContext";
-import { API_BASE_URL } from "./src/config";
 import AvailabilityScreen from "./src/screens/AvailabilityScreen";
 import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
 import ReportTutorScreen from "./src/screens/ReportTutorScreen";
 import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
 import TutorCalendarScreen from "./src/screens/TutorCalendarScreen";
-
+import ContactAdminScreen from "./src/screens/ContactAdminScreen";
 const Stack = createNativeStackNavigator();
 
 type RootStackParamList = {
   Login: undefined;
-  "Admin Login": undefined;
-  "Admin Dashboard": undefined;
-  "Admin Sessions": undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
@@ -72,29 +65,17 @@ type RootStackParamList = {
   } | undefined;
   Profile:
     | {
-        role?: "STUDENT" | "TUTOR" | "ADMIN";
+        role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
       }
     | undefined;
+  "Contact Admin": undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
-type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard" | "Admin Dashboard";
+type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
 const AUTH_CHECK_TIMEOUT_MS = 15000;
 type MeResponse = { is_tutor: boolean; is_student: boolean };
-type AdminMeResponse = { id: number; email: string };
-
-async function probeWithToken<T>(path: string, token: string): Promise<T | null> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) {
-    return null;
-  }
-  return (await res.json()) as T;
-}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -139,24 +120,10 @@ export default function App() {
         }
 
         setAuthToken(token);
-        try {
-          const me = await withTimeout(probeWithToken<MeResponse>("/users/me", token), AUTH_CHECK_TIMEOUT_MS);
-          if (!me) {
-            throw new Error("not a user token");
-          }
-          const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
-          if (!cancelled) {
-            setInitialRoute(route);
-          }
-        } catch {
-          const admin = await withTimeout(probeWithToken<AdminMeResponse>("/admin/me", token), AUTH_CHECK_TIMEOUT_MS);
-          if (!cancelled && admin?.id) {
-            setInitialRoute("Admin Dashboard");
-          } else if (!cancelled) {
-            setAuthToken(null);
-            await clearToken();
-            setInitialRoute("Login");
-          }
+        const me = await withTimeout(api.get<MeResponse>("/users/me"), AUTH_CHECK_TIMEOUT_MS);
+        const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
+        if (!cancelled) {
+          setInitialRoute(route);
         }
       } catch (e) {
         setAuthToken(null);
@@ -192,9 +159,6 @@ export default function App() {
     prefixes: [],
     config: {
       screens: {
-        Login: "login",
-        "Admin Login": "admin/login",
-        "Admin Dashboard": "admin/dashboard",
         Profile: "profile",
       },
     },
@@ -218,42 +182,6 @@ export default function App() {
                 </View>
               )
             }}
-          />
-          <Stack.Screen
-            name="Admin Login"
-            component={AdminLoginScreen}
-            options={{
-              header: () => (
-                <View style={styles.loginHeader}>
-                  <Image
-                    source={require("./src/assets/purdue_logo.png")}
-                    style={styles.loginHeaderImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              )
-            }}
-          />
-          <Stack.Screen
-            name="Admin Dashboard"
-            component={AdminDashboard}
-            options={({ navigation }) => ({
-              header: () => (
-                <DashboardHeader
-                  role="ADMIN"
-                  onLogout={async () => {
-                    await logout();
-                    navigation.reset({ index: 0, routes: [{ name: "Admin Login" }] });
-                  }}
-                  onHelpPress={() => navigation.navigate("Help")}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="Admin Sessions"
-            component={AdminSessionsScreen}
-            options={{ header: () => <GeneralHeader title="Recent Purchases" /> }}
           />
           <Stack.Screen
             name="Student Dashboard"
@@ -333,13 +261,15 @@ export default function App() {
               header: () => (
                 <ProfileHeader
                   onBack={() => navigation.goBack()}
-                  role={
-                    (
+                  role={(() => {
+                    const rawRole = (
                       route.params as
-                        | { role?: "STUDENT" | "TUTOR" | "ADMIN" }
+                        | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
                         | undefined
-                    )?.role ?? "STUDENT"
-                  }
+                    )?.role;
+                    if (rawRole === "ADMINISTRATOR") return "ADMIN";
+                    return rawRole ?? "STUDENT";
+                  })()}
                 />
               ),
             })}
@@ -388,6 +318,11 @@ export default function App() {
             name="Tutor Profile Reviews"
             component={TutorProfileReviewsScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Contact Admin"
+            component={ContactAdminScreen}
+            options={{ header: () => <GeneralHeader title="Contact Admin" /> }}
           />
         </Stack.Navigator>
       </NavigationContainer>
