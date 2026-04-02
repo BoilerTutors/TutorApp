@@ -24,6 +24,14 @@ from app.database import Base
 # ===========================================
 # Users, Tutor Profiles, and Student Profiles
 # ============================================
+class Admin(Base):
+    __tablename__ = "admins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
 class User(Base):
     # Name of the table in the database
     __tablename__ = "users"
@@ -298,6 +306,8 @@ class StudentProfile(Base):
     help_needed: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(Text), nullable=True, default=None
     )
+    # Session mode: "online" | "in_person" | "both"
+    session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
 
     user: Mapped["User"] = relationship(back_populates="student")
     classes_enrolled: Mapped[list["StudentClass"]] = relationship(
@@ -633,8 +643,51 @@ class Match(Base):
     class_strength: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     availability_overlap: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     location_match: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    unmatched: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     run: Mapped["MatchRun"] = relationship(back_populates="matches")
+
+class TutorReport(Base):
+    __tablename__ = "tutor_reports"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'reviewed', 'resolved', 'dismissed')",
+            name="ck_report_status",
+        ),
+    )
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+ 
+    # The student filing the report
+    reporter_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # The tutor being reported
+    tutor_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # link to the specific session the issue occurred in
+    session_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("tutoring_sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+ 
+    reason: Mapped[str] = mapped_column(Text, nullable=False)  # min 20 chars enforced in schema
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+ 
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+ 
+    reporter: Mapped["User"] = relationship(foreign_keys=[reporter_id])
+    tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
+    session: Mapped[Optional["TutoringSession"]] = relationship(foreign_keys=[session_id])
+
+    

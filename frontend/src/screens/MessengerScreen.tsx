@@ -113,6 +113,7 @@ export default function MessengerScreen() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityStudentName, setAvailabilityStudentName] = useState<string>("");
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [unmatchingStudentId, setUnmatchingStudentId] = useState<number | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -360,6 +361,58 @@ export default function MessengerScreen() {
     setProfileModalVisible(true);
   };
 
+  const performUnmatchStudent = useCallback(
+    async (studentUserId: number) => {
+      try {
+        setUnmatchingStudentId(studentUserId);
+        await api.post<void>("/matches/unmatch", { student_id: studentUserId });
+        if (selectedTutorUserId === studentUserId) {
+          setSelectedConversationId(null);
+          setSelectedTutorUserId(null);
+          setSelectedTutorName(null);
+          setMessages([]);
+        }
+        await loadSidebarItems();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not unmatch this student.";
+        Alert.alert("Unmatch failed", message);
+      } finally {
+        setUnmatchingStudentId(null);
+      }
+    },
+    [loadSidebarItems, selectedTutorUserId]
+  );
+
+  const onUnmatchStudent = (studentUserId: number, studentName: string) => {
+    if (unmatchingStudentId != null) {
+      return;
+    }
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Are you sure you want to unmatch?\n\n${studentName} will be hidden from both Messenger views.`
+      );
+      if (!confirmed) {
+        return;
+      }
+      void performUnmatchStudent(studentUserId);
+      return;
+    }
+    Alert.alert(
+      "Are you sure you want to unmatch?",
+      `${studentName} will be hidden from both Messenger views.`,
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: () => {
+            void performUnmatchStudent(studentUserId);
+          },
+        },
+      ]
+    );
+  };
+
   const groupedAvailability = useMemo(() => {
     const groups = new Map<number, string[]>();
     for (const slot of availabilitySlots) {
@@ -535,6 +588,19 @@ export default function MessengerScreen() {
                       }}
                     >
                       <Text style={styles.availabilityBtnText}>View Availability</Text>
+                    </Pressable>
+                  ) : null}
+                  {!isStudentAccount ? (
+                    <Pressable
+                      style={styles.unmatchBtn}
+                      onPress={() => {
+                        onUnmatchStudent(item.other_user_id, personName);
+                      }}
+                      disabled={unmatchingStudentId === item.other_user_id}
+                    >
+                      <Text style={styles.unmatchBtnText}>
+                        {unmatchingStudentId === item.other_user_id ? "Unmatching..." : "Unmatch"}
+                      </Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -790,6 +856,21 @@ const styles = StyleSheet.create({
     color: "#2E57A2",
     fontSize: 12,
     fontWeight: "600",
+  },
+  unmatchBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    backgroundColor: "#FEF2F2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  unmatchBtnText: {
+    color: "#B91C1C",
+    fontSize: 12,
+    fontWeight: "700",
   },
   infoBtn: {
     marginTop: 8,

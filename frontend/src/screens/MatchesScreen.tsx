@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useRoute } from "@react-navigation/native";
@@ -23,7 +24,29 @@ type MatchItem = {
   tutor_first_name: string;
   tutor_last_name: string;
   tutor_major: string | null;
+  tutor_hourly_rate_cents?: number | null;
   similarity_score: number;
+};
+type TutorClassLite = {
+  class_id: number;
+  course_code: string;
+};
+type TutorProfileLookup = {
+  id: number;
+  classes_tutoring?: TutorClassLite[];
+};
+type ClassPublic = {
+  id: number;
+  subject: string;
+  class_number: number;
+};
+type ClassFilterOption = {
+  classId: number;
+  label: string;
+};
+type ClassSearchItem = {
+  id: number;
+  label: string;
 };
 type UserLookup = {
   id: number;
@@ -52,6 +75,13 @@ export default function MatchesScreen() {
   const [matchingTutorIds, setMatchingTutorIds] = useState<Record<number, boolean>>({});
   const [matchedTutorIds, setMatchedTutorIds] = useState<Record<number, boolean>>({});
   const [tutorEmailsById, setTutorEmailsById] = useState<Record<number, string>>({});
+  const [tutorClassesByTutorUserId, setTutorClassesByTutorUserId] = useState<
+    Record<number, TutorClassLite[]>
+  >({});
+  const [classCatalog, setClassCatalog] = useState<ClassSearchItem[]>([]);
+  const [selectedClass, setSelectedClass] = useState<ClassFilterOption | null>(null);
+  const [classSearchQuery, setClassSearchQuery] = useState("");
+  const [showClassSuggestions, setShowClassSuggestions] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
 
@@ -78,11 +108,65 @@ export default function MatchesScreen() {
     setTutorEmailsById(next);
   };
 
-  const loadLatestMatches = async () => {
+  const loadClassCatalog = async () => {
     try {
-      const data = await api.get<MatchItem[]>("/matches/me");
+      const classRows = await api.get<ClassPublic[]>("/classes/?limit=500");
+      const mapped = classRows.map((row) => ({
+        id: row.id,
+        label: `${row.subject} ${row.class_number}`,
+      }));
+      mapped.sort((a, b) => a.label.localeCompare(b.label));
+      setClassCatalog(mapped);
+    } catch {
+      setClassCatalog([]);
+    }
+  };
+
+  const loadTutorClasses = async (rows: MatchItem[]) => {
+    const tutorsWithProfile = rows.filter((row) => row.tutor_profile_id != null);
+    if (tutorsWithProfile.length === 0) {
+      setTutorClassesByTutorUserId({});
+      return;
+    }
+
+    const pairs = await Promise.all(
+      tutorsWithProfile.map(async (row) => {
+        try {
+          const profile = await api.get<TutorProfileLookup>(`/tutors/${row.tutor_profile_id}`);
+          return [row.tutor_id, profile.classes_tutoring ?? []] as const;
+        } catch {
+          return [row.tutor_id, [] as TutorClassLite[]] as const;
+        }
+      })
+    );
+
+    const next: Record<number, TutorClassLite[]> = {};
+    for (const [tutorId, classes] of pairs) {
+      next[tutorId] = classes;
+    }
+    setTutorClassesByTutorUserId(next);
+  };
+
+  const selectedClassId = selectedClass?.classId ?? null;
+  const selectedClassLabel = selectedClass?.label ?? null;
+
+  const classSuggestions = useMemo(() => {
+    const q = classSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return classCatalog.slice(0, 8);
+    }
+    return classCatalog
+      .filter((row) => row.label.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [classCatalog, classSearchQuery]);
+
+  const loadLatestMatches = async (classId: number | null = selectedClassId) => {
+    try {
+      const path =
+        classId != null ? `/matches/me/refresh?class_id=${classId}` : "/matches/me/refresh";
+      const data = await api.post<MatchItem[]>(path);
       setMatches(data);
-      await loadTutorEmails(data);
+      await Promise.all([loadTutorEmails(data), loadTutorClasses(data)]);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to load matches");
     } finally {
@@ -109,6 +193,7 @@ export default function MatchesScreen() {
     try {
       const saved = await api.post<MatchItem[]>("/matches/me/select", {
         tutor_id: item.tutor_id,
+        class_id: selectedClassId,
       });
       const next: Record<number, boolean> = {};
       for (const row of saved) {
@@ -133,11 +218,12 @@ export default function MatchesScreen() {
 
   useEffect(() => {
     if (initialMatches.length > 0) {
-      void loadTutorEmails(initialMatches);
+      void Promise.all([loadTutorEmails(initialMatches), loadTutorClasses(initialMatches)]);
     }
+    void loadClassCatalog();
     void loadSavedMatches();
     if (initialMatches.length === 0) {
-      void loadLatestMatches();
+      void loadLatestMatches(null);
     }
   }, [initialMatches.length]);
 
@@ -150,7 +236,7 @@ export default function MatchesScreen() {
     );
   }
 
-  if (matches.length === 0) {
+  if (matches.length === 0 && selectedClassId == null) {
     return (
       <View style={styles.centered}>
         <Text style={styles.emptyTitle}>No matches yet</Text>
@@ -165,9 +251,65 @@ export default function MatchesScreen() {
         data={matches}
         keyExtractor={(item) => `${item.rank}-${item.tutor_id}`}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View style={styles.filterContainer}>
+            <Text style={styles.filterLabel}>Filter by class</Text>
+            <TextInput
+              value={classSearchQuery}
+              onChangeText={(text) => {
+                setClassSearchQuery(text);
+                setShowClassSuggestions(true);
+              }}
+              onFocus={() => {
+                setShowClassSuggestions(true);
+              }}
+              placeholder="Type class (e.g., CS 180)"
+              style={styles.filterInput}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            {showClassSuggestions && classSuggestions.length > 0 ? (
+              <View style={styles.suggestionsContainer}>
+                {classSuggestions.map((option) => (
+                  <Pressable
+                    key={option.id}
+                    style={styles.suggestionRow}
+                    onPress={() => {
+                      const picked = { classId: option.id, label: option.label };
+                      setSelectedClass(picked);
+                      setClassSearchQuery(option.label);
+                      setShowClassSuggestions(false);
+                      void loadLatestMatches(option.id);
+                    }}
+                  >
+                    <Text style={styles.suggestionText}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {selectedClassLabel ? (
+              <Pressable
+                style={styles.clearFilterBtn}
+                onPress={() => {
+                  setSelectedClass(null);
+                  setClassSearchQuery("");
+                  setShowClassSuggestions(false);
+                  void loadLatestMatches(null);
+                }}
+              >
+                <Text style={styles.clearFilterBtnText}>Clear filter</Text>
+              </Pressable>
+            ) : null}
+            {selectedClassLabel && matches.length === 0 ? (
+              <Text style={styles.filterHint}>
+                No tutors found for {selectedClassLabel}. Try another class.
+              </Text>
+            ) : null}
+          </View>
+        }
         onRefresh={() => {
           setRefreshing(true);
-          void loadLatestMatches();
+          void loadLatestMatches(selectedClassId);
         }}
         refreshing={refreshing}
         renderItem={({ item }) => (
@@ -181,6 +323,23 @@ export default function MatchesScreen() {
             {/* TESTING ONLY: easy to remove once no longer needed */}
             <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
             <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
+            <Text style={styles.meta}>
+              Rate:{" "}
+              {item.tutor_hourly_rate_cents != null
+                ? `$${(item.tutor_hourly_rate_cents / 100).toFixed(2)}/hr`
+                : "—"}
+            </Text>
+            <Text style={styles.meta}>
+              Classes:{" "}
+              {(tutorClassesByTutorUserId[item.tutor_id] ?? [])
+                .map((c) => c.course_code)
+                .join(", ") || "—"}
+            </Text>
+            {selectedClassId != null ? (
+              <Text style={styles.filteredClassMeta}>
+                Filtered class match: {selectedClassLabel ?? `Class ${selectedClassId}`}
+              </Text>
+            ) : null}
             <View style={styles.actionsRow}>
               <Pressable
                 style={[styles.actionBtn, styles.viewProfileBtn]}
@@ -223,7 +382,7 @@ export default function MatchesScreen() {
             style={styles.refreshButton}
             onPress={() => {
               setRefreshing(true);
-              void loadLatestMatches();
+              void loadLatestMatches(selectedClassId);
             }}
           >
             <Text style={styles.refreshButtonText}>Refresh list</Text>
@@ -248,6 +407,64 @@ export default function MatchesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F2F4F8" },
   listContent: { padding: 16, paddingBottom: 24 },
+  filterContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  filterLabel: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 6,
+    fontWeight: "600",
+  },
+  filterInput: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#F9FAFB",
+    fontSize: 14,
+    color: "#111827",
+  },
+  suggestionsContainer: {
+    marginTop: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  suggestionRow: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  suggestionText: {
+    color: "#111827",
+    fontSize: 14,
+  },
+  clearFilterBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#EEF2FF",
+  },
+  clearFilterBtnText: {
+    color: "#2E57A2",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  filterHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#4B5563",
+  },
   centered: {
     flex: 1,
     alignItems: "center",
@@ -279,6 +496,13 @@ const styles = StyleSheet.create({
   score: { fontSize: 15, fontWeight: "700", color: "#2E57A2" },
   name: { fontSize: 17, fontWeight: "700", color: "#111827", marginBottom: 6 },
   meta: { fontSize: 13, color: "#6B7280", marginBottom: 2 },
+  filteredClassMeta: {
+    fontSize: 13,
+    color: "#1D4ED8",
+    marginTop: 2,
+    marginBottom: 2,
+    fontWeight: "600",
+  },
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 10 },
   actionBtn: {
     borderRadius: 10,

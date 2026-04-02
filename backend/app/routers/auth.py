@@ -81,7 +81,7 @@ def verify_mfa(data: MfaVerifyRequest, db: Session = Depends(get_db)):
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed attempts. Please log in again.",
+            detail="Too many failed attempts. Please wait 5 minutes before trying again.",
         )
 
     if not secrets.compare_digest(user.mfa_code, data.code):

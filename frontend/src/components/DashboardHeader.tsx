@@ -12,14 +12,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
 
 type DashboardHeaderProps = {
-  role: "STUDENT" | "TUTOR";
+  role: "STUDENT" | "TUTOR" | "ADMIN";
   onLogout: () => void;
   onSettingsPress?: () => void;
   onNotificationsPress?: () => void;
   onHelpPress?: () => void;
 };
 
-export type AccountType = "STUDENT" | "TUTOR" | "ADMINISTRATOR";
+export type AccountType = "STUDENT" | "TUTOR" | "ADMIN";
 
 type ProfileHeaderProps = {
   onBack: () => void;
