@@ -306,6 +306,21 @@ class TutoringSessionPublic(BaseModel):
     status: SessionStatus
     purchased_at: datetime
 
+
+class AdminTutoringSessionPublic(BaseModel):
+    id: int
+    tutor_id: int
+    student_id: int
+    tutor_name: str
+    student_name: str
+    subject: str
+    scheduled_start: datetime
+    scheduled_end: datetime
+    cost_cents: int
+    notes: Optional[str] = None
+    status: SessionStatus
+    purchased_at: datetime
+
 # ===========================================================
 # ---- Review schemas ----
 # ===========================================================

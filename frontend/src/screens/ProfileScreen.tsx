@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api, setAuthToken } from "../api/client";
 import { loadToken } from "../auth/storage";
@@ -77,9 +77,18 @@ type MeResponse = {
   } | null;
 };
 
+type AdminMeResponse = {
+  id: number;
+  email: string;
+};
+
 type RootStackParamList = {
   Login: undefined;
-  Profile: undefined;
+  Profile:
+    | {
+        role?: "STUDENT" | "TUTOR" | "ADMIN";
+      }
+    | undefined;
 };
 
 const DELETE_CONFIRM_TEXT = "DELETE";
@@ -102,7 +111,9 @@ function parseSemester(s: string): { semester: "F" | "S"; year_taken: number } |
 
 export default function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [adminMe, setAdminMe] = useState<AdminMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -129,20 +140,34 @@ export default function ProfileScreen() {
 
   // Same class list as tutor registration (no backend fetch)
   const availableClasses = AVAILABLE_CLASSES_FALLBACK;
+  const currentRole =
+    ((route.params as { role?: "STUDENT" | "TUTOR" | "ADMIN" } | undefined)?.role ??
+      "STUDENT");
+  const isAdminProfile = currentRole === "ADMIN";
 
   const loadMe = useCallback(async (opts?: { rethrow?: boolean }) => {
     try {
-      const data = await api.get<MeResponse>("/users/me");
-      setMe(data);
-      setEditFirstName(data.first_name);
-      setEditLastName(data.last_name);
-      const major =
-        data.tutor?.major ?? data.student?.major ?? "";
-      const year =
-        data.tutor?.grad_year ?? data.student?.grad_year ?? null;
-      setEditMajor(major ?? "");
-      setEditYear(year != null ? String(year) : "");
-      setEditBio(data.tutor?.bio ?? data.student?.bio ?? "");
+      if (isAdminProfile) {
+        const data = await api.get<AdminMeResponse>("/admin/me");
+        setAdminMe(data);
+        setMe(null);
+        setEditFirstName("");
+        setEditLastName("");
+        setEditMajor("");
+        setEditYear("");
+        setEditBio("");
+      } else {
+        const data = await api.get<MeResponse>("/users/me");
+        setMe(data);
+        setAdminMe(null);
+        setEditFirstName(data.first_name);
+        setEditLastName(data.last_name);
+        const major = data.tutor?.major ?? data.student?.major ?? "";
+        const year = data.tutor?.grad_year ?? data.student?.grad_year ?? null;
+        setEditMajor(major ?? "");
+        setEditYear(year != null ? String(year) : "");
+        setEditBio(data.tutor?.bio ?? data.student?.bio ?? "");
+      }
     } catch (e) {
       // 401/session expired: onUnauthorized handles alert + navigation to Login
       const isSessionExpired = e instanceof Error && e.message.includes("session has expired");
@@ -161,6 +186,9 @@ export default function ProfileScreen() {
         const token = await loadToken();
         if (token) setAuthToken(token);
         setLoading(true);
+        setEditing(false);
+        setEditingPrefs(false);
+        setDeleteModalVisible(false);
         loadMe();
       };
       run();
@@ -361,11 +389,33 @@ export default function ProfileScreen() {
   };
 
   if (loading && !me) {
+    if (loading && !me && !adminMe) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#2E57A2" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      );
+    }
+  }
+
+  if (isAdminProfile && adminMe) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2E57A2" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Administrator Profile</Text>
+          <Text style={styles.label}>Admin ID</Text>
+          <Text style={styles.value}>{adminMe.id}</Text>
+          <Text style={styles.label}>Email</Text>
+          <Text style={styles.value}>{adminMe.email}</Text>
+          <Text style={styles.label}>Access</Text>
+          <Text style={styles.value}>Administrator</Text>
+        </View>
+      </ScrollView>
     );
   }
 

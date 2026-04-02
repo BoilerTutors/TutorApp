@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { setAuthToken, getAuthToken } from "../api/client";
 import { saveToken, loadToken, clearToken } from "../auth/storage";
 import { authApi, usersApi, UserPublic, UserCreate, LoginRequest, Token } from "../services/api";
+import { API_BASE_URL } from "../config";
 
 type AuthContextType = {
   user: UserPublic | null;
@@ -16,6 +17,18 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+async function probeUserWithToken(token: string): Promise<UserPublic | null> {
+  const res = await fetch(`${API_BASE_URL}/users/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    return null;
+  }
+  return (await res.json()) as UserPublic;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
@@ -34,8 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedToken) {
         setAuthToken(storedToken);
         setToken(storedToken);
-        // Fetch user info
-        const userInfo = await authApi.getMe();
+        const userInfo = await probeUserWithToken(storedToken);
         setUser(userInfo);
       }
     } catch (err) {
