@@ -182,7 +182,12 @@ class TutorProfilePublic(BaseModel):
                         professor=c.professor if c else None,
                     )
                 )
-            avg_rating = getattr(tutor, "average_rating", None)
+            try:
+                avg_rating = getattr(tutor, "average_rating", None)
+            except Exception:
+                # Avoid hard-failing profile serialization if local DB schema lags
+                # on session/review-related columns.
+                avg_rating = None
             return handler(
                 {
                     "id": tutor.id,
@@ -487,6 +492,7 @@ class MatchResultPublic(BaseModel):
     tutor_first_name: str
     tutor_last_name: str
     tutor_major: Optional[str] = None
+    tutor_hourly_rate_cents: Optional[int] = None
     similarity_score: float
     embedding_similarity: Optional[float] = None
     class_strength: Optional[float] = None

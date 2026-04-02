@@ -44,8 +44,8 @@ def _serialize_reranked_rows(db: Session, reranked: list[dict]) -> list[MatchRes
                 tutor_profile_id=tutor_profile.id if tutor_profile else None,
                 tutor_first_name=tutor_user.first_name,
                 tutor_last_name=tutor_user.last_name,
-                
                 tutor_major=tutor_profile.major if tutor_profile else None,
+                tutor_hourly_rate_cents=tutor_profile.hourly_rate_cents if tutor_profile else None,
                 similarity_score=float(row["final_score"]),
                 embedding_similarity=row.get("embedding_similarity"),
                 class_strength=row.get("class_strength"),
@@ -85,6 +85,7 @@ def _build_saved_match_payload(db: Session, current_user_id: int) -> list[MatchR
                 tutor_first_name=tutor_user.first_name,
                 tutor_last_name=tutor_user.last_name,
                 tutor_major=tutor_profile.major if tutor_profile else None,
+                tutor_hourly_rate_cents=tutor_profile.hourly_rate_cents if tutor_profile else None,
                 similarity_score=match.similarity_score,
                 embedding_similarity=match.embedding_similarity,
                 class_strength=match.class_strength,
