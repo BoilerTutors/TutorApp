@@ -1,37 +1,6 @@
 # Database Schema (from `app/models.py`)
 
-This document is a clean reference of the current SQLAlchemy models and constraints.
 
-## ER Diagram
-
-```mermaid
-erDiagram
-    users ||--o| tutors : "user_id"
-    users ||--o| students : "user_id"
-    users ||--o{ user_availabilities : "user_id"
-    users ||--o{ tutoring_sessions : "tutor_id"
-    users ||--o{ tutoring_sessions : "student_id"
-    tutoring_sessions ||--o| reviews : "session_id"
-    classes ||--o{ reviews : "class_id"
-
-    students ||--o{ student_classes : "student_id"
-    classes ||--o{ student_classes : "class_id"
-    tutors ||--o{ tutor_classes : "tutor_id"
-    classes ||--o{ tutor_classes : "class_id"
-
-    conversations ||--o{ messages : "conversation_id"
-    users ||--o{ messages : "sender_id"
-    messages ||--o| message_attachments : "message_id"
-    users ||--o{ notifications : "user_id"
-    users ||--o{ user_device_tokens : "user_id"
-    users ||--o| user_notification_settings : "user_id"
-    users ||--o{ user_embeddings : "user_id"
-
-    match_runs ||--o{ matches : "run_id"
-    users ||--o{ match_runs : "student_id"
-    users ||--o{ matches : "student_id"
-    users ||--o{ matches : "tutor_id"
-```
 
 ## Table Reference
 
