@@ -24,6 +24,7 @@ type MatchItem = {
   tutor_first_name: string;
   tutor_last_name: string;
   tutor_major: string | null;
+  tutor_hourly_rate_cents?: number | null;
   similarity_score: number;
 };
 type TutorClassLite = {
@@ -322,6 +323,12 @@ export default function MatchesScreen() {
             {/* TESTING ONLY: easy to remove once no longer needed */}
             <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
             <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
+            <Text style={styles.meta}>
+              Rate:{" "}
+              {item.tutor_hourly_rate_cents != null
+                ? `$${(item.tutor_hourly_rate_cents / 100).toFixed(2)}/hr`
+                : "—"}
+            </Text>
             <Text style={styles.meta}>
               Classes:{" "}
               {(tutorClassesByTutorUserId[item.tutor_id] ?? [])
