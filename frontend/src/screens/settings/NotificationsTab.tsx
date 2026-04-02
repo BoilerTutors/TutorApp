@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { api } from "../../api/client";
 import ViewProfileModal from "../../components/ViewProfileModal";
@@ -9,8 +9,10 @@ export default function NotificationsTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [isTutor, setIsTutor] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
+  const [actingSessionId, setActingSessionId] = useState<number | null>(null);
 
   const loadRows = useCallback(async () => {
     const data = await api.get<NotificationRow[]>("/notifications/me?limit=100");
@@ -24,11 +26,12 @@ export default function NotificationsTab() {
         setLoading(true);
         const [data, me] = await Promise.all([
           api.get<NotificationRow[]>("/notifications/me?limit=100"),
-          api.get<{ id: number }>("/users/me"),
+          api.get<{ id: number; is_tutor: boolean }>("/users/me"),
         ]);
         if (!mounted) return;
         setRows(data ?? []);
         setCurrentUserId(me.id);
+        setIsTutor(Boolean(me.is_tutor));
       } finally {
         if (mounted) {
           setLoading(false);
@@ -51,10 +54,11 @@ export default function NotificationsTab() {
       setRefreshing(true);
       const [data, me] = await Promise.all([
         api.get<NotificationRow[]>("/notifications/me?limit=100"),
-        api.get<{ id: number }>("/users/me"),
+        api.get<{ id: number; is_tutor: boolean }>("/users/me"),
       ]);
       setRows(data ?? []);
       setCurrentUserId(me.id);
+      setIsTutor(Boolean(me.is_tutor));
     } finally {
       setRefreshing(false);
     }
@@ -79,6 +83,46 @@ export default function NotificationsTab() {
       return null;
     },
     [currentUserId]
+  );
+
+  const getSessionIdFromNotification = useCallback((row: NotificationRow): number | null => {
+    const payload = row.payload_json ?? {};
+    const raw = payload.session_id;
+    return typeof raw === "number" ? raw : null;
+  }, []);
+
+  const isSessionRequestNotification = useCallback(
+    (row: NotificationRow): boolean => {
+      const payload = row.payload_json ?? {};
+      return (
+        isTutor &&
+        row.event_type === "session_request" &&
+        !row.is_read &&
+        payload.status === "pending" &&
+        typeof payload.session_id === "number"
+      );
+    },
+    [isTutor]
+  );
+
+  const onSessionDecision = useCallback(
+    async (row: NotificationRow, status: "accepted" | "declined") => {
+      const sessionId = getSessionIdFromNotification(row);
+      if (sessionId == null) {
+        return;
+      }
+      try {
+        setActingSessionId(sessionId);
+        await api.patch(`/sessions/${sessionId}`, { status });
+        await api.patch(`/notifications/${row.id}/read`);
+        await onRefresh();
+      } catch (e) {
+        Alert.alert("Error", e instanceof Error ? e.message : "Failed to update session.");
+      } finally {
+        setActingSessionId(null);
+      }
+    },
+    [getSessionIdFromNotification, onRefresh]
   );
 
   if (loading) {
@@ -106,6 +150,32 @@ export default function NotificationsTab() {
               <Text style={styles.itemBody}>{item.body}</Text>
               <Text style={styles.itemMeta}>{new Date(item.created_at).toLocaleString()}</Text>
               <View style={styles.actionsRow}>
+                {isSessionRequestNotification(item) ? (
+                  <>
+                    <Pressable
+                      style={[styles.decisionBtn, styles.acceptBtn]}
+                      onPress={() => void onSessionDecision(item, "accepted")}
+                      disabled={actingSessionId === getSessionIdFromNotification(item)}
+                    >
+                      <Text style={styles.decisionBtnText}>
+                        {actingSessionId === getSessionIdFromNotification(item)
+                          ? "Working..."
+                          : "Accept"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.decisionBtn, styles.declineBtn]}
+                      onPress={() => void onSessionDecision(item, "declined")}
+                      disabled={actingSessionId === getSessionIdFromNotification(item)}
+                    >
+                      <Text style={styles.decisionBtnText}>
+                        {actingSessionId === getSessionIdFromNotification(item)
+                          ? "Working..."
+                          : "Decline"}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
                 {parseMatchNotificationProfileTarget(item) != null ? (
                   <Pressable
                     style={styles.viewProfileBtn}
@@ -142,6 +212,7 @@ export default function NotificationsTab() {
 
 type NotificationRow = {
   id: number;
+  event_type: string;
   title: string;
   body: string;
   payload_json?: Record<string, unknown> | null;
@@ -248,5 +319,20 @@ const styles = StyleSheet.create({
   markReadBtnText: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  decisionBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  acceptBtn: {
+    backgroundColor: "#16A34A",
+  },
+  declineBtn: {
+    backgroundColor: "#DC2626",
+  },
+  decisionBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
 });

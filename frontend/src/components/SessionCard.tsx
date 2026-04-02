@@ -10,7 +10,7 @@ export type Session = {
   startTime: string;
   endTime: string;
   duration: string;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
 };
 
 const STATUS_CONFIG: Record<
@@ -18,7 +18,8 @@ const STATUS_CONFIG: Record<
   { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }
 > = {
   pending: { icon: "hourglass", color: "#D97706", label: "Pending" },
-  confirmed: { icon: "checkmark-done", color: "#2563EB", label: "Confirmed" },
+  accepted: { icon: "checkmark-done", color: "#2563EB", label: "Accepted" },
+  declined: { icon: "close-circle", color: "#B91C1C", label: "Declined" },
   completed: { icon: "checkmark-circle", color: "#16A34A", label: "Completed" },
   cancelled: { icon: "close-circle", color: "#DC2626", label: "Cancelled" },
 };

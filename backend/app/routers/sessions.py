@@ -16,6 +16,7 @@ from app.crud.sessions import (
     create_tutoring_session,
     get_recent_sessions_for_admin as get_recent_sessions_for_admin_crud,
     generate_session_verification_code,
+    get_session_for_student,
     get_session_for_tutor,
     get_student_sessions_future as get_student_sessions_future_crud,
     get_tutor_sessions_future as get_tutor_sessions_future_crud,
@@ -27,6 +28,7 @@ from app.crud.sessions import (
 from app.database import get_db
 from app.schemas import AdminTutoringSessionPublic, TutoringSessionPublic
 from app.models import TutoringSession, User, Admin
+from app.services.notification_events import build_and_store_notification
 from app.schemas import (
     Message,
     SessionVerificationCodePublic,
@@ -78,6 +80,20 @@ def create_session(
         cost_cents=data.cost_cents,
         notes=data.notes,
     )
+    build_and_store_notification(
+        db,
+        user_id=tutor.id,
+        event_type="session_request",
+        title="New session request",
+        body=f"{current_user.first_name} requested a tutoring session for {data.subject}.",
+        payload_json={
+            "session_id": row.id,
+            "student_id": current_user.id,
+            "tutor_id": tutor.id,
+            "subject": data.subject,
+            "status": row.status,
+        },
+    )
     return TutoringSessionPublic.model_validate(row)
 
 
@@ -110,8 +126,9 @@ def get_tutor_sessions_future(
         )
 
     sessions = [
-        s for s in get_tutor_sessions_future_crud(db, current_user.id)
-        if s.status != "cancelled"
+        s
+        for s in get_tutor_sessions_future_crud(db, current_user.id)
+        if s.status in ("pending", "accepted")
     ]
     return [TutoringSessionPublic.model_validate(s) for s in sessions]
 
@@ -129,8 +146,9 @@ def get_student_sessions_future(
             detail="Only students can access student sessions.",
         )
     sessions = [
-        s for s in get_student_sessions_future_crud(db, current_user.id)
-        if s.status != "cancelled"
+        s
+        for s in get_student_sessions_future_crud(db, current_user.id)
+        if s.status in ("pending", "accepted")
     ]
     return [TutoringSessionPublic.model_validate(s) for s in sessions]
 
@@ -219,29 +237,81 @@ def update_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TutoringSessionPublic:
-    """Update an existing tutoring session (currently used for tutor cancellation)."""
-    if not current_user.is_tutor:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only tutors can update sessions.",
-        )
-    session = get_session_for_tutor(db, session_id=session_id, tutor_user_id=current_user.id)
+    """Update an existing tutoring session."""
+    is_tutor_owner = False
+    if current_user.is_tutor:
+        session = get_session_for_tutor(db, session_id=session_id, tutor_user_id=current_user.id)
+        is_tutor_owner = session is not None
+    else:
+        session = None
+
+    is_student_owner = False
+    if session is None and current_user.is_student:
+        session = get_session_for_student(db, session_id=session_id, student_user_id=current_user.id)
+        is_student_owner = session is not None
+
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found for this tutor.",
+            detail="Session not found for this user.",
         )
     if data.status is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No session update fields provided.",
         )
-    if data.status != "cancelled":
+    if is_student_owner:
+        if data.status != "cancelled":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Students can only cancel sessions.",
+            )
+        if session.status in {"declined", "cancelled"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Session has already been declined/cancelled.",
+            )
+        row = set_session_status(db, session=session, status="cancelled")
+        return TutoringSessionPublic.model_validate(row)
+
+    if not is_tutor_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the session's tutor or student can update this session.",
+        )
+
+    if data.status not in {"accepted", "declined", "cancelled"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only cancellation is supported from this endpoint.",
+            detail="Only accepted, declined, or cancelled are supported.",
         )
-    row = set_session_status(db, session=session, status="cancelled")
+    if data.status in {"accepted", "declined"} and session.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only pending sessions can be accepted or declined.",
+        )
+    if data.status == "cancelled" and session.status in {"declined", "cancelled"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session has already been declined/cancelled.",
+        )
+
+    row = set_session_status(db, session=session, status=data.status)
+    if data.status in {"accepted", "declined"}:
+        build_and_store_notification(
+            db,
+            user_id=session.student_id,
+            event_type="session_status",
+            title="Session request updated",
+            body=f"Your tutor has {data.status} your session for {session.subject}.",
+            payload_json={
+                "session_id": session.id,
+                "student_id": session.student_id,
+                "tutor_id": session.tutor_id,
+                "subject": session.subject,
+                "status": data.status,
+            },
+        )
     return TutoringSessionPublic.model_validate(row)
 
 @router.get("/student/past", response_model=list[TutoringSessionPublic])
