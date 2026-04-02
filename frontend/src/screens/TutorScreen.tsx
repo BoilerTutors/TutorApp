@@ -1,4 +1,6 @@
 import {
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -80,6 +82,17 @@ export default function TutorScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([]);
   const [pastSessions, setPastSessions] = useState<Session[]>([]);
+  const [cancellingSessionId, setCancellingSessionId] = useState<number | null>(null);
+
+  const showErrorMessage = useCallback((title: string, message: string) => {
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(`${title}: ${message}`);
+      }
+      return;
+    }
+    Alert.alert(title, message);
+  }, []);
 
   const filterSessions = useCallback(
     (sessions: Session[]) => {
@@ -105,63 +118,109 @@ export default function TutorScreen() {
     [filterSessions, pastSessions]
   );
 
-  useEffect(() => {
-    let mounted = true;
-    const loadDashboardData = async () => {
-      try {
-        const [me, futureRaw, pastRaw] = await Promise.all([
-          api.get<{ first_name: string }>("/users/me"),
-          api.get<TutoringSession[]>("/sessions/tutor/future"),
-          api.get<TutoringSession[]>("/sessions/tutor/past"),
-        ]);
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const [me, futureRaw, pastRaw] = await Promise.all([
+        api.get<{ first_name: string }>("/users/me"),
+        api.get<TutoringSession[]>("/sessions/tutor/future"),
+        api.get<TutoringSession[]>("/sessions/tutor/past"),
+      ]);
 
-        const uniqueStudentIds = Array.from(
-          new Set([...futureRaw, ...pastRaw].map((s) => s.student_id))
-        );
-        const studentLookupPairs = await Promise.all(
-          uniqueStudentIds.map(async (id) => {
-            try {
-              const user = await api.get<{ first_name: string; last_name: string }>(
-                `/users/${id}`
-              );
-              return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
-            } catch {
-              return [id, `Student #${id}`] as const;
-            }
-          })
-        );
-        const studentNameById = new Map<number, string>(studentLookupPairs);
-
-        const mapSession = (s: TutoringSession): Session => {
-          const parts = formatSessionDateParts(s.scheduled_start, s.scheduled_end);
-          return {
-            id: s.id,
-            studentName: studentNameById.get(s.student_id) ?? `Student #${s.student_id}`,
-            subject: s.subject,
-            date: parts.date,
-            startTime: parts.startTime,
-            endTime: parts.endTime,
-            duration: formatDuration(s.scheduled_start, s.scheduled_end),
-            status: mapBackendStatusToCardStatus(s.status),
-          };
-        };
-
-        if (mounted) {
-          if (me.first_name?.trim()) {
-            setFirstName(me.first_name.trim());
+      const uniqueStudentIds = Array.from(
+        new Set([...futureRaw, ...pastRaw].map((s) => s.student_id))
+      );
+      const studentLookupPairs = await Promise.all(
+        uniqueStudentIds.map(async (id) => {
+          try {
+            const user = await api.get<{ first_name: string; last_name: string }>(
+              `/users/${id}`
+            );
+            return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
+          } catch {
+            return [id, `Student #${id}`] as const;
           }
-          setUpcomingSessions(futureRaw.map(mapSession));
-          setPastSessions(pastRaw.map(mapSession));
-        }
+        })
+      );
+      const studentNameById = new Map<number, string>(studentLookupPairs);
+
+      const mapSession = (s: TutoringSession): Session => {
+        const parts = formatSessionDateParts(s.scheduled_start, s.scheduled_end);
+        return {
+          id: s.id,
+          studentName: studentNameById.get(s.student_id) ?? `Student #${s.student_id}`,
+          subject: s.subject,
+          date: parts.date,
+          startTime: parts.startTime,
+          endTime: parts.endTime,
+          duration: formatDuration(s.scheduled_start, s.scheduled_end),
+          status: mapBackendStatusToCardStatus(s.status),
+        };
+      };
+
+      if (me.first_name?.trim()) {
+        setFirstName(me.first_name.trim());
+      }
+      setUpcomingSessions(futureRaw.map(mapSession));
+      setPastSessions(pastRaw.map(mapSession));
+    } catch {
+      // Keep empty arrays if API calls fail.
+    }
+  }, []);
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        await loadDashboardData();
       } catch {
-        // Keep empty arrays if API calls fail.
+        // no-op
       }
     };
-    void loadDashboardData();
-    return () => {
-      mounted = false;
+    void run();
+  }, [loadDashboardData]);
+
+  const onCancelSession = (sessionId: number) => {
+    if (cancellingSessionId != null) {
+      return;
+    }
+    const performCancel = async () => {
+      try {
+        setCancellingSessionId(sessionId);
+        await api.patch<TutoringSession>(`/sessions/${sessionId}`, {
+          status: "cancelled",
+        });
+        await loadDashboardData();
+      } catch (e) {
+        showErrorMessage(
+          "Error",
+          e instanceof Error ? e.message : "Failed to cancel session."
+        );
+      } finally {
+        setCancellingSessionId(null);
+      }
     };
-  }, []);
+
+    if (Platform.OS === "web") {
+      const confirmed =
+        typeof window !== "undefined" && typeof window.confirm === "function"
+          ? window.confirm("Are you sure you want to cancel this session?")
+          : false;
+      if (confirmed) {
+        void performCancel();
+      }
+      return;
+    }
+
+    Alert.alert("Cancel session", "Are you sure you want to cancel this session?", [
+      { text: "No", style: "cancel" },
+      {
+        text: "Yes",
+        style: "destructive",
+        onPress: () => {
+          void performCancel();
+        },
+      },
+    ]);
+  };
 
   const QUICK_ACTIONS: QuickAction[] = [
     {
@@ -254,7 +313,13 @@ export default function TutorScreen() {
       <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
       {filteredUpcoming.length > 0 ? (
         filteredUpcoming.map((session) => (
-          <SessionCard key={session.id} session={session} />
+          <SessionCard
+            key={session.id}
+            session={session}
+            showCancelAction
+            cancelling={cancellingSessionId === session.id}
+            onCancelPress={onCancelSession}
+          />
         ))
       ) : (
         <Text style={styles.emptyText}>
