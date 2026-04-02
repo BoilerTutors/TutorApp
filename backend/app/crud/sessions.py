@@ -119,7 +119,7 @@ def verify_session_verification_code(db: Session, session_id: int, pin: str) -> 
         db.commit()
     return is_valid
 
-  
+
 def get_student_sessions_past(db: Session, student_user_id: int) -> list[TutoringSession]:
     """Return past sessions for a student (most recent first)."""
     now = datetime.now(timezone.utc)
@@ -130,3 +130,42 @@ def get_student_sessions_past(db: Session, student_user_id: int) -> list[Tutorin
         .order_by(TutoringSession.scheduled_start.desc())
         .all()
     )
+
+
+def get_student_sessions_future(db: Session, student_user_id: int) -> list[TutoringSession]:
+    """Return upcoming sessions for a student (soonest first)."""
+    now = datetime.now(timezone.utc)
+    return (
+        db.query(TutoringSession)
+        .filter(TutoringSession.student_id == student_user_id)
+        .filter(TutoringSession.scheduled_start >= now)
+        .order_by(TutoringSession.scheduled_start.asc())
+        .all()
+    )
+
+
+def create_tutoring_session(
+    db: Session,
+    *,
+    tutor_id: int,
+    student_id: int,
+    subject: str,
+    scheduled_start: datetime,
+    scheduled_end: datetime,
+    cost_cents: int,
+    notes: str | None = None,
+) -> TutoringSession:
+    row = TutoringSession(
+        tutor_id=tutor_id,
+        student_id=student_id,
+        subject=subject,
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_end,
+        cost_cents=cost_cents,
+        notes=notes,
+        status="pending",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

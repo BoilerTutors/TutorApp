@@ -21,6 +21,8 @@ type RootStackParamList = {
   Settings: undefined;
   "Tutor Reviews": undefined;
   "Tutor Past Sessions": undefined;
+  "Tutor Schedule": undefined;
+  Matches: undefined;
 };
 
 type QuickAction = {
@@ -167,7 +169,11 @@ export default function TutorScreen() {
       icon: "person",
       onPress: () => navigation.navigate("Profile", { role: "TUTOR" }),
     },
-    { label: "Sessions Calendar", icon: "calendar" },
+    {
+      label: "Sessions Calendar",
+      icon: "calendar",
+      onPress: () => navigation.navigate("Tutor Schedule"),
+    },
     { label: "Payouts", icon: "cash" },
   ];
 
