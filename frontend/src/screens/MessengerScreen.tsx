@@ -60,6 +60,29 @@ type AvailabilitySlot = {
   start_time: string;
   end_time: string;
 };
+type TutoringSessionCreate = {
+  tutor_id: number;
+  subject: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  cost_cents: number;
+  notes?: string;
+};
+type CurrentSessionExists = {
+  has_current_session: boolean;
+  session_id?: number | null;
+  other_user_id?: number | null;
+  is_verified?: boolean | null;
+};
+type SessionVerificationCodeResponse = {
+  verification_code: string;
+};
+type SessionVerificationVerifyResponse =
+  | boolean
+  | {
+      message?: string;
+      verified?: boolean;
+    };
 type SidebarItem =
   | {
       kind: "match";
@@ -113,9 +136,29 @@ export default function MessengerScreen() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityStudentName, setAvailabilityStudentName] = useState<string>("");
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleSavingSlotId, setScheduleSavingSlotId] = useState<number | null>(null);
+  const [scheduleTutorUserId, setScheduleTutorUserId] = useState<number | null>(null);
+  const [scheduleTutorName, setScheduleTutorName] = useState<string>("");
+  const [scheduleSlots, setScheduleSlots] = useState<AvailabilitySlot[]>([]);
+  const [scheduleSubject, setScheduleSubject] = useState("Tutoring Session");
+  const [unmatchingStudentId, setUnmatchingStudentId] = useState<number | null>(null);
+  const [unmatchingTutorId, setUnmatchingTutorId] = useState<number | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
+  const [currentSessionExists, setCurrentSessionExists] = useState<CurrentSessionExists>({
+    has_current_session: false,
+  });
+  const [generatingVerificationCode, setGeneratingVerificationCode] = useState(false);
+  const [generatedVerificationCode, setGeneratedVerificationCode] = useState<string | null>(null);
+  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
+  const [verifyPin, setVerifyPin] = useState("");
+  const [verifyingSessionCode, setVerifyingSessionCode] = useState(false);
+  const [verifyCodeError, setVerifyCodeError] = useState<string | null>(null);
+  const [verifiedSessionIds, setVerifiedSessionIds] = useState<Record<number, boolean>>({});
   const wsRef = useRef<WebSocket | null>(null);
+  const sessionVerificationWsRef = useRef<WebSocket | null>(null);
   const lastOpenedTutorRef = useRef<number | null>(null);
   const sidebarItems = useMemo<SidebarItem[]>(
     () =>
@@ -140,9 +183,20 @@ export default function MessengerScreen() {
   );
 
   const loadSidebarItems = useCallback(async () => {
-    const me = await api.get<UserMe>("/users/me");
+    const [me, currentSession] = await Promise.all([
+      api.get<UserMe>("/users/me"),
+      api.get<CurrentSessionExists>("/sessions/current/exists"),
+    ]);
     setCurrentUserId(me.id);
     setIsStudentAccount(me.is_student);
+    setCurrentSessionExists(currentSession);
+    if (
+      currentSession.has_current_session &&
+      currentSession.session_id != null &&
+      currentSession.is_verified === true
+    ) {
+      setVerifiedSessionIds((prev) => ({ ...prev, [currentSession.session_id as number]: true }));
+    }
 
     if (!me.is_student) {
       const convs = await api.get<
@@ -180,6 +234,93 @@ export default function MessengerScreen() {
       setConversations([]);
     }
   }, []);
+
+  const shouldShowVerifySessionButton = useCallback(
+    (otherUserId: number) =>
+      currentSessionExists.has_current_session &&
+      currentSessionExists.session_id != null &&
+      currentSessionExists.other_user_id === otherUserId,
+    [currentSessionExists]
+  );
+
+  const onVerifySessionPress = useCallback(async () => {
+    if (!isStudentAccount) {
+      setVerifyCodeError(null);
+      setVerifyPin("");
+      setVerifyModalVisible(true);
+      return;
+    }
+
+    const sessionId = currentSessionExists.session_id;
+    if (!sessionId || generatingVerificationCode) {
+      return;
+    }
+
+    try {
+      setGeneratingVerificationCode(true);
+      const response = await api.post<SessionVerificationCodeResponse>(
+        `/sessions/${sessionId}/verification-code`
+      );
+      setGeneratedVerificationCode(response.verification_code);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to generate verification code.";
+      Alert.alert("Error", message);
+    } finally {
+      setGeneratingVerificationCode(false);
+    }
+  }, [currentSessionExists.session_id, generatingVerificationCode, isStudentAccount]);
+
+  const onSubmitTutorVerificationCode = useCallback(async () => {
+    const sessionId = currentSessionExists.session_id;
+    const pin = verifyPin.trim();
+    if (!sessionId) {
+      setVerifyCodeError("No active session found.");
+      return;
+    }
+    if (!pin) {
+      setVerifyCodeError("Please enter the verification code.");
+      return;
+    }
+
+    try {
+      setVerifyingSessionCode(true);
+      setVerifyCodeError(null);
+      const response = await api.post<SessionVerificationVerifyResponse>(
+        `/sessions/${sessionId}/verify-code`,
+        { pin }
+      );
+      const verified =
+        response === true ||
+        (typeof response === "object" &&
+          response != null &&
+          ("verified" in response
+            ? response.verified === true
+            : typeof response.message === "string" &&
+              response.message.toLowerCase().includes("accepted")));
+      if (!verified) {
+        setVerifyCodeError("Verification was not accepted. Please try again.");
+        return;
+      }
+      setVerifiedSessionIds((prev) => ({ ...prev, [sessionId]: true }));
+      setVerifyModalVisible(false);
+      setVerifyPin("");
+      Alert.alert("Session Verified", "Verification code accepted.");
+      await loadSidebarItems();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid verification code.";
+      setVerifyCodeError(message);
+    } finally {
+      setVerifyingSessionCode(false);
+    }
+  }, [currentSessionExists.session_id, loadSidebarItems, verifyPin]);
+
+  useEffect(() => {
+    // Prevent showing stale code when active session changes or ends.
+    if (!currentSessionExists.has_current_session) {
+      setGeneratedVerificationCode(null);
+    }
+  }, [currentSessionExists.has_current_session, currentSessionExists.session_id]);
 
   const loadMessages = useCallback(async (conversationId: number) => {
     const rows = await api.get<Message[]>(`/messages/conversations/${conversationId}/messages`);
@@ -342,6 +483,25 @@ export default function MessengerScreen() {
     return `${hour12}:${minuteStr} ${suffix}`;
   };
 
+  const getNextDateForDay = (dayOfWeek: number) => {
+    const now = new Date();
+    const jsTarget = (dayOfWeek + 1) % 7; // app 0=Mon..6=Sun => js 1..0
+    const candidate = new Date(now);
+    const delta = (jsTarget - now.getDay() + 7) % 7;
+    candidate.setDate(now.getDate() + delta);
+    candidate.setHours(0, 0, 0, 0);
+    return candidate;
+  };
+
+  const toIsoForNextDayTime = (dayOfWeek: number, timeValue: string) => {
+    const [rawHour = "0", rawMinute = "0"] = timeValue.split(":");
+    const hour = Number.parseInt(rawHour, 10);
+    const minute = Number.parseInt(rawMinute, 10);
+    const d = getNextDateForDay(dayOfWeek);
+    d.setHours(Number.isNaN(hour) ? 0 : hour, Number.isNaN(minute) ? 0 : minute, 0, 0);
+    return d.toISOString();
+  };
+
   const onViewStudentAvailability = async (studentUserId: number, studentName: string) => {
     setAvailabilityStudentName(studentName);
     setAvailabilitySlots([]);
@@ -360,6 +520,156 @@ export default function MessengerScreen() {
     setProfileModalVisible(true);
   };
 
+  const onOpenScheduleSession = async (tutorUserId: number, tutorName: string) => {
+    setScheduleTutorUserId(tutorUserId);
+    setScheduleTutorName(tutorName);
+    setScheduleSlots([]);
+    setScheduleSubject("Tutoring Session");
+    setScheduleLoading(true);
+    setScheduleModalVisible(true);
+    try {
+      const slots = await api.get<AvailabilitySlot[]>(`/availability/users/${tutorUserId}`);
+      setScheduleSlots(slots);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load tutor availability.";
+      Alert.alert("Error", message);
+      setScheduleModalVisible(false);
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
+  const onBookSessionSlot = async (slot: AvailabilitySlot) => {
+    if (!scheduleTutorUserId || scheduleSavingSlotId != null) {
+      return;
+    }
+    const subject = scheduleSubject.trim() || "Tutoring Session";
+    const body: TutoringSessionCreate = {
+      tutor_id: scheduleTutorUserId,
+      subject,
+      scheduled_start: toIsoForNextDayTime(slot.day_of_week, slot.start_time),
+      scheduled_end: toIsoForNextDayTime(slot.day_of_week, slot.end_time),
+      cost_cents: 0,
+    };
+
+    try {
+      setScheduleSavingSlotId(slot.id);
+      await api.post("/sessions/", body);
+      Alert.alert("Booked", "Session has been scheduled.");
+      setScheduleModalVisible(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to schedule session.";
+      Alert.alert("Booking failed", message);
+    } finally {
+      setScheduleSavingSlotId(null);
+    }
+  };
+
+  const performUnmatchStudent = useCallback(
+    async (studentUserId: number) => {
+      try {
+        setUnmatchingStudentId(studentUserId);
+        await api.post<void>("/matches/unmatch", { student_id: studentUserId });
+        if (selectedTutorUserId === studentUserId) {
+          setSelectedConversationId(null);
+          setSelectedTutorUserId(null);
+          setSelectedTutorName(null);
+          setMessages([]);
+        }
+        await loadSidebarItems();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not unmatch this student.";
+        Alert.alert("Unmatch failed", message);
+      } finally {
+        setUnmatchingStudentId(null);
+      }
+    },
+    [loadSidebarItems, selectedTutorUserId]
+  );
+
+  const onUnmatchStudent = (studentUserId: number, studentName: string) => {
+    if (unmatchingStudentId != null) {
+      return;
+    }
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Are you sure you want to unmatch?\n\n${studentName} will be hidden from both Messenger views.`
+      );
+      if (!confirmed) {
+        return;
+      }
+      void performUnmatchStudent(studentUserId);
+      return;
+    }
+    Alert.alert(
+      "Are you sure you want to unmatch?",
+      `${studentName} will be hidden from both Messenger views.`,
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: () => {
+            void performUnmatchStudent(studentUserId);
+          },
+        },
+      ]
+    );
+  };
+
+  const performUnmatchTutor = useCallback(
+    async (tutorUserId: number) => {
+      try {
+        setUnmatchingTutorId(tutorUserId);
+        await api.post<void>("/matches/unmatch", { tutor_id: tutorUserId });
+        if (selectedTutorUserId === tutorUserId) {
+          setSelectedConversationId(null);
+          setSelectedTutorUserId(null);
+          setSelectedTutorName(null);
+          setMessages([]);
+        }
+        await loadSidebarItems();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not unmatch this tutor.";
+        Alert.alert("Unmatch failed", message);
+      } finally {
+        setUnmatchingTutorId(null);
+      }
+    },
+    [loadSidebarItems, selectedTutorUserId]
+  );
+
+  const onUnmatchTutor = (tutorUserId: number, tutorName: string) => {
+    if (unmatchingTutorId != null) {
+      return;
+    }
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Are you sure you want to unmatch?\n\n${tutorName} will be hidden from both Messenger views.`
+      );
+      if (!confirmed) {
+        return;
+      }
+      void performUnmatchTutor(tutorUserId);
+      return;
+    }
+    Alert.alert(
+      "Are you sure you want to unmatch?",
+      `${tutorName} will be hidden from both Messenger views.`,
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: () => {
+            void performUnmatchTutor(tutorUserId);
+          },
+        },
+      ]
+    );
+  };
+
   const groupedAvailability = useMemo(() => {
     const groups = new Map<number, string[]>();
     for (const slot of availabilitySlots) {
@@ -373,6 +683,21 @@ export default function MessengerScreen() {
       timeRanges,
     }));
   }, [availabilitySlots]);
+
+  const groupedScheduleAvailability = useMemo(() => {
+    const groups = new Map<number, AvailabilitySlot[]>();
+    for (const slot of scheduleSlots) {
+      const existing = groups.get(slot.day_of_week) ?? [];
+      existing.push(slot);
+      groups.set(slot.day_of_week, existing);
+    }
+    return Array.from(groups.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([dayOfWeek, slots]) => ({
+        dayOfWeek,
+        slots: slots.sort((a, b) => a.start_time.localeCompare(b.start_time)),
+      }));
+  }, [scheduleSlots]);
 
   useEffect(() => {
     const tutorId = route.params?.openTutorUserId;
@@ -441,6 +766,50 @@ export default function MessengerScreen() {
     };
   }, [selectedConversationId]);
 
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      return;
+    }
+
+    const wsBase = API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "");
+    const wsUrl = `${wsBase}/sessions/ws/verification?token=${encodeURIComponent(token)}`;
+    const ws = new WebSocket(wsUrl);
+    sessionVerificationWsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data as string) as {
+          event_type?: string;
+          session_id?: number;
+          is_verified?: boolean;
+        };
+        if (
+          payload.event_type === "session_verification_updated" &&
+          payload.is_verified === true &&
+          typeof payload.session_id === "number"
+        ) {
+          setVerifiedSessionIds((prev) => ({ ...prev, [payload.session_id!]: true }));
+        }
+      } catch {
+        // Ignore malformed websocket payloads.
+      }
+    };
+
+    ws.onclose = () => {
+      if (sessionVerificationWsRef.current === ws) {
+        sessionVerificationWsRef.current = null;
+      }
+    };
+
+    return () => {
+      ws.close();
+      if (sessionVerificationWsRef.current === ws) {
+        sessionVerificationWsRef.current = null;
+      }
+    };
+  }, [currentUserId]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -501,6 +870,72 @@ export default function MessengerScreen() {
                     >
                       <Text style={styles.infoBtnText}>View Profile</Text>
                     </Pressable>
+                    <Pressable
+                      style={styles.scheduleBtn}
+                      onPress={() => {
+                        void onOpenScheduleSession(
+                          item.tutor_id,
+                          `${item.tutor_first_name} ${item.tutor_last_name}`
+                        );
+                      }}
+                    >
+                      <Text style={styles.scheduleBtnText}>Schedule Session</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.unmatchBtn}
+                      onPress={() => {
+                        onUnmatchTutor(
+                          item.tutor_id,
+                          `${item.tutor_first_name} ${item.tutor_last_name}`
+                        );
+                      }}
+                      disabled={unmatchingTutorId === item.tutor_id}
+                    >
+                      <Text style={styles.unmatchBtnText}>
+                        {unmatchingTutorId === item.tutor_id ? "Unmatching..." : "Unmatch"}
+                      </Text>
+                    </Pressable>
+
+                    {shouldShowVerifySessionButton(item.tutor_id) ? (
+                      <View style={styles.verifySessionRow}>
+                        {(() => {
+                          const isVerificationComplete =
+                            currentSessionExists.session_id != null &&
+                            verifiedSessionIds[currentSessionExists.session_id] === true;
+                          return (
+                        <Pressable
+                          style={[
+                            styles.verifySessionBtn,
+                            isVerificationComplete && styles.verifySessionBtnComplete,
+                          ]}
+                          onPress={() => {
+                            void onVerifySessionPress();
+                          }}
+                          disabled={generatingVerificationCode || isVerificationComplete}
+                        >
+                          <Text
+                            style={[
+                              styles.verifySessionBtnText,
+                              isVerificationComplete && styles.verifySessionBtnTextComplete,
+                            ]}
+                          >
+                            {isVerificationComplete
+                              ? "Verification Complete"
+                              : generatingVerificationCode
+                                ? "Generating..."
+                                : "Verify Session"}
+                          </Text>
+                        </Pressable>
+                          );
+                        })()}
+                        {generatedVerificationCode ? (
+                          <View style={styles.verificationCodeBlock}>
+                            <Text style={styles.verificationCodeText}>{generatedVerificationCode}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
                   </View>
                 );
               }
@@ -536,6 +971,58 @@ export default function MessengerScreen() {
                     >
                       <Text style={styles.availabilityBtnText}>View Availability</Text>
                     </Pressable>
+                  ) : null}
+                  {!isStudentAccount ? (
+                    <Pressable
+                      style={styles.unmatchBtn}
+                      onPress={() => {
+                        onUnmatchStudent(item.other_user_id, personName);
+                      }}
+                      disabled={unmatchingStudentId === item.other_user_id}
+                    >
+                      <Text style={styles.unmatchBtnText}>
+                        {unmatchingStudentId === item.other_user_id ? "Unmatching..." : "Unmatch"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {shouldShowVerifySessionButton(item.other_user_id) ? (
+                    <View style={styles.verifySessionRow}>
+                      {(() => {
+                        const isVerificationComplete =
+                          currentSessionExists.session_id != null &&
+                          verifiedSessionIds[currentSessionExists.session_id] === true;
+                        return (
+                      <Pressable
+                        style={[
+                          styles.verifySessionBtn,
+                          isVerificationComplete && styles.verifySessionBtnComplete,
+                        ]}
+                        onPress={() => {
+                          void onVerifySessionPress();
+                        }}
+                        disabled={generatingVerificationCode || isVerificationComplete}
+                      >
+                        <Text
+                          style={[
+                            styles.verifySessionBtnText,
+                            isVerificationComplete && styles.verifySessionBtnTextComplete,
+                          ]}
+                        >
+                          {isVerificationComplete
+                            ? "Verification Complete"
+                            : generatingVerificationCode
+                              ? "Generating..."
+                              : "Verify Session"}
+                        </Text>
+                      </Pressable>
+                        );
+                      })()}
+                      {generatedVerificationCode ? (
+                        <View style={styles.verificationCodeBlock}>
+                          <Text style={styles.verificationCodeText}>{generatedVerificationCode}</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   ) : null}
                 </View>
               );
@@ -666,6 +1153,117 @@ export default function MessengerScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        visible={scheduleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setScheduleModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Schedule Session</Text>
+            <Text style={styles.modalEmpty}>
+              Tutor: {scheduleTutorName || "Selected tutor"}
+            </Text>
+            <TextInput
+              value={scheduleSubject}
+              onChangeText={setScheduleSubject}
+              placeholder="Session subject"
+              style={styles.composeInput}
+              autoCorrect={false}
+            />
+            {scheduleLoading ? (
+              <ActivityIndicator size="small" color="#2E57A2" />
+            ) : groupedScheduleAvailability.length === 0 ? (
+              <Text style={styles.modalEmpty}>No availability slots found.</Text>
+            ) : (
+              <ScrollView style={styles.modalList}>
+                {groupedScheduleAvailability.map((group) => (
+                  <View key={group.dayOfWeek} style={styles.modalRow}>
+                    <Text style={styles.modalRowDay}>{formatDay(group.dayOfWeek)}</Text>
+                    <View style={styles.modalRowTimes}>
+                      {group.slots.map((slot) => (
+                        <Pressable
+                          key={slot.id}
+                          style={styles.slotPickBtn}
+                          onPress={() => {
+                            void onBookSessionSlot(slot);
+                          }}
+                          disabled={scheduleSavingSlotId === slot.id}
+                        >
+                          <Text style={styles.slotPickBtnText}>
+                            {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                            {scheduleSavingSlotId === slot.id ? " (Booking...)" : ""}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <Pressable style={styles.modalCloseBtn} onPress={() => setScheduleModalVisible(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={verifyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setVerifyModalVisible(false);
+          setVerifyPin("");
+          setVerifyCodeError(null);
+        }}
+      >
+        <View style={styles.verifyModalOverlay}>
+          <View style={styles.verifyModalCard}>
+            <Text style={styles.verifyModalTitle}>Verify Session</Text>
+            <Text style={styles.verifyModalSubtitle}>Enter the 6-digit student verification code</Text>
+            <TextInput
+              style={styles.verifyCodeInput}
+              placeholder="000000"
+              placeholderTextColor="#B0B6C3"
+              keyboardType="number-pad"
+              maxLength={6}
+              value={verifyPin}
+              onChangeText={(value) => {
+                setVerifyPin(value);
+                if (verifyCodeError) {
+                  setVerifyCodeError(null);
+                }
+              }}
+              autoFocus
+            />
+            {verifyCodeError ? <Text style={styles.verifyCodeErrorText}>{verifyCodeError}</Text> : null}
+            <Pressable
+              style={styles.verifyCodeSubmitBtn}
+              onPress={() => {
+                void onSubmitTutorVerificationCode();
+              }}
+              disabled={verifyingSessionCode}
+            >
+              {verifyingSessionCode ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.verifyCodeSubmitBtnText}>VERIFY</Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setVerifyModalVisible(false);
+                setVerifyPin("");
+                setVerifyCodeError(null);
+              }}
+              style={styles.verifyModalCloseBtn}
+            >
+              <Text style={styles.verifyModalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -791,6 +1389,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  unmatchBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    backgroundColor: "#FEF2F2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  unmatchBtnText: {
+    color: "#B91C1C",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   infoBtn: {
     marginTop: 8,
     alignSelf: "flex-start",
@@ -805,6 +1418,61 @@ const styles = StyleSheet.create({
     color: "#2E57A2",
     fontSize: 12,
     fontWeight: "600",
+  },
+  scheduleBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#D4AF4A",
+    backgroundColor: "#FFF7D6",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  scheduleBtnText: {
+    color: "#8A6A00",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  verifySessionBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#7C3AED",
+    backgroundColor: "#F5F3FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  verifySessionBtnText: {
+    color: "#5B21B6",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  verifySessionBtnComplete: {
+    borderColor: "#15803D",
+    backgroundColor: "#DCFCE7",
+  },
+  verifySessionBtnTextComplete: {
+    color: "#166534",
+  },
+  verifySessionRow: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  verificationCodeBlock: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    backgroundColor: "#FAF5FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  verificationCodeText: {
+    color: "#4C1D95",
+    fontSize: 12,
+    fontWeight: "700",
   },
   helperText: {
     marginTop: 8,
@@ -973,6 +1641,20 @@ const styles = StyleSheet.create({
   modalRowTimes: {
     alignItems: "flex-end",
   },
+  slotPickBtn: {
+    borderWidth: 1,
+    borderColor: "#D5DCE8",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  slotPickBtnText: {
+    color: "#1B2D50",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   modalCloseBtn: {
     alignSelf: "flex-end",
     backgroundColor: "#2E57A2",
@@ -983,5 +1665,73 @@ const styles = StyleSheet.create({
   modalCloseText: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  verifyModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  verifyModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 380,
+    alignItems: "center",
+  },
+  verifyModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1F36",
+    marginBottom: 8,
+  },
+  verifyModalSubtitle: {
+    fontSize: 14,
+    color: "#8C93A4",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  verifyCodeInput: {
+    fontSize: 24,
+    letterSpacing: 8,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#E2E5ED",
+    borderRadius: 10,
+    padding: 12,
+    width: "100%",
+    marginBottom: 16,
+    color: "#1A1F36",
+    backgroundColor: "#FFFFFF",
+  },
+  verifyCodeErrorText: {
+    fontSize: 14,
+    color: "#B91C1C",
+    fontWeight: "500",
+    marginBottom: 12,
+    alignSelf: "flex-start",
+  },
+  verifyCodeSubmitBtn: {
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: "#2E57A2",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  verifyCodeSubmitBtnText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
+  verifyModalCloseBtn: {
+    marginTop: 12,
+  },
+  verifyModalCloseText: {
+    color: "#3F6FB4",
+    textDecorationLine: "underline",
   },
 });

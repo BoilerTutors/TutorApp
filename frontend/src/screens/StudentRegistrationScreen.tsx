@@ -263,6 +263,7 @@ export default function StudentRegistrationScreen() {
         classes: studentClasses.length > 0 ? studentClasses : undefined,
         preferred_locations: selectedLocations.length > 0 ? selectedLocations : undefined,
         help_needed: helpTypes.length > 0 ? helpTypes : undefined,
+        session_mode: sessionMode,
       },
     };
 

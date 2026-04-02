@@ -15,9 +15,8 @@ from app import models  # noqa: F401 — registers models with Base
 
 
 def main() -> None:
-    # drop_all + create_all ensures local schema stays aligned with models.py
-    # even when table/column definitions change during development.
     Base.metadata.drop_all(bind=engine)
+    print("Dropped existing tables.")
     Base.metadata.create_all(bind=engine)
     print("Tables rebuilt to match current schema.")
 

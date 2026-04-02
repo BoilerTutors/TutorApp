@@ -10,7 +10,7 @@ from typing import Optional
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.models import Conversation, Message, MessageAttachment, User
+from app.models import Conversation, Match, Message, MessageAttachment, User
 
 
 def _canonical_pair(user_id_a: int, user_id_b: int) -> tuple[int, int]:
@@ -20,8 +20,31 @@ def _canonical_pair(user_id_a: int, user_id_b: int) -> tuple[int, int]:
     return (min(user_id_a, user_id_b), max(user_id_a, user_id_b))
 
 
+def _is_unmatched_pair(db: Session, *, user_a_id: int, user_b_id: int) -> bool:
+    return (
+        db.query(Match.id)
+        .filter(
+            Match.student_id == user_a_id,
+            Match.tutor_id == user_b_id,
+            Match.unmatched.is_(True),
+        )
+        .first()
+        is not None
+        or db.query(Match.id)
+        .filter(
+            Match.student_id == user_b_id,
+            Match.tutor_id == user_a_id,
+            Match.unmatched.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
 def get_or_create_conversation(db: Session, user1_id: int, user2_id: int) -> Conversation:
     """Get existing conversation between two users or create one. user1_id/user2_id order is normalized."""
+    if _is_unmatched_pair(db, user_a_id=user1_id, user_b_id=user2_id):
+        raise ValueError("This tutor-student pair is unmatched.")
     u1, u2 = _canonical_pair(user1_id, user2_id)
     stmt = select(Conversation).where(
         Conversation.user1_id == u1,
@@ -44,6 +67,8 @@ def get_conversation_by_id(db: Session, conversation_id: int, user_id: int) -> O
         return None
     if user_id not in (conv.user1_id, conv.user2_id):
         return None
+    if _is_unmatched_pair(db, user_a_id=conv.user1_id, user_b_id=conv.user2_id):
+        return None
     return conv
 
 
@@ -57,6 +82,8 @@ def list_conversations_for_user(db: Session, user_id: int):
     conversations = list(db.execute(stmt).scalars().all())
     result = []
     for conv in conversations:
+        if _is_unmatched_pair(db, user_a_id=conv.user1_id, user_b_id=conv.user2_id):
+            continue
         other_id = conv.user2_id if conv.user1_id == user_id else conv.user1_id
         other_user = db.get(User, other_id)
         last_msg = (

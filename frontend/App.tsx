@@ -15,13 +15,19 @@ import NotificationsTab from "./src/screens/settings/NotificationsTab";
 import HelpScreen from "./src/screens/HelpScreen";
 import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
 import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
+import TutorPastSessionsScreen from "./src/screens/TutorPastSessionsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
 import { AuthProvider } from "./src/context/AuthContext";
-
+import AvailabilityScreen from "./src/screens/AvailabilityScreen";
+import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
+import ReportTutorScreen from "./src/screens/ReportTutorScreen";
+import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
+import TutorCalendarScreen from "./src/screens/TutorCalendarScreen";
+import ContactAdminScreen from "./src/screens/ContactAdminScreen";
 const Stack = createNativeStackNavigator();
 
 type RootStackParamList = {
@@ -32,6 +38,8 @@ type RootStackParamList = {
   "Student Registration": undefined;
   "Student Reviews": undefined;
   "Tutor Reviews": undefined;
+  "Tutor Past Sessions": undefined;
+  "Tutor Schedule": undefined;
   Messenger:
     | {
         openTutorUserId?: number;
@@ -60,6 +68,7 @@ type RootStackParamList = {
         role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
       }
     | undefined;
+  "Contact Admin": undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -231,6 +240,16 @@ export default function App() {
             options={{ headerShown: false }}
           />
           <Stack.Screen
+            name="Tutor Past Sessions"
+            component={TutorPastSessionsScreen}
+            options={{ header: () => <GeneralHeader title="Past Sessions" /> }}
+          />
+          <Stack.Screen
+            name="Tutor Schedule"
+            component={TutorCalendarScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
             name="Messenger"
             component={MessengerScreen}
             options={{ header: () => <GeneralHeader title="Messenger" /> }}
@@ -242,13 +261,15 @@ export default function App() {
               header: () => (
                 <ProfileHeader
                   onBack={() => navigation.goBack()}
-                  role={
-                    (
+                  role={(() => {
+                    const rawRole = (
                       route.params as
                         | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
                         | undefined
-                    )?.role ?? "STUDENT"
-                  }
+                    )?.role;
+                    if (rawRole === "ADMINISTRATOR") return "ADMIN";
+                    return rawRole ?? "STUDENT";
+                  })()}
                 />
               ),
             })}
@@ -274,6 +295,34 @@ export default function App() {
             name="Matches"
             component={MatchesScreen}
             options={{ title: "Your Matches" }}
+          />
+          <Stack.Screen
+            name="Availability"
+            component={AvailabilityScreen}
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen
+            name="Session History"
+            component={SessionHistoryScreen}
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen
+            name="Report Tutor"
+            component={ReportTutorScreen}
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen
+            name="Tutor Profile Reviews"
+            component={TutorProfileReviewsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Contact Admin"
+            component={ContactAdminScreen}
+            options={{ header: () => <GeneralHeader title="Contact Admin" /> }}
           />
         </Stack.Navigator>
       </NavigationContainer>

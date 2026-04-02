@@ -11,11 +11,13 @@ type RootStackParamList = {
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
   "Student Reviews": undefined;
+  Availability: undefined;
   Matches:
     | {
         matches?: MatchItem[];
       }
     | undefined;
+  "Contact Admin": undefined;
 };
 
 type MatchItem = {
@@ -34,11 +36,8 @@ type QuickAction = {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { label: "Find Tutors", icon: "search" },
-  { label: "Messages", icon: "mail" },
   { label: "Book Session", icon: "calendar" },
   { label: "My Schedule", icon: "time" },
-  { label: "My Reviews", icon: "star" },
-  { label: "Profile", icon: "person" },
 ];
 
 export default function StudentScreen() {
@@ -102,6 +101,12 @@ export default function StudentScreen() {
         >
           <Text style={styles.buttonText}>👤 My Profile</Text>
         </Pressable>
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Contact Admin")}
+        >
+          <Text style={styles.buttonText}>🛟 Contact Admin</Text>
+        </Pressable>
       </View>
 
       {/* Quick Actions */}
@@ -115,15 +120,15 @@ export default function StudentScreen() {
             onPress={() => {
               if (action.label === "Find Tutors") {
                 void handleComputeMatches();
-              } else if (action.label === "Messages") {
-                navigation.navigate("Messenger");
-              } else if (action.label === "Profile") {
-                navigation.navigate("Profile", { role: "STUDENT" });
+              } else if (action.label === "Book Session") {
+                navigation.navigate("Matches");
+              } else if (action.label === "My Schedule") {
+                navigation.navigate("Availability");
               }
             }}
           >
-            <Ionicons name={action.icon} size={16} color="#FFFFFF" style={styles.actionIcon} />
-            <Text style={styles.buttonText}>
+            <Ionicons name={action.icon} size={20} color="#FFFFFF" />
+            <Text style={styles.actionText}>
               {action.label === "Find Tutors" && computingMatches ? "Finding..." : action.label}
             </Text>
           </Pressable>
@@ -169,20 +174,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 10,
+    rowGap: 5,
   },
   actionButton: {
-    flexDirection: "row",
+    width: "31.5%",
     alignItems: "center",
-    backgroundColor: NAVY,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    width: "31%",
     justifyContent: "center",
+    backgroundColor: NAVY,
+    borderRadius: 10,
+    paddingVertical: 14,
   },
-  actionIcon: {
-    marginRight: 6,
+  actionText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: "center",
   },
   button: {
     marginTop: 10,

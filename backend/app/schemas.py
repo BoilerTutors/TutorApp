@@ -5,12 +5,28 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, mod
 
 
 # Type aliases for the session status and semester code
-SessionStatus = Literal["pending", "confirmed", "completed", "cancelled"]
+SessionStatus = Literal["pending", "accepted", "declined", "completed", "cancelled"]
 SemesterCode = Literal["F", "S"]
 
 # ===========================================================
 # ---- User schemas ----
 # ===========================================================
+
+class AdminCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+
+
+class AdminUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(default=None, min_length=8)
+
+
+class AdminPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -183,7 +199,12 @@ class TutorProfilePublic(BaseModel):
                         professor=c.professor if c else None,
                     )
                 )
-            avg_rating = getattr(tutor, "average_rating", None)
+            try:
+                avg_rating = getattr(tutor, "average_rating", None)
+            except Exception:
+                # Avoid hard-failing profile serialization if local DB schema lags
+                # on session/review-related columns.
+                avg_rating = None
             return handler(
                 {
                     "id": tutor.id,
@@ -212,6 +233,7 @@ class StudentProfileCreate(BaseModel):
     preferred_locations: Optional[list[str]] = None
     classes: Optional[list["StudentClassCreate"]] = None
     help_needed: Optional[list[str]] = None
+    session_mode: Optional[str] = None  # "online" | "in_person" | "both"
 
 
 class StudentProfileUpdate(BaseModel):
@@ -220,6 +242,7 @@ class StudentProfileUpdate(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
+    session_mode: Optional[str] = None  # "online" | "in_person" | "both"
 
 
 class StudentProfilePublic(BaseModel):
@@ -232,6 +255,7 @@ class StudentProfilePublic(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
+    session_mode: Optional[str] = None
 
 
 # ===========================================================
@@ -275,6 +299,7 @@ class TutoringSessionUpdate(BaseModel):
     scheduled_start: Optional[datetime] = None
     scheduled_end: Optional[datetime] = None
     notes: Optional[str] = None
+    cancel_reason: Optional[str] = None
 
 
 class TutoringSessionPublic(BaseModel):
@@ -290,6 +315,36 @@ class TutoringSessionPublic(BaseModel):
     notes: Optional[str] = None
     status: SessionStatus
     purchased_at: datetime
+
+
+class AdminTutoringSessionPublic(BaseModel):
+    id: int
+    tutor_id: int
+    student_id: int
+    tutor_name: str
+    student_name: str
+    subject: str
+    scheduled_start: datetime
+    scheduled_end: datetime
+    cost_cents: int
+    notes: Optional[str] = None
+    status: SessionStatus
+    purchased_at: datetime
+      
+      
+class SessionVerificationCodePublic(BaseModel):
+    verification_code: str = Field(min_length=6, max_length=6)
+
+
+class SessionVerificationVerifyRequest(BaseModel):
+    pin: str = Field(min_length=6, max_length=6)
+
+
+class CurrentSessionExistsPublic(BaseModel):
+    has_current_session: bool
+    session_id: Optional[int] = None
+    other_user_id: Optional[int] = None
+    is_verified: Optional[bool] = None
 
 # ===========================================================
 # ---- Review schemas ----
@@ -480,6 +535,7 @@ class MatchResultPublic(BaseModel):
     tutor_first_name: str
     tutor_last_name: str
     tutor_major: Optional[str] = None
+    tutor_hourly_rate_cents: Optional[int] = None
     similarity_score: float
     embedding_similarity: Optional[float] = None
     class_strength: Optional[float] = None
@@ -489,6 +545,12 @@ class MatchResultPublic(BaseModel):
 
 class MatchSelectRequest(BaseModel):
     tutor_id: int
+    class_id: Optional[int] = None
+
+
+class MatchUnmatchRequest(BaseModel):
+    student_id: Optional[int] = None
+    tutor_id: Optional[int] = None
 
 
 class DeviceTokenRegisterRequest(BaseModel):
@@ -551,3 +613,54 @@ MessagePublic.model_rebuild()
 
 ProfileUpdate.model_rebuild()
 
+class TutoringSessionStudentPublic(BaseModel):
+    """Session as seen by the student — includes tutor_id for name lookup."""
+    model_config = ConfigDict(from_attributes=True)
+ 
+    id: int
+    tutor_id: int
+    student_id: int
+    subject: str
+    scheduled_start: datetime
+    scheduled_end: datetime
+    cost_cents: int
+    notes: Optional[str] = None
+    status: SessionStatus
+    purchased_at: datetime
+ 
+ 
+# --- Report schemas ---
+
+
+class AdminMessageCreate(BaseModel):
+    tutor_id: int
+    message: str = Field(min_length=1, max_length=4000)
+    refund_requested: bool = False
+
+
+class AdminMessagePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: int
+    tutor_id: int
+    message: str
+    refund_requested: bool
+    created_at: datetime
+ 
+class ReportCreate(BaseModel):
+    tutor_id: int
+    session_id: Optional[int] = None
+    reason: str = Field(min_length=20, max_length=2000)
+ 
+ 
+class ReportPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+ 
+    id: int
+    reporter_id: int
+    tutor_id: int
+    session_id: Optional[int] = None
+    reason: str
+    status: str
+    created_at: datetime

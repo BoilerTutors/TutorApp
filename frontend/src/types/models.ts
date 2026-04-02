@@ -47,4 +47,17 @@ export type Review = {
   createdAt: string;
 };
 
+export type TutoringSession = {
+  id: number;
+  tutor_id: number;
+  student_id: number;
+  subject: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  cost_cents: number;
+  notes?: string | null;
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
+  purchased_at: string;
+};
+
 export type MockUserRole = "student" | "tutor";

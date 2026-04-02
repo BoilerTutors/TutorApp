@@ -67,6 +67,12 @@ async function request<T>(
         throw new Error("Your session has expired. Please sign in again.");
       }
       // No token (e.g. wrong login credentials): show message on the login screen.
+      const text401 = await res.json();
+      const detail = text401.detail;
+      if (detail === "Incorrect MFA code") {
+        throw new Error(detail);
+      }
+
       throw new Error("Invalid email or password.");
     }
     const text = await res.text();
