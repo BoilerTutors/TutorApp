@@ -505,6 +505,10 @@ class MatchSelectRequest(BaseModel):
     class_id: Optional[int] = None
 
 
+class MatchUnmatchRequest(BaseModel):
+    student_id: int
+
+
 class DeviceTokenRegisterRequest(BaseModel):
     token: str
     platform: Optional[str] = None
