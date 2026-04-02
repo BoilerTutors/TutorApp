@@ -572,3 +572,37 @@ MessagePublic.model_rebuild()
 
 ProfileUpdate.model_rebuild()
 
+class TutoringSessionStudentPublic(BaseModel):
+    """Session as seen by the student — includes tutor_id for name lookup."""
+    model_config = ConfigDict(from_attributes=True)
+ 
+    id: int
+    tutor_id: int
+    student_id: int
+    subject: str
+    scheduled_start: datetime
+    scheduled_end: datetime
+    cost_cents: int
+    notes: Optional[str] = None
+    status: SessionStatus
+    purchased_at: datetime
+ 
+ 
+# --- Report schemas ---
+ 
+class ReportCreate(BaseModel):
+    tutor_id: int
+    session_id: Optional[int] = None
+    reason: str = Field(min_length=20, max_length=2000)
+ 
+ 
+class ReportPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+ 
+    id: int
+    reporter_id: int
+    tutor_id: int
+    session_id: Optional[int] = None
+    reason: str
+    status: str
+    created_at: datetime
