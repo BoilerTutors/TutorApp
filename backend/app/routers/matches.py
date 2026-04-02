@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.crud.matches import (
     add_match_to_latest_run,
-    get_latest_matches_for_student,
+    get_active_matches_for_student,
     has_student_matched_tutor,
     unmatch_student_tutor_pair,
 )
@@ -52,17 +52,18 @@ def _serialize_reranked_rows(db: Session, reranked: list[dict]) -> list[MatchRes
                 class_strength=row.get("class_strength"),
                 availability_overlap=row.get("availability_overlap"),
                 location_match=row.get("location_match"),
+                tutor_matching_paused=bool(tutor_profile.matching_paused) if tutor_profile else False,
             )
         )
     return response
 
 
 def _build_saved_match_payload(db: Session, current_user_id: int) -> list[MatchResultPublic]:
-    latest_matches = get_latest_matches_for_student(db, student_id=current_user_id)
-    if not latest_matches:
+    active_matches = get_active_matches_for_student(db, student_id=current_user_id)
+    if not active_matches:
         return []
 
-    tutor_user_ids = [m.tutor_id for m in latest_matches]
+    tutor_user_ids = [m.tutor_id for m in active_matches]
     tutors_by_user_id = {
         t.user_id: t
         for t in db.query(TutorProfile).filter(TutorProfile.user_id.in_(tutor_user_ids)).all()
@@ -73,7 +74,7 @@ def _build_saved_match_payload(db: Session, current_user_id: int) -> list[MatchR
     }
 
     response: list[MatchResultPublic] = []
-    for match in latest_matches:
+    for match in active_matches:
         tutor_user = users_by_id.get(match.tutor_id)
         if tutor_user is None:
             continue
@@ -92,6 +93,7 @@ def _build_saved_match_payload(db: Session, current_user_id: int) -> list[MatchR
                 class_strength=match.class_strength,
                 availability_overlap=match.availability_overlap,
                 location_match=match.location_match,
+                tutor_matching_paused=bool(tutor_profile.matching_paused) if tutor_profile else False,
             )
         )
     return response
@@ -179,6 +181,15 @@ async def select_match(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You have already matched with this tutor.",
+        )
+
+    tutor_profile = (
+        db.query(TutorProfile).filter(TutorProfile.user_id == body.tutor_id).first()
+    )
+    if tutor_profile is not None and tutor_profile.matching_paused:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This tutor has paused new matches.",
         )
 
     add_match_to_latest_run(

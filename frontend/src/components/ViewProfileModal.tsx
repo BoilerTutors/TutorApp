@@ -23,6 +23,7 @@ export type UserProfileDetails = {
     grad_year: number | null;
     preferred_locations: string[] | null;
     help_needed: string[] | null;
+    max_hourly_rate_cents?: number | null;
   } | null;
 };
 
@@ -118,6 +119,16 @@ export default function ViewProfileModal({ visible, userId, onClose, onLoadError
                     <Text style={styles.modalLabel}>Type of help needed</Text>
                     <Text style={styles.modalValue}>
                       {(profileData.student?.help_needed ?? []).join(", ") || "—"}
+                    </Text>
+                  </>
+                ) : null}
+                {profileData.is_student &&
+                profileData.student?.max_hourly_rate_cents != null &&
+                profileData.student.max_hourly_rate_cents >= 0 ? (
+                  <>
+                    <Text style={styles.modalLabel}>Max hourly budget</Text>
+                    <Text style={styles.modalValue}>
+                      ${(profileData.student.max_hourly_rate_cents / 100).toFixed(2)}/hr
                     </Text>
                   </>
                 ) : null}

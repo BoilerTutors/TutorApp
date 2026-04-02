@@ -151,6 +151,7 @@ CREATE TABLE public.matches (
     class_strength double precision,
     availability_overlap double precision,
     location_match double precision,
+    unmatched boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -327,7 +328,8 @@ CREATE TABLE public.students (
     preferred_locations text[] DEFAULT '{}'::text[],
     help_needed text[] DEFAULT '{}'::text[],
     bio text,
-    session_mode character varying(20) DEFAULT 'both'::character varying
+    session_mode character varying(20) DEFAULT 'both'::character varying,
+    max_hourly_rate_cents integer
 );
 
 
@@ -363,6 +365,7 @@ CREATE TABLE public.tutor_classes (
     year_taken integer NOT NULL,
     grade_received character varying(2) NOT NULL,
     has_taed boolean DEFAULT false NOT NULL,
+    hourly_rate_cents integer,
     CONSTRAINT ck_semester_value CHECK (((semester)::text = ANY ((ARRAY['F'::character varying, 'S'::character varying])::text[])))
 );
 
@@ -400,6 +403,8 @@ CREATE TABLE public.tutoring_sessions (
     subject character varying(255) NOT NULL,
     cost_cents integer NOT NULL,
     notes text,
+    verification_code_hash character varying(255),
+    is_verified boolean DEFAULT false NOT NULL,
     status character varying(30) NOT NULL,
     purchased_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT ck_session_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'confirmed'::character varying, 'completed'::character varying, 'cancelled'::character varying])::text[]))),
@@ -439,7 +444,8 @@ CREATE TABLE public.tutors (
     major character varying(120),
     grad_year integer,
     preferred_locations text[] DEFAULT '{}'::text[],
-    help_provided text[] DEFAULT '{}'::text[]
+    help_provided text[] DEFAULT '{}'::text[],
+    matching_paused boolean DEFAULT false NOT NULL
 );
 
 

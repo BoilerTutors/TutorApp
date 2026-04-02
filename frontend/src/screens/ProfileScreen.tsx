@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -36,6 +37,7 @@ type TutorClassWithClass = {
   year_taken: number;
   grade_received: string;
   has_taed: boolean;
+  hourly_rate_cents?: number | null;
   course_code: string;
   professor?: string | null;
 };
@@ -48,6 +50,8 @@ type SelectedClassEdit = {
   semesterTaken: string;
   gradeReceived: string;
   hasTAed: boolean;
+  /** Dollars per hour as typed in the field, e.g. "25" or "25.50" */
+  hourlyRate: string;
 };
 
 type MeResponse = {
@@ -66,6 +70,7 @@ type MeResponse = {
     preferred_locations?: string[] | null;
     help_provided?: string[] | null;
     session_mode?: string | null;
+    matching_paused?: boolean;
     classes_tutoring?: TutorClassWithClass[];
   } | null;
   student?: {
@@ -76,6 +81,7 @@ type MeResponse = {
     grad_year: number | null;
     preferred_locations?: string[] | null;
     session_mode?: string | null;
+    max_hourly_rate_cents?: number | null;
   } | null;
 };
 
@@ -128,6 +134,7 @@ export default function ProfileScreen() {
   const [editHelpProvided, setEditHelpProvided] = useState<string[]>([]);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [classSearchQuery, setClassSearchQuery] = useState("");
+  const [matchingPausedSaving, setMatchingPausedSaving] = useState(false);
 
   // Student preferences (session mode + locations; separate from tutor prefs state)
   const [editingStudentPrefs, setEditingStudentPrefs] = useState(false);
@@ -136,6 +143,8 @@ export default function ProfileScreen() {
   const [editStudentSessionMode, setEditStudentSessionMode] = useState<
     "online" | "in_person" | "both"
   >("both");
+  /** Dollars per hour, e.g. "25" — stored as max_hourly_rate_cents on save */
+  const [editStudentMaxHourly, setEditStudentMaxHourly] = useState("");
 
   // Same class list as tutor registration (no backend fetch)
   const availableClasses = AVAILABLE_CLASSES_FALLBACK;
@@ -187,6 +196,10 @@ export default function ProfileScreen() {
         semesterTaken: formatSemester(c.semester, c.year_taken),
         gradeReceived: c.grade_received,
         hasTAed: c.has_taed,
+        hourlyRate:
+          c.hourly_rate_cents != null && c.hourly_rate_cents >= 0
+            ? String(c.hourly_rate_cents / 100)
+            : "",
       }))
     );
     setEditLocations(t?.preferred_locations ?? []);
@@ -205,6 +218,10 @@ export default function ProfileScreen() {
     const s = me?.student;
     setEditStudentLocations(s?.preferred_locations ?? []);
     setEditStudentSessionMode((s?.session_mode as "online" | "in_person" | "both") ?? "both");
+    const cents = s?.max_hourly_rate_cents;
+    setEditStudentMaxHourly(
+      cents != null && cents >= 0 ? String(cents / 100) : ""
+    );
     setEditingStudentPrefs(true);
   }, [me?.student]);
 
@@ -230,6 +247,7 @@ export default function ProfileScreen() {
           semesterTaken: "",
           gradeReceived: "",
           hasTAed: false,
+          hourlyRate: "",
         },
       ];
     });
@@ -243,7 +261,7 @@ export default function ProfileScreen() {
 
   const updateClassField = (
     classId: number,
-    field: "semesterTaken" | "gradeReceived" | "hasTAed",
+    field: "semesterTaken" | "gradeReceived" | "hasTAed" | "hourlyRate",
     value: string | boolean
   ) => {
     setEditClasses((prev) =>
@@ -277,18 +295,35 @@ export default function ProfileScreen() {
       Alert.alert("Required", "Please select at least one tutoring location.");
       return;
     }
+    for (const c of editClasses) {
+      const rate = c.hourlyRate.trim();
+      if (rate) {
+        const n = parseFloat(rate);
+        if (!Number.isFinite(n) || n < 0) {
+          Alert.alert(
+            "Invalid rate",
+            `Enter a valid hourly rate for ${c.courseCode}, or leave it blank.`
+          );
+          return;
+        }
+      }
+    }
     setSavingPrefs(true);
     try {
       const classes = editClasses
         .map((c) => {
           const parsed = parseSemester(c.semesterTaken);
           if (!parsed || !c.gradeReceived) return null;
+          const rateTrim = c.hourlyRate.trim();
+          const hourly_rate_cents =
+            rateTrim === "" ? null : Math.round(parseFloat(rateTrim) * 100);
           return {
             class_id: c.class_id,
             semester: parsed.semester,
             year_taken: parsed.year_taken,
             grade_received: c.gradeReceived,
             has_taed: c.hasTAed,
+            hourly_rate_cents,
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -322,6 +357,21 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleToggleMatchingPaused = async (value: boolean) => {
+    if (!me?.is_tutor) return;
+    setMatchingPausedSaving(true);
+    try {
+      await api.patch<MeResponse>("/users/me", {
+        tutor_profile: { matching_paused: value },
+      });
+      await loadMe({ rethrow: true });
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to update matching preference");
+    } finally {
+      setMatchingPausedSaving(false);
+    }
+  };
+
   const handleSaveStudentPrefs = async () => {
     if (!me?.is_student) {
       Alert.alert("Cannot save", "Only student accounts can save student preferences.");
@@ -334,12 +384,26 @@ export default function ProfileScreen() {
       Alert.alert("Required", "Please select at least one tutoring location.");
       return;
     }
+    const rateTrim = editStudentMaxHourly.trim();
+    let max_hourly_rate_cents: number | null = null;
+    if (rateTrim !== "") {
+      const n = parseFloat(rateTrim);
+      if (!Number.isFinite(n) || n < 0) {
+        Alert.alert(
+          "Invalid amount",
+          "Enter a valid maximum hourly rate in dollars (e.g. 25), or leave the field blank."
+        );
+        return;
+      }
+      max_hourly_rate_cents = Math.round(n * 100);
+    }
     setSavingStudentPrefs(true);
     try {
       await api.patch<MeResponse>("/users/me", {
         student_profile: {
           preferred_locations: editStudentLocations,
           session_mode: editStudentSessionMode,
+          max_hourly_rate_cents,
         },
       });
       await loadMe({ rethrow: true });
@@ -641,6 +705,15 @@ export default function ProfileScreen() {
                       ))}
                     </View>
                   </ScrollView>
+                  <Text style={styles.fieldLabel}>Hourly rate ($/hr)</Text>
+                  <TextInput
+                    style={styles.classRateInput}
+                    value={c.hourlyRate}
+                    onChangeText={(v) => updateClassField(c.class_id, "hourlyRate", v)}
+                    placeholder="e.g. 25"
+                    placeholderTextColor="#B0B6C3"
+                    keyboardType="decimal-pad"
+                  />
                   <Pressable
                     style={styles.checkboxRow}
                     onPress={() => updateClassField(c.class_id, "hasTAed", !c.hasTAed)}
@@ -732,6 +805,9 @@ export default function ProfileScreen() {
                       <Text style={styles.prefValue}>
                         {c.course_code} — Grade: {c.grade_received}, {formatSemester(c.semester, c.year_taken)}
                         {c.has_taed ? " • TA'd" : ""}
+                        {c.hourly_rate_cents != null
+                          ? ` • $${(c.hourly_rate_cents / 100).toFixed(2)}/hr`
+                          : ""}
                       </Text>
                     </View>
                   ))}
@@ -823,6 +899,18 @@ export default function ProfileScreen() {
                 </>
               )}
 
+              <Text style={styles.label}>Max hourly budget (optional)</Text>
+              <Text style={styles.sectionSubtitle}>
+                The most you prefer to pay per hour for tutoring (USD). Leave blank for no limit.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={editStudentMaxHourly}
+                onChangeText={setEditStudentMaxHourly}
+                placeholder="e.g. 25"
+                keyboardType={Platform.OS === "ios" ? "decimal-pad" : "numeric"}
+              />
+
               <View style={styles.row}>
                 <Pressable
                   style={[styles.button, styles.cancelButton]}
@@ -860,7 +948,16 @@ export default function ProfileScreen() {
                   <Text style={styles.value}>{me.student!.preferred_locations!.join(", ")}</Text>
                 </>
               )}
+              {me.student?.max_hourly_rate_cents != null && me.student.max_hourly_rate_cents >= 0 && (
+                <>
+                  <Text style={styles.label}>Max hourly budget</Text>
+                  <Text style={styles.value}>
+                    ${(me.student.max_hourly_rate_cents / 100).toFixed(2)}/hr
+                  </Text>
+                </>
+              )}
               {(me.student?.preferred_locations?.length ?? 0) === 0 &&
+                me.student?.max_hourly_rate_cents == null &&
                 !me.student?.session_mode && (
                   <Text style={styles.placeholder}>No preferences set yet.</Text>
                 )}
@@ -869,6 +966,30 @@ export default function ProfileScreen() {
               </Pressable>
             </>
           )}
+        </View>
+      )}
+
+      {me.is_tutor && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Student matching</Text>
+          <Text style={styles.sectionSubtitle}>
+            When paused, students on Find Tutors cannot start a new match with you. Existing matches
+            stay the same.
+          </Text>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Pause new matches</Text>
+            {matchingPausedSaving ? (
+              <ActivityIndicator size="small" color="#2E57A2" />
+            ) : (
+              <Switch
+                accessibilityLabel="Pause new student matches"
+                value={me.tutor?.matching_paused ?? false}
+                onValueChange={(v) => {
+                  void handleToggleMatchingPaused(v);
+                }}
+              />
+            )}
+          </View>
         </View>
       )}
 
@@ -979,6 +1100,14 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginBottom: 8,
   },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+    gap: 12,
+  },
+  toggleLabel: { fontSize: 16, color: "#111827", flex: 1 },
   label: { fontSize: 12, fontWeight: "600", color: "#6B7280", marginBottom: 4 },
   value: { fontSize: 16, color: "#111827", marginBottom: 12 },
   placeholder: { fontSize: 14, color: "#9CA3AF", fontStyle: "italic" },
@@ -1094,6 +1223,17 @@ const styles = StyleSheet.create({
   classCardCode: { fontSize: 16, fontWeight: "700", color: "#2E57A2" },
   removeText: { fontSize: 14, color: "#B91C1C", fontWeight: "500" },
   fieldLabel: { fontSize: 12, fontWeight: "600", color: "#6B7280", marginTop: 8, marginBottom: 6 },
+  classRateInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#2F3850",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 4,
+  },
   chipRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 8 },
   chipRowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   chip: {

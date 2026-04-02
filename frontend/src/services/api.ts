@@ -23,6 +23,7 @@ export type TutorProfileCreate = {
 export type StudentProfileCreate = {
   major?: string;
   grad_year?: number;
+  max_hourly_rate_cents?: number | null;
 };
 
 export type TutorClassCreate = {
@@ -30,6 +31,8 @@ export type TutorClassCreate = {
   semester: "F" | "S";
   year_taken: number;
   grade_received: string;
+  has_taed?: boolean;
+  hourly_rate_cents?: number | null;
 };
 
 export type LoginRequest = {
@@ -69,6 +72,7 @@ export type StudentProfilePublic = {
   user_id: number;
   major?: string;
   grad_year?: number;
+  max_hourly_rate_cents?: number | null;
 };
 
 export type ClassPublic = {
@@ -85,6 +89,8 @@ export type TutorClassPublic = {
   semester: "F" | "S";
   year_taken: number;
   grade_received: string;
+  has_taed?: boolean;
+  hourly_rate_cents?: number | null;
 };
 
 export type ReviewCreate = {

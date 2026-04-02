@@ -129,6 +129,7 @@ class TutorProfileUpdate(BaseModel):
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
     classes: Optional[list["TutorClassCreate"]] = None
+    matching_paused: Optional[bool] = None
 
 
 class TutorClassWithClassPublic(BaseModel):
@@ -140,6 +141,7 @@ class TutorClassWithClassPublic(BaseModel):
     year_taken: int
     grade_received: str
     has_taed: bool
+    hourly_rate_cents: Optional[int] = None
     course_code: str
     professor: Optional[str] = None
 
@@ -157,6 +159,7 @@ class TutorProfilePublic(BaseModel):
     average_rating: Optional[float] = None
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None
+    matching_paused: bool = False
     classes_tutoring: list["TutorClassWithClassPublic"] = []
 
     @model_validator(mode="wrap")
@@ -178,16 +181,12 @@ class TutorProfilePublic(BaseModel):
                         year_taken=tc.year_taken,
                         grade_received=tc.grade_received,
                         has_taed=tc.has_taed,
+                        hourly_rate_cents=tc.hourly_rate_cents,
                         course_code=course_code,
                         professor=c.professor if c else None,
                     )
                 )
-            try:
-                avg_rating = getattr(tutor, "average_rating", None)
-            except Exception:
-                # Avoid hard-failing profile serialization if local DB schema lags
-                # on session/review-related columns.
-                avg_rating = None
+            avg_rating = tutor.average_rating
             return handler(
                 {
                     "id": tutor.id,
@@ -200,6 +199,7 @@ class TutorProfilePublic(BaseModel):
                     "average_rating": avg_rating,
                     "help_provided": tutor.help_provided,
                     "session_mode": getattr(tutor, "session_mode", None),
+                    "matching_paused": getattr(tutor, "matching_paused", False),
                     "classes_tutoring": classes_data,
                 }
             )
@@ -217,6 +217,7 @@ class StudentProfileCreate(BaseModel):
     classes: Optional[list["StudentClassCreate"]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    max_hourly_rate_cents: Optional[int] = Field(default=None, ge=0)
 
 
 class StudentProfileUpdate(BaseModel):
@@ -226,6 +227,7 @@ class StudentProfileUpdate(BaseModel):
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    max_hourly_rate_cents: Optional[int] = Field(default=None, ge=0)
 
 
 class StudentProfilePublic(BaseModel):
@@ -239,6 +241,7 @@ class StudentProfilePublic(BaseModel):
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None
+    max_hourly_rate_cents: Optional[int] = None
 
 
 # ===========================================================
@@ -386,6 +389,7 @@ class TutorClassCreate(BaseModel):
     year_taken: int
     grade_received: str = Field(max_length=2)
     has_taed: bool = False
+    hourly_rate_cents: Optional[int] = None
 
 
 class TutorClassPublic(BaseModel):
@@ -398,6 +402,7 @@ class TutorClassPublic(BaseModel):
     year_taken: int
     grade_received: str
     has_taed: bool
+    hourly_rate_cents: Optional[int] = None
 
 # ===========================================================
 # ---- Auth / misc schemas ----
@@ -501,6 +506,7 @@ class MatchResultPublic(BaseModel):
     class_strength: Optional[float] = None
     availability_overlap: Optional[float] = None
     location_match: Optional[float] = None
+    tutor_matching_paused: bool = False
 
 
 class MatchSelectRequest(BaseModel):

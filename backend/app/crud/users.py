@@ -60,6 +60,7 @@ def create_user(db: Session, data: UserCreate) -> User:
                         year_taken=tc.year_taken,
                         grade_received=tc.grade_received,
                         has_taed=tc.has_taed,
+                        hourly_rate_cents=tc.hourly_rate_cents,
                     )
                 )
         refresh_tutor_embeddings(db, tutor)
@@ -73,6 +74,7 @@ def create_user(db: Session, data: UserCreate) -> User:
             preferred_locations=data.student_profile.preferred_locations or None,
             help_needed=data.student_profile.help_needed or None,
             session_mode=data.student_profile.session_mode or "both",
+            max_hourly_rate_cents=data.student_profile.max_hourly_rate_cents,
         )
         db.add(student)
         db.flush()
@@ -126,6 +128,8 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             tutor_embedding_needs_refresh = True
         if t.session_mode is not None:
             user.tutor.session_mode = t.session_mode
+        if t.matching_paused is not None:
+            user.tutor.matching_paused = t.matching_paused
         if t.classes is not None:
             for tc in user.tutor.classes_tutoring:
                 db.delete(tc)
@@ -139,6 +143,7 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
                         year_taken=tc.year_taken,
                         grade_received=tc.grade_received,
                         has_taed=tc.has_taed,
+                        hourly_rate_cents=tc.hourly_rate_cents,
                     )
                 )
             tutor_embedding_needs_refresh = True
@@ -168,6 +173,8 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             student_embedding_needs_refresh = True
         if s.session_mode is not None:
             user.student.session_mode = s.session_mode
+        if "max_hourly_rate_cents" in s.model_fields_set:
+            user.student.max_hourly_rate_cents = s.max_hourly_rate_cents
         if student_embedding_needs_refresh:
             refresh_student_embeddings(db, user.student)
     db.commit()

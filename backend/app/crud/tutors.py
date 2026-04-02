@@ -65,7 +65,9 @@ def update_tutor_profile(db: Session, tutor: TutorProfile, data: TutorProfileUpd
         tutor.major = data.major
     if data.grad_year is not None:
         tutor.grad_year = data.grad_year
-    
+    if data.matching_paused is not None:
+        tutor.matching_paused = data.matching_paused
+
     db.commit()
     db.refresh(tutor)
     return tutor

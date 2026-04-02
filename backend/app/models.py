@@ -17,7 +17,7 @@ from sqlalchemy import (
     CheckConstraint,
     JSON,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, object_session, relationship
 from app.database import Base
 
 
@@ -255,6 +255,13 @@ class TutorProfile(Base):
     )
     # Session mode: "online" | "in_person" | "both"
     session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
+    # When True, new students cannot add a match; existing active matches are unchanged.
+    matching_paused: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(
@@ -264,7 +271,13 @@ class TutorProfile(Base):
 
     @property
     def reviews_received(self) -> list["Review"]:
-        return [s.review for s in self.user.sessions_as_tutor if s.review is not None]
+        sess = object_session(self)
+        try:
+            return [s.review for s in self.user.sessions_as_tutor if s.review is not None]
+        except Exception:
+            if sess is not None:
+                sess.rollback()
+            return []
 
     @property
     def average_rating(self) -> Optional[float]:
@@ -300,6 +313,8 @@ class StudentProfile(Base):
     )
     # Session mode: "online" | "in_person" | "both"
     session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
+    # Max the student is willing to pay per hour (same units as tutor hourly_rate_cents)
+    max_hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
 
     user: Mapped["User"] = relationship(back_populates="student")
     classes_enrolled: Mapped[list["StudentClass"]] = relationship(
@@ -309,7 +324,13 @@ class StudentProfile(Base):
 
     @property
     def reviews_written(self) -> list["Review"]:
-        return [s.review for s in self.user.sessions_as_student if s.review is not None]
+        sess = object_session(self)
+        try:
+            return [s.review for s in self.user.sessions_as_student if s.review is not None]
+        except Exception:
+            if sess is not None:
+                sess.rollback()
+            return []
 
 # ============================================
 # User/Tutor/Student One-to-Many Attributes.
@@ -588,6 +609,7 @@ class TutorClass(Base):
     year_taken: Mapped[int] = mapped_column(Integer, nullable=False)        # e.g. 2025
     grade_received: Mapped[str] = mapped_column(String(2), nullable=False)  # "A+", "A", "A-", "B+", etc.
     has_taed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     tutor: Mapped["TutorProfile"] = relationship(back_populates="classes_tutoring")
     class_: Mapped["Class"] = relationship(back_populates="tutor_classes")
