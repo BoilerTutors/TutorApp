@@ -78,7 +78,7 @@ export default function AdminLoginScreen() {
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="mccormackga@icloud.com"
+            placeholder="Enter Email"
             placeholderTextColor="#8C93A4"
             autoCapitalize="none"
             keyboardType="email-address"
