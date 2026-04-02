@@ -210,3 +210,5 @@ def test_non_tutor_in_session_cannot_verify_pin(client, db_session):
         json={"pin": code},
     )
     assert tutor_response.status_code == 200
+
+

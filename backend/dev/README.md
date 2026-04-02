@@ -32,11 +32,7 @@ From **backend**, pick **one** approach:
 python dev/create_tables.py
 ```
 
-If models changed and you need to force-sync schema locally:
-
-```bash
-python dev/create_tables.py --reset
-```
+`create_tables.py` always drops existing tables first, then recreates them from `models.py`.
 
 **B — Alembic only (matches production migrations)**
 
