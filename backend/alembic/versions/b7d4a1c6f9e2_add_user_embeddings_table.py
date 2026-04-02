@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
@@ -19,7 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    """Upgrade schema.
+
+    Skip if table already exists (e.g. DB created with create_tables.py).
+    """
+    bind = op.get_bind()
+    if inspect(bind).has_table("user_embeddings"):
+        return
     op.create_table(
         "user_embeddings",
         sa.Column("id", sa.Integer(), nullable=False),

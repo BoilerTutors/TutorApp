@@ -216,6 +216,7 @@ class StudentProfileCreate(BaseModel):
     preferred_locations: Optional[list[str]] = None
     classes: Optional[list["StudentClassCreate"]] = None
     help_needed: Optional[list[str]] = None
+    session_mode: Optional[str] = None  # "online" | "in_person" | "both"
 
 
 class StudentProfileUpdate(BaseModel):
@@ -224,6 +225,7 @@ class StudentProfileUpdate(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
+    session_mode: Optional[str] = None  # "online" | "in_person" | "both"
 
 
 class StudentProfilePublic(BaseModel):
@@ -236,6 +238,7 @@ class StudentProfilePublic(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
+    session_mode: Optional[str] = None
 
 
 # ===========================================================
