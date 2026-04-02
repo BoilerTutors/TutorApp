@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import get_current_user
 from app.crud.sessions import (
+    create_tutoring_session,
     generate_session_verification_code,
+    get_student_sessions_future as get_student_sessions_future_crud,
     get_tutor_sessions_future as get_tutor_sessions_future_crud,
     get_tutor_sessions_past as get_tutor_sessions_past_crud,
     get_student_sessions_past as get_student_sessions_past_crud,
@@ -25,10 +27,52 @@ from app.schemas import (
     Message,
     SessionVerificationCodePublic,
     SessionVerificationVerifyRequest,
+    TutoringSessionCreate,
     TutoringSessionPublic,
 )
 
 router = APIRouter()
+
+
+@router.post("/", response_model=TutoringSessionPublic, status_code=status.HTTP_201_CREATED)
+def create_session(
+    data: TutoringSessionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TutoringSessionPublic:
+    """Create a tutoring session purchase/booking as a student."""
+    if not current_user.is_student:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can create sessions.",
+        )
+    if data.tutor_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot create a session with yourself.",
+        )
+    tutor = db.get(User, data.tutor_id)
+    if tutor is None or not tutor.is_tutor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tutor not found.",
+        )
+    if data.scheduled_end <= data.scheduled_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scheduled_end must be after scheduled_start.",
+        )
+    row = create_tutoring_session(
+        db,
+        tutor_id=data.tutor_id,
+        student_id=current_user.id,
+        subject=data.subject,
+        scheduled_start=data.scheduled_start,
+        scheduled_end=data.scheduled_end,
+        cost_cents=data.cost_cents,
+        notes=data.notes,
+    )
+    return TutoringSessionPublic.model_validate(row)
 
 
 @router.get("/tutor/past", response_model=list[TutoringSessionPublic])
@@ -60,6 +104,21 @@ def get_tutor_sessions_future(
         )
 
     sessions = get_tutor_sessions_future_crud(db, current_user.id)
+    return [TutoringSessionPublic.model_validate(s) for s in sessions]
+
+
+@router.get("/student/future", response_model=list[TutoringSessionPublic])
+def get_student_sessions_future(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[TutoringSessionPublic]:
+    """Get all future tutoring sessions where the current user is the student."""
+    if not current_user.is_student:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access student sessions.",
+        )
+    sessions = get_student_sessions_future_crud(db, current_user.id)
     return [TutoringSessionPublic.model_validate(s) for s in sessions]
 
 
@@ -124,7 +183,7 @@ def verify_session_code(
 
     return Message(message="Verification code accepted")
 
-    @router.get("/student/past", response_model=list[TutoringSessionPublic])
+@router.get("/student/past", response_model=list[TutoringSessionPublic])
 def get_student_sessions_past(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

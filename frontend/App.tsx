@@ -26,6 +26,7 @@ import AvailabilityScreen from "./src/screens/AvailabilityScreen";
 import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
 import ReportTutorScreen from "./src/screens/ReportTutorScreen";
 import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
+import TutorCalendarScreen from "./src/screens/TutorCalendarScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -38,6 +39,7 @@ type RootStackParamList = {
   "Student Reviews": undefined;
   "Tutor Reviews": undefined;
   "Tutor Past Sessions": undefined;
+  "Tutor Schedule": undefined;
   Messenger:
     | {
         openTutorUserId?: number;
@@ -240,6 +242,11 @@ export default function App() {
             name="Tutor Past Sessions"
             component={TutorPastSessionsScreen}
             options={{ header: () => <GeneralHeader title="Past Sessions" /> }}
+          />
+          <Stack.Screen
+            name="Tutor Schedule"
+            component={TutorCalendarScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Messenger"
