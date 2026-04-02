@@ -1,4 +1,4 @@
-"""Create all tables in the local Postgres. Run from backend/ so app is importable.
+"""Rebuild all tables in local Postgres to match current models.
 
   cd backend && python dev/create_tables.py
 """
@@ -18,7 +18,7 @@ def main() -> None:
     Base.metadata.drop_all(bind=engine)
     print("Dropped existing tables.")
     Base.metadata.create_all(bind=engine)
-    print("Tables created.")
+    print("Tables rebuilt to match current schema.")
 
 
 if __name__ == "__main__":

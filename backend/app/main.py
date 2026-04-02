@@ -9,6 +9,7 @@ from app.routers import (
     students,
     classes,
     sessions,
+    payment,
     availability,
     reviews,
     messages,
@@ -42,6 +43,7 @@ app.include_router(tutors.router, prefix="/tutors", tags=["tutors"])
 app.include_router(students.router, prefix="/students", tags=["students"])
 app.include_router(classes.router, prefix="/classes", tags=["classes"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
+app.include_router(payment.router, prefix="/payment", tags=["payment"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(availability.router, prefix="/availability", tags=["availability"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
