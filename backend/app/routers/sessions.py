@@ -53,6 +53,15 @@ from app.schemas import (
 router = APIRouter()
 
 
+
+def _display_name(user: User) -> str:
+    return f"{user.first_name} {user.last_name}".strip()
+
+
+def _format_session_time(value) -> str:
+    local_dt = value.astimezone()
+    return local_dt.strftime("%b %d, %I:%M %p").replace(" 0", " ")
+
 @router.websocket("/ws/verification")
 async def session_verification_ws(
     websocket: WebSocket,
@@ -67,6 +76,7 @@ async def session_verification_ws(
             await websocket.receive_text()
     except WebSocketDisconnect:
         session_verification_ws_manager.disconnect(websocket, user.id)
+
 
 
 @router.post("/", response_model=TutoringSessionPublic, status_code=status.HTTP_201_CREATED)
@@ -325,12 +335,35 @@ def update_session(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Students can only cancel sessions.",
             )
+        reason = (data.cancel_reason or "").strip()
+        if not reason:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cancellation reason is required.",
+            )
         if session.status in {"declined", "cancelled"}:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Session has already been declined/cancelled.",
             )
         row = set_session_status(db, session=session, status="cancelled")
+        build_and_store_notification(
+            db,
+            user_id=session.tutor_id,
+            event_type="session_cancelled",
+            title="Session cancelled",
+            body=(
+                f"{_display_name(current_user)} cancelled the session at "
+                f"{_format_session_time(session.scheduled_start)}. Reason: {reason}"
+            ),
+            payload_json={
+                "session_id": session.id,
+                "student_id": session.student_id,
+                "tutor_id": session.tutor_id,
+                "status": "cancelled",
+                "reason": reason,
+            },
+        )
         return TutoringSessionPublic.model_validate(row)
 
     if not is_tutor_owner:
@@ -356,6 +389,23 @@ def update_session(
         )
 
     row = set_session_status(db, session=session, status=data.status)
+    if data.status == "cancelled":
+        build_and_store_notification(
+            db,
+            user_id=session.student_id,
+            event_type="session_cancelled",
+            title="Session cancelled",
+            body=(
+                f"{_display_name(current_user)} cancelled session at "
+                f"{_format_session_time(session.scheduled_start)}"
+            ),
+            payload_json={
+                "session_id": session.id,
+                "student_id": session.student_id,
+                "tutor_id": session.tutor_id,
+                "status": "cancelled",
+            },
+        )
     if data.status in {"accepted", "declined"}:
         build_and_store_notification(
             db,

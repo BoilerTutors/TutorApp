@@ -115,7 +115,6 @@ export default function AvailabilityScreen() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
   const [selectedSessionBlock, setSelectedSessionBlock] = useState<SessionBlock | null>(null);
-  const [studentDisplayName, setStudentDisplayName] = useState("Student");
 
   // Delete confirm
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -125,7 +124,7 @@ export default function AvailabilityScreen() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [availSlots, pastSessions, futureSessions, me] = await Promise.all([
+      const [availSlots, pastSessions, futureSessions] = await Promise.all([
         api.get<AvailabilitySlot[]>("/availability/me"),
         api.get<
           Array<{
@@ -147,12 +146,7 @@ export default function AvailabilityScreen() {
             status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
           }>
         >("/sessions/student/future"),
-        api.get<{ first_name: string; last_name: string }>("/users/me"),
       ]);
-      const fullName = `${me.first_name} ${me.last_name}`.trim();
-      if (fullName) {
-        setStudentDisplayName(fullName);
-      }
       const allSessions = [...pastSessions, ...futureSessions];
       const activeSessions = allSessions.filter(
         (s) => s.status === "pending" || s.status === "accepted"
@@ -288,26 +282,16 @@ export default function AvailabilityScreen() {
     }
     setSaving(true);
     try {
-      await api.patch(`/sessions/${selectedSessionBlock.id}`, { status: "cancelled" });
-      const conversation = await api.post<{ id: number }>("/messages/conversations", {
-        other_user_id: selectedSessionBlock.tutor_id,
-      });
-      const when = new Date(selectedSessionBlock.scheduled_start_iso).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
-      const message = `${studentDisplayName} cancelled the session at ${when}. Reason: ${reason}`;
-      await api.post(`/messages/conversations/${conversation.id}/messages`, {
-        content: message,
+      await api.patch(`/sessions/${selectedSessionBlock.id}`, {
+        status: "cancelled",
+        cancel_reason: reason,
       });
       setShowCancelSessionModal(false);
       setShowDetailModal(false);
       setCancelReason("");
       setSelectedSessionBlock(null);
       await loadData();
-      Alert.alert("Session cancelled", "The tutor has been notified in chat.");
+      Alert.alert("Session cancelled", "The tutor has been notified.");
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to cancel session.");
     } finally {

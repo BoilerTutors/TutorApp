@@ -17,6 +17,7 @@ type RootStackParamList = {
         matches?: MatchItem[];
       }
     | undefined;
+  "Contact Admin": undefined;
 };
 
 type MatchItem = {
@@ -99,6 +100,12 @@ export default function StudentScreen() {
           onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
         >
           <Text style={styles.buttonText}>👤 My Profile</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Contact Admin")}
+        >
+          <Text style={styles.buttonText}>🛟 Contact Admin</Text>
         </Pressable>
       </View>
 
