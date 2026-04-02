@@ -187,7 +187,7 @@ def test_verify_mfa_returns_429_after_too_many_attempts(client, db_session):
     )
 
     assert response.status_code == 429
-    assert response.json()["detail"] == "Too many failed attempts. Please log in again."
+    assert response.json()["detail"] == "Too many failed attempts. Please wait 5 minutes before trying again."
 
     user = get_user_by_email(db_session, "locked@purdue.edu")
     assert user is not None
