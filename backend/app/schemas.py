@@ -12,6 +12,22 @@ SemesterCode = Literal["F", "S"]
 # ---- User schemas ----
 # ===========================================================
 
+class AdminCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+
+
+class AdminUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(default=None, min_length=8)
+
+
+class AdminPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+
 class UserCreate(BaseModel):
     email: EmailStr
     first_name: str = Field(min_length=1, max_length=255)

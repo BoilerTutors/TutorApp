@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import User
+from app.models import Admin, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -23,9 +23,9 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(sub: str) -> str:
+def create_access_token(sub: str, role: str = "user") -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode = {"sub": sub, "exp": expire}
+    to_encode = {"sub": sub, "role": role, "exp": expire}
     return jwt.encode(
         to_encode,
         settings.secret_key.get_secret_value(),
@@ -33,18 +33,27 @@ def create_access_token(sub: str) -> str:
     )
 
 
-def get_user_from_token(token: str, db: Session) -> User:
+def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(
             token,
             settings.secret_key.get_secret_value(),
             algorithms=[settings.algorithm],
         )
-        sub = payload.get("sub")
-        if not sub:
-            raise HTTPException(status_code=401, detail="Invalid token")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return payload
+
+
+def get_user_from_token(token: str, db: Session) -> User:
+    payload = decode_token(token)
+    role = payload.get("role", "user")
+    if role != "user":
+        raise HTTPException(status_code=401, detail="Invalid token")
+    sub = payload["sub"]
     try:
         user_id = int(sub)
     except ValueError:
@@ -53,6 +62,21 @@ def get_user_from_token(token: str, db: Session) -> User:
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+
+def get_admin_from_token(token: str, db: Session) -> Admin:
+    payload = decode_token(token)
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=401, detail="Invalid token")
+    sub = payload["sub"]
+    try:
+        admin_id = int(sub)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    admin = db.get(Admin, admin_id)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin not found")
+    return admin
 
 
 def get_current_user(
@@ -66,3 +90,16 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return get_user_from_token(credentials.credentials, db)
+
+
+def get_current_admin(
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Admin:
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return get_admin_from_token(credentials.credentials, db)
