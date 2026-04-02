@@ -58,3 +58,14 @@ def verify_session_verification_code(db: Session, session_id: int, pin: str) -> 
         session.is_verified = True
         db.commit()
     return is_valid
+
+    def get_student_sessions_past(db: Session, student_user_id: int) -> list[TutoringSession]:
+    """Return past sessions for a student (most recent first)."""
+    now = datetime.now(timezone.utc)
+    return (
+        db.query(TutoringSession)
+        .filter(TutoringSession.student_id == student_user_id)
+        .filter(TutoringSession.scheduled_end < now)
+        .order_by(TutoringSession.scheduled_start.desc())
+        .all()
+    )
