@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -8,7 +8,7 @@ from app.crud.matches import (
     has_student_matched_tutor,
 )
 from app.database import get_db
-from app.models import TutorProfile, User
+from app.models import Class, TutorClass, TutorProfile, User
 from app.schemas import MatchResultPublic, MatchSelectRequest
 from app.services.embeddings import knn_retrieve_candidates, rerank_candidates
 from app.services.notification_events import build_and_store_notification, emit_notification
@@ -44,6 +44,7 @@ def _serialize_reranked_rows(db: Session, reranked: list[dict]) -> list[MatchRes
                 tutor_profile_id=tutor_profile.id if tutor_profile else None,
                 tutor_first_name=tutor_user.first_name,
                 tutor_last_name=tutor_user.last_name,
+                
                 tutor_major=tutor_profile.major if tutor_profile else None,
                 similarity_score=float(row["final_score"]),
                 embedding_similarity=row.get("embedding_similarity"),
@@ -94,10 +95,36 @@ def _build_saved_match_payload(db: Session, current_user_id: int) -> list[MatchR
     return response
 
 
-def _compute_reranked_rows(db: Session, student_user_id: int) -> list[dict]:
+def _candidate_tutor_user_ids_for_class(db: Session, class_id: int) -> list[int]:
+    class_exists = db.query(Class.id).filter(Class.id == class_id).first()
+    if class_exists is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Class not found",
+        )
+
+    rows = (
+        db.query(TutorProfile.user_id)
+        .join(TutorClass, TutorClass.tutor_id == TutorProfile.id)
+        .filter(TutorClass.class_id == class_id)
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _compute_reranked_rows(
+    db: Session,
+    student_user_id: int,
+    class_id: int | None = None,
+) -> list[dict]:
+    candidate_tutor_user_ids: list[int] | None = None
+    if class_id is not None:
+        candidate_tutor_user_ids = _candidate_tutor_user_ids_for_class(db, class_id)
+
     candidates = knn_retrieve_candidates(
         db,
         student_id=student_user_id,
+        candidate_tutor_user_ids=candidate_tutor_user_ids,
         top_k=50,
         model_name="local-hash-v1",
     )
@@ -113,6 +140,7 @@ def _compute_reranked_rows(db: Session, student_user_id: int) -> list[dict]:
 
 @router.post("/me/refresh", response_model=list[MatchResultPublic])
 def refresh_my_match_candidates(
+    class_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[MatchResultPublic]:
@@ -122,7 +150,7 @@ def refresh_my_match_candidates(
             detail="Only student accounts can calculate tutor matches.",
         )
 
-    reranked = _compute_reranked_rows(db, current_user.id)
+    reranked = _compute_reranked_rows(db, current_user.id, class_id=class_id)
     return _serialize_reranked_rows(db, reranked)
 
 
@@ -138,7 +166,7 @@ async def select_match(
             detail="Only student accounts can select tutor matches.",
         )
 
-    reranked = _compute_reranked_rows(db, current_user.id)
+    reranked = _compute_reranked_rows(db, current_user.id, class_id=body.class_id)
     selected = next((row for row in reranked if int(row["tutor_id"]) == body.tutor_id), None)
     if selected is None:
         raise HTTPException(
