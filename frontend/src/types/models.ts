@@ -15,6 +15,12 @@ export type UserProfile = {
   bio?: string;
 };
 
+export type LoginResponse = {
+  access_token?: string;
+  token_type: string;
+  mfa_required: boolean;
+};
+
 export type StudentClass = BoilerClass & {
   helpLevel: number;
 };
@@ -39,6 +45,19 @@ export type Review = {
   rating: number;
   comment?: string;
   createdAt: string;
+};
+
+export type TutoringSession = {
+  id: number;
+  tutor_id: number;
+  student_id: number;
+  subject: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  cost_cents: number;
+  notes?: string | null;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  purchased_at: string;
 };
 
 export type MockUserRole = "student" | "tutor";

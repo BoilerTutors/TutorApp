@@ -355,6 +355,13 @@ class TutoringSession(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     cost_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verification_code_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
     # pending | confirmed | completed | cancelled
     status: Mapped[str] = mapped_column(
@@ -628,6 +635,12 @@ class Match(Base):
     class_strength: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     availability_overlap: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     location_match: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    unmatched: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

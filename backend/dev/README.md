@@ -17,7 +17,7 @@ Stop: `docker compose -f dev/docker-compose.yml down`
 In **backend/.env**, set (and comment out RDS_* if you want to use only local):
 
 ```env
-LOCAL_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/tutorapp
+LOCAL_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/tutorapp
 ```
 
 See **dev/.env.example** for the same line.
@@ -30,6 +30,12 @@ From **backend**, pick **one** approach:
 
 ```bash
 python dev/create_tables.py
+```
+
+If models changed and you need to force-sync schema locally:
+
+```bash
+python dev/create_tables.py --reset
 ```
 
 **B — Alembic only (matches production migrations)**
@@ -62,7 +68,7 @@ This prints their `id` and `email` so you can use them in the FastAPI docs for m
 If you have the Postgres client installed:
 
 ```bash
-PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d tutorapp
+PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d tutorapp
 ```
 
 Then, for example:
@@ -85,4 +91,4 @@ python dev/create_tables.py                        # recreate tables from models
 python dev/seed_test_data.py                       # reseed test users (optional)
 ```
 
-Credentials used by Docker: user `postgres`, password `postgres`, database `tutorapp`, port `5432`.
+Credentials used by Docker: user `postgres`, password `postgres`, database `tutorapp`, host port `5433` (maps to `5432` in the container).

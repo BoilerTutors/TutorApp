@@ -67,6 +67,12 @@ async function request<T>(
         throw new Error("Your session has expired. Please sign in again.");
       }
       // No token (e.g. wrong login credentials): show message on the login screen.
+      const text401 = await res.json();
+      const detail = text401.detail;
+      if (detail === "Incorrect MFA code") {
+        throw new Error(detail);
+      }
+
       throw new Error("Invalid email or password.");
     }
     const text = await res.text();
@@ -102,7 +108,7 @@ async function request<T>(
   }
   const contentType = res.headers.get("content-type");
   const contentLength = res.headers.get("content-length");
-  if (contentLength === "0" || !res.body) {
+  if (contentLength === "0") {
     return undefined as T;
   }
   if (contentType?.includes("application/json")) {
