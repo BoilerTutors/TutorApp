@@ -24,6 +24,14 @@ from app.database import Base
 # ===========================================
 # Users, Tutor Profiles, and Student Profiles
 # ============================================
+class Admin(Base):
+    __tablename__ = "admins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
 class User(Base):
     # Name of the table in the database
     __tablename__ = "users"

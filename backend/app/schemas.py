@@ -12,6 +12,22 @@ SemesterCode = Literal["F", "S"]
 # ---- User schemas ----
 # ===========================================================
 
+class AdminCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+
+
+class AdminUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(default=None, min_length=8)
+
+
+class AdminPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+
 class UserCreate(BaseModel):
     email: EmailStr
     first_name: str = Field(min_length=1, max_length=255)
@@ -299,6 +315,21 @@ class TutoringSessionPublic(BaseModel):
     purchased_at: datetime
 
 
+class AdminTutoringSessionPublic(BaseModel):
+    id: int
+    tutor_id: int
+    student_id: int
+    tutor_name: str
+    student_name: str
+    subject: str
+    scheduled_start: datetime
+    scheduled_end: datetime
+    cost_cents: int
+    notes: Optional[str] = None
+    status: SessionStatus
+    purchased_at: datetime
+      
+      
 class SessionVerificationCodePublic(BaseModel):
     verification_code: str = Field(min_length=6, max_length=6)
 
