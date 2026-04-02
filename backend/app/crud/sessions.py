@@ -152,7 +152,7 @@ def get_current_session_for_user(db: Session, user_id: int) -> TutoringSession |
         .filter(or_(TutoringSession.tutor_id == user_id, TutoringSession.student_id == user_id))
         .filter(TutoringSession.scheduled_start <= now)
         .filter(TutoringSession.scheduled_end >= now)
-        .filter(TutoringSession.status.in_(("pending", "confirmed")))
+        .filter(TutoringSession.status.in_(("pending", "confirmed", "accepted")))
         .order_by(TutoringSession.scheduled_start.desc())
         .first()
     )
