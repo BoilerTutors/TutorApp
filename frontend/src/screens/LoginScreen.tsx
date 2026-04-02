@@ -201,47 +201,47 @@ export default function LoginScreen() {
     <>
       <StatusBar style="dark" />
       <Modal visible={mfaPending} transparent animationType="fade">
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalCard}>
-      <Text style={styles.modalTitle}>Verify Your Identity</Text>
-      <Text style={styles.modalSubtitle}>
-        Enter the 6-digit code sent to {email}
-      </Text>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Verify Your Identity</Text>
+          <Text style={styles.modalSubtitle}>
+            Enter the 6-digit code sent to {email}
+          </Text>
 
-      <TextInput
-        style={styles.mfaInput}
-        placeholder="000000"
-        placeholderTextColor="#B0B6C3"
-        keyboardType="number-pad"
-        maxLength={6}
-        value={mfaCode}
-        onChangeText={setMfaCode}
-        autoFocus
-      />
+          <TextInput
+            style={styles.mfaInput}
+            placeholder="000000"
+            placeholderTextColor="#B0B6C3"
+            keyboardType="number-pad"
+            maxLength={6}
+            value={mfaCode}
+            onChangeText={setMfaCode}
+            autoFocus
+          />
 
-      {loginError ? <Text style={styles.loginErrorText}>{loginError}</Text> : null}
+          {loginError ? <Text style={styles.loginErrorText}>{loginError}</Text> : null}
 
-      <TouchableOpacity
-        style={styles.loginBtn}
-        onPress={onVerifyMfa}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.loginText}>VERIFY</Text>
-        )}
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.loginBtn}
+            onPress={onVerifyMfa}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.loginText}>VERIFY</Text>
+            )}
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        onPress={() => { setMfaPending(false); setMfaCode(""); setLoginError(null); }}
-        style={{ marginTop: 12 }}
-      >
-        <Text style={styles.link}>Back to Login</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-</Modal>
+          <TouchableOpacity
+            onPress={() => { setMfaPending(false); setMfaCode(""); setLoginError(null); }}
+            style={{ marginTop: 12 }}
+          >
+            <Text style={styles.link}>Back to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
     <View style={styles.screen}>
       <View style={styles.headerWrap}>
         
