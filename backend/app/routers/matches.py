@@ -6,10 +6,11 @@ from app.crud.matches import (
     add_match_to_latest_run,
     get_latest_matches_for_student,
     has_student_matched_tutor,
+    unmatch_student_tutor_pair,
 )
 from app.database import get_db
 from app.models import Class, TutorClass, TutorProfile, User
-from app.schemas import MatchResultPublic, MatchSelectRequest
+from app.schemas import MatchResultPublic, MatchSelectRequest, MatchUnmatchRequest
 from app.services.embeddings import knn_retrieve_candidates, rerank_candidates
 from app.services.notification_events import build_and_store_notification, emit_notification
 
@@ -217,3 +218,27 @@ def get_my_matches(
             detail="Only student accounts can view tutor matches.",
         )
     return _build_saved_match_payload(db, current_user.id)
+
+
+@router.post("/unmatch", status_code=status.HTTP_204_NO_CONTENT)
+def unmatch_student_from_tutor(
+    body: MatchUnmatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    if not current_user.is_tutor or current_user.tutor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only tutor accounts can unmatch from messages.",
+        )
+
+    updated = unmatch_student_tutor_pair(
+        db,
+        student_id=body.student_id,
+        tutor_id=current_user.id,
+    )
+    if updated == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active match found for this student-tutor pair.",
+        )
