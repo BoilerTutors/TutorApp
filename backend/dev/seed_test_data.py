@@ -63,7 +63,7 @@ def get_or_create_session(
         scheduled_end=scheduled_end,
         cost_cents=cost_cents,
         notes=notes,
-        status="confirmed",
+        status="accepted",
     )
     session.add(tutoring_session)
     session.flush()  # assign id
