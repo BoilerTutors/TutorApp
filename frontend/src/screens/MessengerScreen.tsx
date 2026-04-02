@@ -68,6 +68,21 @@ type TutoringSessionCreate = {
   cost_cents: number;
   notes?: string;
 };
+type CurrentSessionExists = {
+  has_current_session: boolean;
+  session_id?: number | null;
+  other_user_id?: number | null;
+  is_verified?: boolean | null;
+};
+type SessionVerificationCodeResponse = {
+  verification_code: string;
+};
+type SessionVerificationVerifyResponse =
+  | boolean
+  | {
+      message?: string;
+      verified?: boolean;
+    };
 type SidebarItem =
   | {
       kind: "match";
@@ -131,7 +146,18 @@ export default function MessengerScreen() {
   const [unmatchingStudentId, setUnmatchingStudentId] = useState<number | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
+  const [currentSessionExists, setCurrentSessionExists] = useState<CurrentSessionExists>({
+    has_current_session: false,
+  });
+  const [generatingVerificationCode, setGeneratingVerificationCode] = useState(false);
+  const [generatedVerificationCode, setGeneratedVerificationCode] = useState<string | null>(null);
+  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
+  const [verifyPin, setVerifyPin] = useState("");
+  const [verifyingSessionCode, setVerifyingSessionCode] = useState(false);
+  const [verifyCodeError, setVerifyCodeError] = useState<string | null>(null);
+  const [verifiedSessionIds, setVerifiedSessionIds] = useState<Record<number, boolean>>({});
   const wsRef = useRef<WebSocket | null>(null);
+  const sessionVerificationWsRef = useRef<WebSocket | null>(null);
   const lastOpenedTutorRef = useRef<number | null>(null);
   const sidebarItems = useMemo<SidebarItem[]>(
     () =>
@@ -156,9 +182,20 @@ export default function MessengerScreen() {
   );
 
   const loadSidebarItems = useCallback(async () => {
-    const me = await api.get<UserMe>("/users/me");
+    const [me, currentSession] = await Promise.all([
+      api.get<UserMe>("/users/me"),
+      api.get<CurrentSessionExists>("/sessions/current/exists"),
+    ]);
     setCurrentUserId(me.id);
     setIsStudentAccount(me.is_student);
+    setCurrentSessionExists(currentSession);
+    if (
+      currentSession.has_current_session &&
+      currentSession.session_id != null &&
+      currentSession.is_verified === true
+    ) {
+      setVerifiedSessionIds((prev) => ({ ...prev, [currentSession.session_id as number]: true }));
+    }
 
     if (!me.is_student) {
       const convs = await api.get<
@@ -196,6 +233,93 @@ export default function MessengerScreen() {
       setConversations([]);
     }
   }, []);
+
+  const shouldShowVerifySessionButton = useCallback(
+    (otherUserId: number) =>
+      currentSessionExists.has_current_session &&
+      currentSessionExists.session_id != null &&
+      currentSessionExists.other_user_id === otherUserId,
+    [currentSessionExists]
+  );
+
+  const onVerifySessionPress = useCallback(async () => {
+    if (!isStudentAccount) {
+      setVerifyCodeError(null);
+      setVerifyPin("");
+      setVerifyModalVisible(true);
+      return;
+    }
+
+    const sessionId = currentSessionExists.session_id;
+    if (!sessionId || generatingVerificationCode) {
+      return;
+    }
+
+    try {
+      setGeneratingVerificationCode(true);
+      const response = await api.post<SessionVerificationCodeResponse>(
+        `/sessions/${sessionId}/verification-code`
+      );
+      setGeneratedVerificationCode(response.verification_code);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to generate verification code.";
+      Alert.alert("Error", message);
+    } finally {
+      setGeneratingVerificationCode(false);
+    }
+  }, [currentSessionExists.session_id, generatingVerificationCode, isStudentAccount]);
+
+  const onSubmitTutorVerificationCode = useCallback(async () => {
+    const sessionId = currentSessionExists.session_id;
+    const pin = verifyPin.trim();
+    if (!sessionId) {
+      setVerifyCodeError("No active session found.");
+      return;
+    }
+    if (!pin) {
+      setVerifyCodeError("Please enter the verification code.");
+      return;
+    }
+
+    try {
+      setVerifyingSessionCode(true);
+      setVerifyCodeError(null);
+      const response = await api.post<SessionVerificationVerifyResponse>(
+        `/sessions/${sessionId}/verify-code`,
+        { pin }
+      );
+      const verified =
+        response === true ||
+        (typeof response === "object" &&
+          response != null &&
+          ("verified" in response
+            ? response.verified === true
+            : typeof response.message === "string" &&
+              response.message.toLowerCase().includes("accepted")));
+      if (!verified) {
+        setVerifyCodeError("Verification was not accepted. Please try again.");
+        return;
+      }
+      setVerifiedSessionIds((prev) => ({ ...prev, [sessionId]: true }));
+      setVerifyModalVisible(false);
+      setVerifyPin("");
+      Alert.alert("Session Verified", "Verification code accepted.");
+      await loadSidebarItems();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid verification code.";
+      setVerifyCodeError(message);
+    } finally {
+      setVerifyingSessionCode(false);
+    }
+  }, [currentSessionExists.session_id, loadSidebarItems, verifyPin]);
+
+  useEffect(() => {
+    // Prevent showing stale code when active session changes or ends.
+    if (!currentSessionExists.has_current_session) {
+      setGeneratedVerificationCode(null);
+    }
+  }, [currentSessionExists.has_current_session, currentSessionExists.session_id]);
 
   const loadMessages = useCallback(async (conversationId: number) => {
     const rows = await api.get<Message[]>(`/messages/conversations/${conversationId}/messages`);
@@ -589,6 +713,50 @@ export default function MessengerScreen() {
     };
   }, [selectedConversationId]);
 
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      return;
+    }
+
+    const wsBase = API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "");
+    const wsUrl = `${wsBase}/sessions/ws/verification?token=${encodeURIComponent(token)}`;
+    const ws = new WebSocket(wsUrl);
+    sessionVerificationWsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data as string) as {
+          event_type?: string;
+          session_id?: number;
+          is_verified?: boolean;
+        };
+        if (
+          payload.event_type === "session_verification_updated" &&
+          payload.is_verified === true &&
+          typeof payload.session_id === "number"
+        ) {
+          setVerifiedSessionIds((prev) => ({ ...prev, [payload.session_id!]: true }));
+        }
+      } catch {
+        // Ignore malformed websocket payloads.
+      }
+    };
+
+    ws.onclose = () => {
+      if (sessionVerificationWsRef.current === ws) {
+        sessionVerificationWsRef.current = null;
+      }
+    };
+
+    return () => {
+      ws.close();
+      if (sessionVerificationWsRef.current === ws) {
+        sessionVerificationWsRef.current = null;
+      }
+    };
+  }, [currentUserId]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -660,6 +828,45 @@ export default function MessengerScreen() {
                     >
                       <Text style={styles.scheduleBtnText}>Schedule Session</Text>
                     </Pressable>
+                    {shouldShowVerifySessionButton(item.tutor_id) ? (
+                      <View style={styles.verifySessionRow}>
+                        {(() => {
+                          const isVerificationComplete =
+                            currentSessionExists.session_id != null &&
+                            verifiedSessionIds[currentSessionExists.session_id] === true;
+                          return (
+                        <Pressable
+                          style={[
+                            styles.verifySessionBtn,
+                            isVerificationComplete && styles.verifySessionBtnComplete,
+                          ]}
+                          onPress={() => {
+                            void onVerifySessionPress();
+                          }}
+                          disabled={generatingVerificationCode || isVerificationComplete}
+                        >
+                          <Text
+                            style={[
+                              styles.verifySessionBtnText,
+                              isVerificationComplete && styles.verifySessionBtnTextComplete,
+                            ]}
+                          >
+                            {isVerificationComplete
+                              ? "Verification Complete"
+                              : generatingVerificationCode
+                                ? "Generating..."
+                                : "Verify Session"}
+                          </Text>
+                        </Pressable>
+                          );
+                        })()}
+                        {generatedVerificationCode ? (
+                          <View style={styles.verificationCodeBlock}>
+                            <Text style={styles.verificationCodeText}>{generatedVerificationCode}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
                   </View>
                 );
               }
@@ -708,6 +915,45 @@ export default function MessengerScreen() {
                         {unmatchingStudentId === item.other_user_id ? "Unmatching..." : "Unmatch"}
                       </Text>
                     </Pressable>
+                  ) : null}
+                  {shouldShowVerifySessionButton(item.other_user_id) ? (
+                    <View style={styles.verifySessionRow}>
+                      {(() => {
+                        const isVerificationComplete =
+                          currentSessionExists.session_id != null &&
+                          verifiedSessionIds[currentSessionExists.session_id] === true;
+                        return (
+                      <Pressable
+                        style={[
+                          styles.verifySessionBtn,
+                          isVerificationComplete && styles.verifySessionBtnComplete,
+                        ]}
+                        onPress={() => {
+                          void onVerifySessionPress();
+                        }}
+                        disabled={generatingVerificationCode || isVerificationComplete}
+                      >
+                        <Text
+                          style={[
+                            styles.verifySessionBtnText,
+                            isVerificationComplete && styles.verifySessionBtnTextComplete,
+                          ]}
+                        >
+                          {isVerificationComplete
+                            ? "Verification Complete"
+                            : generatingVerificationCode
+                              ? "Generating..."
+                              : "Verify Session"}
+                        </Text>
+                      </Pressable>
+                        );
+                      })()}
+                      {generatedVerificationCode ? (
+                        <View style={styles.verificationCodeBlock}>
+                          <Text style={styles.verificationCodeText}>{generatedVerificationCode}</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   ) : null}
                 </View>
               );
@@ -893,6 +1139,62 @@ export default function MessengerScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        visible={verifyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setVerifyModalVisible(false);
+          setVerifyPin("");
+          setVerifyCodeError(null);
+        }}
+      >
+        <View style={styles.verifyModalOverlay}>
+          <View style={styles.verifyModalCard}>
+            <Text style={styles.verifyModalTitle}>Verify Session</Text>
+            <Text style={styles.verifyModalSubtitle}>Enter the 6-digit student verification code</Text>
+            <TextInput
+              style={styles.verifyCodeInput}
+              placeholder="000000"
+              placeholderTextColor="#B0B6C3"
+              keyboardType="number-pad"
+              maxLength={6}
+              value={verifyPin}
+              onChangeText={(value) => {
+                setVerifyPin(value);
+                if (verifyCodeError) {
+                  setVerifyCodeError(null);
+                }
+              }}
+              autoFocus
+            />
+            {verifyCodeError ? <Text style={styles.verifyCodeErrorText}>{verifyCodeError}</Text> : null}
+            <Pressable
+              style={styles.verifyCodeSubmitBtn}
+              onPress={() => {
+                void onSubmitTutorVerificationCode();
+              }}
+              disabled={verifyingSessionCode}
+            >
+              {verifyingSessionCode ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.verifyCodeSubmitBtnText}>VERIFY</Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setVerifyModalVisible(false);
+                setVerifyPin("");
+                setVerifyCodeError(null);
+              }}
+              style={styles.verifyModalCloseBtn}
+            >
+              <Text style={styles.verifyModalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1060,6 +1362,46 @@ const styles = StyleSheet.create({
   },
   scheduleBtnText: {
     color: "#8A6A00",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  verifySessionBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#7C3AED",
+    backgroundColor: "#F5F3FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  verifySessionBtnText: {
+    color: "#5B21B6",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  verifySessionBtnComplete: {
+    borderColor: "#15803D",
+    backgroundColor: "#DCFCE7",
+  },
+  verifySessionBtnTextComplete: {
+    color: "#166534",
+  },
+  verifySessionRow: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  verificationCodeBlock: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    backgroundColor: "#FAF5FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  verificationCodeText: {
+    color: "#4C1D95",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1254,5 +1596,73 @@ const styles = StyleSheet.create({
   modalCloseText: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  verifyModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  verifyModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 380,
+    alignItems: "center",
+  },
+  verifyModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1F36",
+    marginBottom: 8,
+  },
+  verifyModalSubtitle: {
+    fontSize: 14,
+    color: "#8C93A4",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  verifyCodeInput: {
+    fontSize: 24,
+    letterSpacing: 8,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#E2E5ED",
+    borderRadius: 10,
+    padding: 12,
+    width: "100%",
+    marginBottom: 16,
+    color: "#1A1F36",
+    backgroundColor: "#FFFFFF",
+  },
+  verifyCodeErrorText: {
+    fontSize: 14,
+    color: "#B91C1C",
+    fontWeight: "500",
+    marginBottom: 12,
+    alignSelf: "flex-start",
+  },
+  verifyCodeSubmitBtn: {
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: "#2E57A2",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  verifyCodeSubmitBtnText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
+  verifyModalCloseBtn: {
+    marginTop: 12,
+  },
+  verifyModalCloseText: {
+    color: "#3F6FB4",
+    textDecorationLine: "underline",
   },
 });

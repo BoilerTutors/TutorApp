@@ -144,6 +144,20 @@ def get_student_sessions_future(db: Session, student_user_id: int) -> list[Tutor
     )
 
 
+def get_current_session_for_user(db: Session, user_id: int) -> TutoringSession | None:
+    """Return the current active session for a user, if one exists."""
+    now = datetime.now(timezone.utc)
+    return (
+        db.query(TutoringSession)
+        .filter(or_(TutoringSession.tutor_id == user_id, TutoringSession.student_id == user_id))
+        .filter(TutoringSession.scheduled_start <= now)
+        .filter(TutoringSession.scheduled_end >= now)
+        .filter(TutoringSession.status.in_(("pending", "confirmed")))
+        .order_by(TutoringSession.scheduled_start.desc())
+        .first()
+    )
+
+
 def create_tutoring_session(
     db: Session,
     *,
