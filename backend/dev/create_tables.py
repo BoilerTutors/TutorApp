@@ -1,4 +1,4 @@
-"""Create all tables in the local Postgres. Run from backend/ so app is importable.
+"""Rebuild all tables in local Postgres to match current models.
 
   cd backend && python dev/create_tables.py
 """
@@ -15,8 +15,11 @@ from app import models  # noqa: F401 — registers models with Base
 
 
 def main() -> None:
+    # drop_all + create_all ensures local schema stays aligned with models.py
+    # even when table/column definitions change during development.
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    print("Tables created.")
+    print("Tables rebuilt to match current schema.")
 
 
 if __name__ == "__main__":
