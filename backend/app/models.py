@@ -345,7 +345,7 @@ class TutoringSession(Base):
     __table_args__ = (
         CheckConstraint("scheduled_end > scheduled_start", name="ck_session_time_order"),
         CheckConstraint(
-            "status IN ('pending', 'confirmed', 'completed', 'cancelled')",
+            "status IN ('pending', 'accepted', 'declined', 'completed', 'cancelled')",
             name="ck_session_status",
         ),
     )
@@ -371,7 +371,7 @@ class TutoringSession(Base):
         server_default="false",
     )
 
-    # pending | confirmed | completed | cancelled
+    # pending | accepted | declined | completed | cancelled
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="pending"
     ) 

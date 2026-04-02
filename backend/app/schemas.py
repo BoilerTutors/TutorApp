@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, mod
 
 
 # Type aliases for the session status and semester code
-SessionStatus = Literal["pending", "confirmed", "completed", "cancelled"]
+SessionStatus = Literal["pending", "accepted", "declined", "completed", "cancelled"]
 SemesterCode = Literal["F", "S"]
 
 # ===========================================================
