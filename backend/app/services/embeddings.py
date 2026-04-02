@@ -288,6 +288,7 @@ def knn_retrieve_candidates(
     db: Session,
     *,
     student_id: int,
+    candidate_tutor_user_ids: Sequence[int] | None = None,
     top_k: int = 50,
     model_name: str = "local-hash-v1",
     bio_weight: float = 1.0,
@@ -304,7 +305,14 @@ def knn_retrieve_candidates(
     if student is None:
         return []
 
-    tutors = db.query(TutorProfile).all()
+    tutors_query = db.query(TutorProfile)
+    if candidate_tutor_user_ids is not None:
+        candidate_ids = [int(tutor_id) for tutor_id in candidate_tutor_user_ids]
+        if not candidate_ids:
+            return []
+        tutors_query = tutors_query.filter(TutorProfile.user_id.in_(candidate_ids))
+
+    tutors = tutors_query.all()
     if not tutors:
         return []
 

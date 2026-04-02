@@ -488,6 +488,7 @@ class MatchResultPublic(BaseModel):
 
 class MatchSelectRequest(BaseModel):
     tutor_id: int
+    class_id: Optional[int] = None
 
 
 class DeviceTokenRegisterRequest(BaseModel):
