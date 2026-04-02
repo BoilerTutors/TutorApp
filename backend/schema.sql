@@ -326,7 +326,8 @@ CREATE TABLE public.students (
     grad_year integer,
     preferred_locations text[] DEFAULT '{}'::text[],
     help_needed text[] DEFAULT '{}'::text[],
-    bio text
+    bio text,
+    session_mode character varying(20) DEFAULT 'both'::character varying
 );
 
 

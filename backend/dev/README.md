@@ -24,11 +24,28 @@ See **dev/.env.example** for the same line.
 
 ## 3. Create tables
 
-From **backend**:
+From **backend**, pick **one** approach:
+
+**A — SQLAlchemy only (simplest for local dev)**
 
 ```bash
 python dev/create_tables.py
 ```
+
+**B — Alembic only (matches production migrations)**
+
+```bash
+alembic upgrade head
+```
+
+If you already ran `create_tables.py`, the database has tables but Alembic does not know that. Running `alembic upgrade head` then tries to replay the first migration, which creates `conversations` and fails with **relation "conversations" already exists**. Fix it by marking that baseline migration as already applied, then apply the rest:
+
+```bash
+alembic stamp 6c05817e209e
+alembic upgrade head
+```
+
+(Use your venv’s `alembic`, e.g. `backend/.venv/bin/alembic`, if the command is not on your `PATH`.)
 
 ## 4. Seed test data
 
