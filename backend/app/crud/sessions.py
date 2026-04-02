@@ -182,6 +182,19 @@ def get_session_for_tutor(db: Session, *, session_id: int, tutor_user_id: int) -
     )
 
 
+def get_session_for_student(
+    db: Session, *, session_id: int, student_user_id: int
+) -> TutoringSession | None:
+    return (
+        db.query(TutoringSession)
+        .filter(
+            TutoringSession.id == session_id,
+            TutoringSession.student_id == student_user_id,
+        )
+        .first()
+    )
+
+
 def set_session_status(
     db: Session,
     *,

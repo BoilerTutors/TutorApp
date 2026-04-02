@@ -56,7 +56,7 @@ export type TutoringSession = {
   scheduled_end: string;
   cost_cents: number;
   notes?: string | null;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
   purchased_at: string;
 };
 

@@ -9,6 +9,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -29,12 +30,14 @@ type AvailabilitySlot = {
 
 type SessionBlock = {
   id: number; // session id
+  tutor_id: number;
   day_of_week: number;
   start_time: string;
   end_time: string;
+  scheduled_start_iso: string;
   subject: string;
   tutorName: string;
-  status?: "pending" | "confirmed" | "completed" | "cancelled";
+  status?: "pending" | "accepted" | "declined" | "completed" | "cancelled";
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -112,14 +115,17 @@ export default function AvailabilityScreen() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
   const [selectedSessionBlock, setSelectedSessionBlock] = useState<SessionBlock | null>(null);
+  const [studentDisplayName, setStudentDisplayName] = useState("Student");
 
   // Delete confirm
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCancelSessionModal, setShowCancelSessionModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [availSlots, pastSessions, futureSessions] = await Promise.all([
+      const [availSlots, pastSessions, futureSessions, me] = await Promise.all([
         api.get<AvailabilitySlot[]>("/availability/me"),
         api.get<
           Array<{
@@ -128,7 +134,7 @@ export default function AvailabilityScreen() {
             scheduled_start: string;
             scheduled_end: string;
             subject: string;
-            status: "pending" | "confirmed" | "completed" | "cancelled";
+            status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
           }>
         >("/sessions/student/past"),
         api.get<
@@ -138,12 +144,19 @@ export default function AvailabilityScreen() {
             scheduled_start: string;
             scheduled_end: string;
             subject: string;
-            status: "pending" | "confirmed" | "completed" | "cancelled";
+            status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
           }>
         >("/sessions/student/future"),
+        api.get<{ first_name: string; last_name: string }>("/users/me"),
       ]);
+      const fullName = `${me.first_name} ${me.last_name}`.trim();
+      if (fullName) {
+        setStudentDisplayName(fullName);
+      }
       const allSessions = [...pastSessions, ...futureSessions];
-      const activeSessions = allSessions.filter((s) => s.status !== "cancelled");
+      const activeSessions = allSessions.filter(
+        (s) => s.status === "pending" || s.status === "accepted"
+      );
       const uniqueTutorIds = Array.from(new Set(activeSessions.map((s) => s.tutor_id)));
       const tutorNamePairs = await Promise.all(
         uniqueTutorIds.map(async (id) => {
@@ -162,6 +175,7 @@ export default function AvailabilityScreen() {
         const end = new Date(s.scheduled_end);
         return {
           id: s.id,
+          tutor_id: s.tutor_id,
           day_of_week: jsDayToAppDay(start.getDay()),
           start_time: `${String(start.getHours()).padStart(2, "0")}:${String(
             start.getMinutes()
@@ -169,6 +183,7 @@ export default function AvailabilityScreen() {
           end_time: `${String(end.getHours()).padStart(2, "0")}:${String(
             end.getMinutes()
           ).padStart(2, "0")}:00`,
+          scheduled_start_iso: s.scheduled_start,
           subject: s.subject,
           tutorName: tutorNameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}`,
           status: s.status,
@@ -262,6 +277,42 @@ export default function AvailabilityScreen() {
     setSelectedSessionBlock(block);
     setSelectedSlot(null);
     setShowDetailModal(true);
+  };
+
+  const handleCancelSession = async () => {
+    if (!selectedSessionBlock) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      Alert.alert("Reason required", "Please provide a reason for cancellation.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.patch(`/sessions/${selectedSessionBlock.id}`, { status: "cancelled" });
+      const conversation = await api.post<{ id: number }>("/messages/conversations", {
+        other_user_id: selectedSessionBlock.tutor_id,
+      });
+      const when = new Date(selectedSessionBlock.scheduled_start_iso).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const message = `${studentDisplayName} cancelled the session at ${when}. Reason: ${reason}`;
+      await api.post(`/messages/conversations/${conversation.id}/messages`, {
+        content: message,
+      });
+      setShowCancelSessionModal(false);
+      setShowDetailModal(false);
+      setCancelReason("");
+      setSelectedSessionBlock(null);
+      await loadData();
+      Alert.alert("Session cancelled", "The tutor has been notified in chat.");
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to cancel session.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Render a single day column
@@ -522,10 +573,69 @@ export default function AvailabilityScreen() {
                   <Ionicons name="lock-closed-outline" size={14} color="#5D667C" />
                   <Text style={styles.sessionNoticeText}>This block is reserved for a session</Text>
                 </View>
+                <TouchableOpacity
+                  style={[styles.cancelSessionBtn, saving && styles.saveBtnDisabled]}
+                  disabled={saving}
+                  onPress={() => {
+                    setShowDetailModal(false);
+                    setShowCancelSessionModal(true);
+                  }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color="#FFF" />
+                  <Text style={styles.cancelSessionBtnText}>Cancel Session</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
         </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showCancelSessionModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowCancelSessionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModal}>
+            <Text style={styles.confirmTitle}>Cancel Session</Text>
+            <Text style={styles.confirmBody}>
+              Tell your tutor why you need to cancel this session.
+            </Text>
+            <TextInput
+              style={styles.reasonInput}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="Enter cancellation reason..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={styles.confirmBtns}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => {
+                  setShowCancelSessionModal(false);
+                  setCancelReason("");
+                }}
+                disabled={saving}
+              >
+                <Text style={styles.confirmCancelText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmDeleteBtn}
+                onPress={handleCancelSession}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.confirmDeleteText}>Submit Cancel</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Delete Confirm Modal */}
@@ -718,6 +828,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sessionNoticeText: { fontSize: 13, color: "#5D667C" },
+  cancelSessionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 12,
+  },
+  cancelSessionBtnText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
   deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -737,6 +858,17 @@ const styles = StyleSheet.create({
   },
   confirmTitle: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 8 },
   confirmBody: { fontSize: 14, color: "#5D667C", marginBottom: 20, lineHeight: 20 },
+  reasonInput: {
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 96,
+    color: "#1B2D50",
+    marginBottom: 16,
+    backgroundColor: "#FFFFFF",
+  },
   confirmBtns: { flexDirection: "row", gap: 12 },
   confirmCancelBtn: {
     flex: 1,

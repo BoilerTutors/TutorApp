@@ -36,7 +36,7 @@ type TutoringSessionPublic = {
   scheduled_end: string;
   cost_cents: number;
   notes: string | null;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
   purchased_at: string;
 };
 
@@ -131,7 +131,9 @@ export default function TutorCalendarScreen() {
       ]);
 
       const allSessions = [...futureSessions, ...pastSessions];
-      const activeSessions = allSessions.filter((s) => s.status !== "cancelled");
+      const activeSessions = allSessions.filter(
+        (s) => s.status === "pending" || s.status === "accepted"
+      );
       const uniqueStudentIds = Array.from(new Set(activeSessions.map((s) => s.student_id)));
       const studentNamePairs = await Promise.all(
         uniqueStudentIds.map(async (id) => {
