@@ -22,6 +22,10 @@ import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
 import { AuthProvider } from "./src/context/AuthContext";
+import AvailabilityScreen from "./src/screens/AvailabilityScreen";
+import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
+import ReportTutorScreen from "./src/screens/ReportTutorScreen";
+import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -281,6 +285,29 @@ export default function App() {
             name="Matches"
             component={MatchesScreen}
             options={{ title: "Your Matches" }}
+          />
+          <Stack.Screen
+            name="Availability"
+            component={AvailabilityScreen}
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen
+            name="Session History"
+            component={SessionHistoryScreen}
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen
+            name="Report Tutor"
+            component={ReportTutorScreen}
+            options={{ headerShown: false }}
+          />
+          
+          <Stack.Screen
+            name="Tutor Profile Reviews"
+            component={TutorProfileReviewsScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </NavigationContainer>
