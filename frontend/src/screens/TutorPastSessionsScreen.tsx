@@ -23,34 +23,6 @@ const SORT_LABELS: Record<SortOption, string> = {
   name: "Name (A–Z)",
 };
 
-const FALLBACK_PAST_SESSIONS: Session[] = [
-  { id: 101, studentName: "Emma D.", subject: "Chemistry", date: "Monday, Apr 22", startTime: "10:00 AM", endTime: "11:00 AM", duration: "1 hour", status: "completed" },
-  { id: 102, studentName: "Liam P.", subject: "Linear Algebra", date: "Sunday, Apr 21", startTime: "3:00 PM", endTime: "4:00 PM", duration: "1 hour", status: "completed" },
-  { id: 103, studentName: "Sophia R.", subject: "Data Structures", date: "Saturday, Apr 20", startTime: "1:00 PM", endTime: "2:30 PM", duration: "1.5 hours", status: "completed" },
-  { id: 104, studentName: "Noah K.", subject: "Physics II", date: "Friday, Apr 19", startTime: "11:00 AM", endTime: "12:00 PM", duration: "1 hour", status: "completed" },
-  { id: 105, studentName: "Olivia M.", subject: "Organic Chemistry", date: "Thursday, Apr 18", startTime: "2:00 PM", endTime: "3:00 PM", duration: "1 hour", status: "completed" },
-  { id: 106, studentName: "Aiden T.", subject: "Calculus III", date: "Wednesday, Apr 17", startTime: "9:00 AM", endTime: "10:00 AM", duration: "1 hour", status: "completed" },
-  { id: 107, studentName: "Isabella C.", subject: "Statistics", date: "Tuesday, Apr 16", startTime: "4:00 PM", endTime: "5:00 PM", duration: "1 hour", status: "completed" },
-  { id: 108, studentName: "Mason W.", subject: "Discrete Math", date: "Monday, Apr 15", startTime: "10:00 AM", endTime: "11:30 AM", duration: "1.5 hours", status: "completed" },
-  { id: 109, studentName: "Ava J.", subject: "Biology", date: "Sunday, Apr 14", startTime: "1:00 PM", endTime: "2:00 PM", duration: "1 hour", status: "completed" },
-  { id: 110, studentName: "Ethan B.", subject: "Computer Architecture", date: "Saturday, Apr 13", startTime: "3:00 PM", endTime: "4:30 PM", duration: "1.5 hours", status: "completed" },
-  { id: 111, studentName: "Charlotte L.", subject: "Differential Equations", date: "Friday, Apr 12", startTime: "11:00 AM", endTime: "12:00 PM", duration: "1 hour", status: "completed" },
-  { id: 112, studentName: "James H.", subject: "Thermodynamics", date: "Thursday, Apr 11", startTime: "2:00 PM", endTime: "3:00 PM", duration: "1 hour", status: "completed" },
-  { id: 113, studentName: "Amelia F.", subject: "Probability", date: "Wednesday, Apr 10", startTime: "9:00 AM", endTime: "10:00 AM", duration: "1 hour", status: "completed" },
-  { id: 114, studentName: "Benjamin G.", subject: "Operating Systems", date: "Tuesday, Apr 9", startTime: "4:00 PM", endTime: "5:30 PM", duration: "1.5 hours", status: "completed" },
-  { id: 115, studentName: "Mia N.", subject: "Algorithms", date: "Monday, Apr 8", startTime: "10:00 AM", endTime: "11:00 AM", duration: "1 hour", status: "completed" },
-  { id: 116, studentName: "Lucas V.", subject: "Calculus I", date: "Sunday, Apr 7", startTime: "1:00 PM", endTime: "2:00 PM", duration: "1 hour", status: "completed" },
-  { id: 117, studentName: "Harper S.", subject: "English Composition", date: "Saturday, Apr 6", startTime: "3:00 PM", endTime: "4:00 PM", duration: "1 hour", status: "completed" },
-  { id: 118, studentName: "Alexander Q.", subject: "Microeconomics", date: "Friday, Apr 5", startTime: "11:00 AM", endTime: "12:00 PM", duration: "1 hour", status: "completed" },
-  { id: 119, studentName: "Evelyn Z.", subject: "Genetics", date: "Thursday, Apr 4", startTime: "2:00 PM", endTime: "3:30 PM", duration: "1.5 hours", status: "completed" },
-  { id: 120, studentName: "Daniel X.", subject: "Signals & Systems", date: "Wednesday, Apr 3", startTime: "9:00 AM", endTime: "10:00 AM", duration: "1 hour", status: "completed" },
-  { id: 121, studentName: "Abigail A.", subject: "Abstract Algebra", date: "Tuesday, Apr 2", startTime: "4:00 PM", endTime: "5:00 PM", duration: "1 hour", status: "completed" },
-  { id: 122, studentName: "Ryan S.", subject: "Calculus II", date: "Monday, Apr 1", startTime: "10:00 AM", endTime: "11:00 AM", duration: "1 hour", status: "completed" },
-  { id: 123, studentName: "Emily O.", subject: "Machine Learning", date: "Sunday, Mar 31", startTime: "1:00 PM", endTime: "2:30 PM", duration: "1.5 hours", status: "completed" },
-  { id: 124, studentName: "John D.", subject: "Physics", date: "Saturday, Mar 30", startTime: "3:00 PM", endTime: "4:00 PM", duration: "1 hour", status: "completed" },
-  { id: 125, studentName: "Grace I.", subject: "Biochemistry", date: "Friday, Mar 29", startTime: "11:00 AM", endTime: "12:00 PM", duration: "1 hour", status: "completed" },
-];
-
 function formatDuration(startIso: string, endIso: string): string {
   const start = new Date(startIso);
   const end = new Date(endIso);
@@ -114,7 +86,7 @@ export default function TutorPastSessionsScreen() {
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
-  const [pastSessions, setPastSessions] = useState<Session[]>(FALLBACK_PAST_SESSIONS);
+  const [pastSessions, setPastSessions] = useState<Session[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -151,11 +123,11 @@ export default function TutorPastSessionsScreen() {
           };
         });
 
-        if (mounted && mapped.length > 0) {
+        if (mounted) {
           setPastSessions(mapped);
         }
       } catch {
-        // Keep fallback placeholders if API call fails.
+        // Keep empty array if API call fails.
       }
     };
 

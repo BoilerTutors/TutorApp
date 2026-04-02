@@ -29,38 +29,7 @@ type QuickAction = {
   onPress?: () => void;
 };
 
-const PLACEHOLDER_UPCOMING: Session[] = [
-  {
-    id: 1,
-    studentName: "Ryan S.",
-    subject: "Calculus II",
-    date: "Thursday, May 2",
-    startTime: "4:00 PM",
-    endTime: "5:00 PM",
-    duration: "1 hour",
-    status: "confirmed",
-  },
-  {
-    id: 3,
-    studentName: "John D.",
-    subject: "Physics",
-    date: "Friday, May 3",
-    startTime: "1:00 PM",
-    endTime: "2:00 PM",
-    duration: "1 hour",
-    status: "pending",
-  },
-];
-
 const MAX_RECENT_PAST = 3;
-
-const PLACEHOLDER_PAST: Session[] = [
-  { id: 2, studentName: "Emma D.", subject: "Chemistry", date: "Monday, Apr 22", startTime: "10:00 AM", endTime: "11:00 AM", duration: "1 hour", status: "completed" },
-  { id: 4, studentName: "Liam P.", subject: "Linear Algebra", date: "Sunday, Apr 21", startTime: "3:00 PM", endTime: "4:00 PM", duration: "1 hour", status: "completed" },
-  { id: 5, studentName: "Sophia R.", subject: "Data Structures", date: "Saturday, Apr 20", startTime: "1:00 PM", endTime: "2:30 PM", duration: "1.5 hours", status: "completed" },
-  { id: 6, studentName: "Noah K.", subject: "Physics II", date: "Friday, Apr 19", startTime: "11:00 AM", endTime: "12:00 PM", duration: "1 hour", status: "completed" },
-  { id: 7, studentName: "Olivia M.", subject: "Organic Chemistry", date: "Thursday, Apr 18", startTime: "2:00 PM", endTime: "3:00 PM", duration: "1 hour", status: "completed" },
-];
 
 function formatDuration(startIso: string, endIso: string): string {
   const start = new Date(startIso);
@@ -107,8 +76,8 @@ export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [firstName, setFirstName] = useState("Tutor");
   const [searchQuery, setSearchQuery] = useState("");
-  const [upcomingSessions, setUpcomingSessions] = useState<Session[]>(PLACEHOLDER_UPCOMING);
-  const [pastSessions, setPastSessions] = useState<Session[]>(PLACEHOLDER_PAST);
+  const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([]);
+  const [pastSessions, setPastSessions] = useState<Session[]>([]);
 
   const filterSessions = useCallback(
     (sessions: Session[]) => {
@@ -179,15 +148,11 @@ export default function TutorScreen() {
           if (me.first_name?.trim()) {
             setFirstName(me.first_name.trim());
           }
-          if (futureRaw.length > 0) {
-            setUpcomingSessions(futureRaw.map(mapSession));
-          }
-          if (pastRaw.length > 0) {
-            setPastSessions(pastRaw.map(mapSession));
-          }
+          setUpcomingSessions(futureRaw.map(mapSession));
+          setPastSessions(pastRaw.map(mapSession));
         }
       } catch {
-        // Keep placeholders as fallback if API calls fail.
+        // Keep empty arrays if API calls fail.
       }
     };
     void loadDashboardData();
@@ -202,18 +167,7 @@ export default function TutorScreen() {
       icon: "person",
       onPress: () => navigation.navigate("Profile", { role: "TUTOR" }),
     },
-    {
-      label: "Messages",
-      icon: "mail",
-      onPress: () => navigation.navigate("Messenger"),
-    },
-    { label: "Availability", icon: "time" },
-    { label: "Sessions", icon: "calendar" },
-    {
-      label: "Reviews",
-      icon: "star",
-      onPress: () => navigation.navigate("Tutor Reviews"),
-    },
+    { label: "Sessions Calendar", icon: "calendar" },
     { label: "Payouts", icon: "cash" },
   ];
 

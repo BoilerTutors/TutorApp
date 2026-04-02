@@ -34,11 +34,8 @@ type QuickAction = {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { label: "Find Tutors", icon: "search" },
-  { label: "Messages", icon: "mail" },
   { label: "Book Session", icon: "calendar" },
   { label: "My Schedule", icon: "time" },
-  { label: "My Reviews", icon: "star" },
-  { label: "Profile", icon: "person" },
 ];
 
 export default function StudentScreen() {
@@ -169,7 +166,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 10,
+    rowGap: 5,
   },
   actionButton: {
     width: "31.5%",
