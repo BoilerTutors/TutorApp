@@ -14,6 +14,7 @@ from app.routers import (
     messages,
     matches,
     notifications,
+    reports,
 )
 
 app = FastAPI(title="BoilerTutors API", version="0.1.0")
@@ -45,6 +46,7 @@ app.include_router(availability.router, prefix="/availability", tags=["availabil
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(matches.router, prefix="/matches", tags=["matches"])
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(reports.router, prefix="/reports", tags=["reports"])
 
 
 @app.get("/")

@@ -8,7 +8,6 @@ Create Date: 2026-02-26 10:30:00.000000
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -19,10 +18,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-    op.add_column("students", sa.Column("bio", sa.Text(), nullable=True))
+    """Upgrade schema.
+
+    IF NOT EXISTS: local DBs created with create_tables.py already have this column.
+    """
+    op.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS bio TEXT;")
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column("students", "bio")
+    op.execute("ALTER TABLE students DROP COLUMN IF EXISTS bio;")

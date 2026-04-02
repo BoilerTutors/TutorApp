@@ -82,7 +82,7 @@ def get_latest_matches_for_student(db: Session, *, student_id: int) -> list[Matc
 
     return (
         db.query(Match)
-        .filter(Match.run_id == latest_run.id)
+        .filter(Match.run_id == latest_run.id, Match.unmatched.is_(False))
         .order_by(Match.rank.asc())
         .all()
     )
@@ -153,7 +153,43 @@ def add_match_to_latest_run(
 def has_student_matched_tutor(db: Session, *, student_id: int, tutor_id: int) -> bool:
     existing = (
         db.query(Match.id)
-        .filter(Match.student_id == student_id, Match.tutor_id == tutor_id)
+        .filter(
+            Match.student_id == student_id,
+            Match.tutor_id == tutor_id,
+            Match.unmatched.is_(False),
+        )
         .first()
     )
     return existing is not None
+
+
+def has_unmatched_pair(db: Session, *, student_id: int, tutor_id: int) -> bool:
+    row = (
+        db.query(Match.id)
+        .filter(
+            Match.student_id == student_id,
+            Match.tutor_id == tutor_id,
+            Match.unmatched.is_(True),
+        )
+        .first()
+    )
+    return row is not None
+
+
+def unmatch_student_tutor_pair(
+    db: Session,
+    *,
+    student_id: int,
+    tutor_id: int,
+) -> int:
+    updated_count = (
+        db.query(Match)
+        .filter(
+            Match.student_id == student_id,
+            Match.tutor_id == tutor_id,
+            Match.unmatched.is_(False),
+        )
+        .update({Match.unmatched: True}, synchronize_session=False)
+    )
+    db.commit()
+    return int(updated_count or 0)

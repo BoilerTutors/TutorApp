@@ -74,6 +74,8 @@ type MeResponse = {
     bio: string | null;
     major: string | null;
     grad_year: number | null;
+    preferred_locations?: string[] | null;
+    session_mode?: string | null;
   } | null;
 };
 
@@ -137,6 +139,14 @@ export default function ProfileScreen() {
   const [editHelpProvided, setEditHelpProvided] = useState<string[]>([]);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [classSearchQuery, setClassSearchQuery] = useState("");
+
+  // Student preferences (session mode + locations; separate from tutor prefs state)
+  const [editingStudentPrefs, setEditingStudentPrefs] = useState(false);
+  const [savingStudentPrefs, setSavingStudentPrefs] = useState(false);
+  const [editStudentLocations, setEditStudentLocations] = useState<string[]>([]);
+  const [editStudentSessionMode, setEditStudentSessionMode] = useState<
+    "online" | "in_person" | "both"
+  >("both");
 
   // Same class list as tutor registration (no backend fetch)
   const availableClasses = AVAILABLE_CLASSES_FALLBACK;
@@ -218,6 +228,23 @@ export default function ProfileScreen() {
     setShowClassPicker(false);
     setClassSearchQuery("");
   }, []);
+
+  const startEditingStudentPrefs = useCallback(() => {
+    const s = me?.student;
+    setEditStudentLocations(s?.preferred_locations ?? []);
+    setEditStudentSessionMode((s?.session_mode as "online" | "in_person" | "both") ?? "both");
+    setEditingStudentPrefs(true);
+  }, [me?.student]);
+
+  const cancelEditingStudentPrefs = useCallback(() => {
+    setEditingStudentPrefs(false);
+  }, []);
+
+  const toggleStudentLocation = (loc: string) => {
+    setEditStudentLocations((prev) =>
+      prev.includes(loc) ? prev.filter((l) => l !== loc) : [...prev, loc]
+    );
+  };
 
   const addClass = (c: { id: number; courseCode: string; title?: string }) => {
     setEditClasses((prev) => {
@@ -320,6 +347,35 @@ export default function ProfileScreen() {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to save preferences");
     } finally {
       setSavingPrefs(false);
+    }
+  };
+
+  const handleSaveStudentPrefs = async () => {
+    if (!me?.is_student) {
+      Alert.alert("Cannot save", "Only student accounts can save student preferences.");
+      return;
+    }
+    if (
+      (editStudentSessionMode === "in_person" || editStudentSessionMode === "both") &&
+      editStudentLocations.length === 0
+    ) {
+      Alert.alert("Required", "Please select at least one tutoring location.");
+      return;
+    }
+    setSavingStudentPrefs(true);
+    try {
+      await api.patch<MeResponse>("/users/me", {
+        student_profile: {
+          preferred_locations: editStudentLocations,
+          session_mode: editStudentSessionMode,
+        },
+      });
+      await loadMe({ rethrow: true });
+      setEditingStudentPrefs(false);
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save preferences");
+    } finally {
+      setSavingStudentPrefs(false);
     }
   };
 
@@ -542,7 +598,7 @@ export default function ProfileScreen() {
 
       {me.is_tutor && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tutoring preferences</Text>
+          <Text style={styles.sectionTitle}>Tutoring Preferences</Text>
           {editingPrefs ? (
             <>
               {/* Classes */}
@@ -758,6 +814,107 @@ export default function ProfileScreen() {
                 <Text style={styles.placeholder}>No preferences set yet.</Text>
               )}
               <Pressable style={styles.button} onPress={startEditingPrefs}>
+                <Text style={styles.buttonText}>Edit preferences</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
+
+      {me.is_student && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Student preferences</Text>
+          {editingStudentPrefs ? (
+            <>
+              <Text style={styles.label}>Session mode</Text>
+              <View style={styles.chipRow}>
+                {(["online", "in_person", "both"] as const).map((m) => (
+                  <Pressable
+                    key={m}
+                    style={[styles.chip, editStudentSessionMode === m && styles.chipActive]}
+                    onPress={() => setEditStudentSessionMode(m)}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        editStudentSessionMode === m && styles.chipTextActive,
+                      ]}
+                    >
+                      {m === "both" ? "Online & In-Person" : m === "online" ? "Online" : "In-Person"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {(editStudentSessionMode === "in_person" || editStudentSessionMode === "both") && (
+                <>
+                  <Text style={styles.label}>Preferred locations</Text>
+                  <View style={styles.chipRowWrap}>
+                    {PURDUE_LOCATIONS.map((loc) => (
+                      <Pressable
+                        key={loc}
+                        style={[
+                          styles.chip,
+                          editStudentLocations.includes(loc) && styles.chipActive,
+                        ]}
+                        onPress={() => toggleStudentLocation(loc)}
+                      >
+                        <Text
+                          style={[
+                            styles.chipText,
+                            editStudentLocations.includes(loc) && styles.chipTextActive,
+                          ]}
+                        >
+                          {loc}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              <View style={styles.row}>
+                <Pressable
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={cancelEditingStudentPrefs}
+                  disabled={savingStudentPrefs}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.button}
+                  onPress={handleSaveStudentPrefs}
+                  disabled={savingStudentPrefs}
+                >
+                  {savingStudentPrefs ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.buttonText}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>Session mode</Text>
+              <Text style={styles.value}>
+                {me.student?.session_mode === "both" || !me.student?.session_mode
+                  ? "Online & In-Person"
+                  : me.student?.session_mode === "online"
+                    ? "Online"
+                    : "In-Person"}
+              </Text>
+              {(me.student?.preferred_locations?.length ?? 0) > 0 && (
+                <>
+                  <Text style={styles.label}>Locations</Text>
+                  <Text style={styles.value}>{me.student!.preferred_locations!.join(", ")}</Text>
+                </>
+              )}
+              {(me.student?.preferred_locations?.length ?? 0) === 0 &&
+                !me.student?.session_mode && (
+                  <Text style={styles.placeholder}>No preferences set yet.</Text>
+                )}
+              <Pressable style={styles.button} onPress={startEditingStudentPrefs}>
                 <Text style={styles.buttonText}>Edit preferences</Text>
               </Pressable>
             </>

@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, View, Image, Dimensions, Text } from "react-native";
+import { ActivityIndicator, StyleSheet, View, Image, Dimensions, Text } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "./src/screens/LoginScreen";
-import AdminLoginScreen from "./src/screens/AdminLoginScreen";
-import AdminDashboard from "./src/screens/AdminDashboard";
-import AdminSessionsScreen from "./src/screens/AdminSessionsScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
@@ -18,32 +15,31 @@ import NotificationsTab from "./src/screens/settings/NotificationsTab";
 import HelpScreen from "./src/screens/HelpScreen";
 import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
 import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
+<<<<<<< HEAD
 import TutorPastSessionsScreen from "./src/screens/TutorPastSessionsScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
+=======
+import TutorSearchScreen from "./src/screens/TutorSearchScreen";
+import { api, setAuthToken } from "./src/api/client";
+>>>>>>> 1d9a378 (final changes)
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
 import { AuthProvider } from "./src/context/AuthContext";
-import { API_BASE_URL } from "./src/config";
-import AvailabilityScreen from "./src/screens/AvailabilityScreen";
-import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
-import ReportTutorScreen from "./src/screens/ReportTutorScreen";
-import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
+import { ReviewsProvider } from "./src/context/ReviewsContext";
 
 const Stack = createNativeStackNavigator();
 
 type RootStackParamList = {
   Login: undefined;
-  "Admin Login": undefined;
-  "Admin Dashboard": undefined;
-  "Admin Sessions": undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
   "Student Registration": undefined;
   "Student Reviews": undefined;
   "Tutor Reviews": undefined;
+<<<<<<< HEAD
   "Tutor Past Sessions": undefined;
   Messenger:
     | {
@@ -70,42 +66,27 @@ type RootStackParamList = {
   } | undefined;
   Profile:
     | {
-        role?: "STUDENT" | "TUTOR" | "ADMIN";
+        role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
       }
     | undefined;
+=======
+  "Tutor Search": undefined;
+  Messenger: { openTutorUserId?: number; openTutorName?: string } | undefined;
+  Settings: { initialTab?: string } | undefined;
+  Matches: { matches?: Array<{ rank: number; tutor_id: number; tutor_first_name: string; tutor_last_name: string; tutor_major: string | null; similarity_score: number }> } | undefined;
+>>>>>>> 1d9a378 (final changes)
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
-type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard" | "Admin Dashboard";
+type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
 const AUTH_CHECK_TIMEOUT_MS = 15000;
 type MeResponse = { is_tutor: boolean; is_student: boolean };
-type AdminMeResponse = { id: number; email: string };
-
-async function probeWithToken<T>(path: string, token: string): Promise<T | null> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) {
-    return null;
-  }
-  return (await res.json()) as T;
-}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("auth timeout")), timeoutMs);
-    promise
-      .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
+    promise.then((value) => { clearTimeout(timer); resolve(value); }).catch((error) => { clearTimeout(timer); reject(error); });
   });
 }
 
@@ -113,48 +94,17 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<InitialRouteName | null>(null);
 
   useEffect(() => {
-    setOnUnauthorized(() => {
-      Alert.alert(
-        "Session expired",
-        "Please sign in again.",
-        [{ text: "OK", onPress: () => navigationRef.resetRoot({ index: 0, routes: [{ name: "Login" }] }) }]
-      );
-    });
-    return () => setOnUnauthorized(null);
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
-
     const bootstrapAuth = async () => {
       try {
         const token = await loadToken();
-        if (!token) {
-          if (!cancelled) {
-            setInitialRoute("Login");
-          }
-          return;
-        }
-
+        if (!token) { if (!cancelled) setInitialRoute("Login"); return; }
         setAuthToken(token);
-        try {
-          const me = await withTimeout(probeWithToken<MeResponse>("/users/me", token), AUTH_CHECK_TIMEOUT_MS);
-          if (!me) {
-            throw new Error("not a user token");
-          }
-          const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
-          if (!cancelled) {
-            setInitialRoute(route);
-          }
-        } catch {
-          const admin = await withTimeout(probeWithToken<AdminMeResponse>("/admin/me", token), AUTH_CHECK_TIMEOUT_MS);
-          if (!cancelled && admin?.id) {
-            setInitialRoute("Admin Dashboard");
-          } else if (!cancelled) {
-            setAuthToken(null);
-            await clearToken();
-            setInitialRoute("Login");
-          }
+        const me = await withTimeout(api.get<MeResponse>("/users/me"), AUTH_CHECK_TIMEOUT_MS);
+        const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
+<<<<<<< HEAD
+        if (!cancelled) {
+          setInitialRoute(route);
         }
       } catch (e) {
         setAuthToken(null);
@@ -167,14 +117,17 @@ export default function App() {
         if (!cancelled) {
           setInitialRoute("Login");
         }
+=======
+        if (!cancelled) setInitialRoute(route);
+      } catch {
+        setAuthToken(null);
+        await clearToken();
+        if (!cancelled) setInitialRoute("Login");
+>>>>>>> 1d9a378 (final changes)
       }
     };
-
     void bootstrapAuth();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   if (!initialRoute) {
@@ -186,27 +139,21 @@ export default function App() {
     );
   }
 
-  const linking = {
-    prefixes: [],
-    config: {
-      screens: {
-        Login: "login",
-        "Admin Login": "admin/login",
-        "Admin Dashboard": "admin/dashboard",
-        Profile: "profile",
-      },
-    },
-  };
+  const linking = { prefixes: [], config: { screens: { Profile: "profile" } } };
 
   return (
     <AuthProvider>
-      <NavigationContainer linking={linking as any} ref={navigationRef}>
-        <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{
+      <ReviewsProvider>
+        <NavigationContainer linking={linking as any} ref={navigationRef}>
+          <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
+            <Stack.Screen name="Login" component={LoginScreen} options={{ header: () => (
+              <View style={styles.loginHeader}>
+                <Image source={require("./src/assets/purdue_logo.png")} style={styles.loginHeaderImage} resizeMode="cover" />
+              </View>
+            )}} />
+            <Stack.Screen name="Student Dashboard" component={StudentScreen} options={({ navigation }) => ({
               header: () => (
+<<<<<<< HEAD
                 <View style={styles.loginHeader}>
                   <Image
                     source={require("./src/assets/purdue_logo.png")}
@@ -216,42 +163,6 @@ export default function App() {
                 </View>
               )
             }}
-          />
-          <Stack.Screen
-            name="Admin Login"
-            component={AdminLoginScreen}
-            options={{
-              header: () => (
-                <View style={styles.loginHeader}>
-                  <Image
-                    source={require("./src/assets/purdue_logo.png")}
-                    style={styles.loginHeaderImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              )
-            }}
-          />
-          <Stack.Screen
-            name="Admin Dashboard"
-            component={AdminDashboard}
-            options={({ navigation }) => ({
-              header: () => (
-                <DashboardHeader
-                  role="ADMIN"
-                  onLogout={async () => {
-                    await logout();
-                    navigation.reset({ index: 0, routes: [{ name: "Admin Login" }] });
-                  }}
-                  onHelpPress={() => navigation.navigate("Help")}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="Admin Sessions"
-            component={AdminSessionsScreen}
-            options={{ header: () => <GeneralHeader title="Recent Purchases" /> }}
           />
           <Stack.Screen
             name="Student Dashboard"
@@ -329,7 +240,7 @@ export default function App() {
                   role={
                     (
                       route.params as
-                        | { role?: "STUDENT" | "TUTOR" | "ADMIN" }
+                        | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
                         | undefined
                     )?.role ?? "STUDENT"
                   }
@@ -359,60 +270,45 @@ export default function App() {
             component={MatchesScreen}
             options={{ title: "Your Matches" }}
           />
-          <Stack.Screen
-            name="Availability"
-            component={AvailabilityScreen}
-            options={{ headerShown: false }}
-          />
-          
-          <Stack.Screen
-            name="Session History"
-            component={SessionHistoryScreen}
-            options={{ headerShown: false }}
-          />
-          
-          <Stack.Screen
-            name="Report Tutor"
-            component={ReportTutorScreen}
-            options={{ headerShown: false }}
-          />
-          
-          <Stack.Screen
-            name="Tutor Profile Reviews"
-            component={TutorProfileReviewsScreen}
-            options={{ headerShown: false }}
-          />
         </Stack.Navigator>
       </NavigationContainer>
+=======
+                <DashboardHeader role="STUDENT" onLogout={async () => { await logout(); navigation.reset({ index: 0, routes: [{ name: "Login" }] }); }}
+                  onSettingsPress={() => navigation.navigate("Settings")}
+                  onNotificationsPress={() => navigation.navigate("Settings", { initialTab: "notifications" })} />
+              ),
+            })} />
+            <Stack.Screen name="Tutor Dashboard" component={TutorScreen} options={({ navigation }) => ({
+              header: () => (
+                <DashboardHeader role="TUTOR" onLogout={async () => { await logout(); navigation.reset({ index: 0, routes: [{ name: "Login" }] }); }}
+                  onSettingsPress={() => navigation.navigate("Settings")}
+                  onNotificationsPress={() => navigation.navigate("Settings", { initialTab: "notifications" })} />
+              ),
+            })} />
+            <Stack.Screen name="Tutor Registration" component={TutorRegistrationScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Student Registration" component={StudentRegistrationScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Student Reviews" component={StudentReviewsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Tutor Reviews" component={TutorReviewsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Tutor Search" component={TutorSearchScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Messenger" component={MessengerScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Profile" component={ProfileScreen} options={({ navigation, route }) => ({
+              header: () => <ProfileHeader onBack={() => navigation.goBack()} role={(route.params as any)?.role ?? "STUDENT"} />,
+            })} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={({ navigation }) => ({
+              header: () => <SettingsHeader onBack={() => navigation.goBack()} />,
+            })} />
+            <Stack.Screen name="Matches" component={MatchesScreen} options={{ title: "Your Matches" }} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </ReviewsProvider>
+>>>>>>> 1d9a378 (final changes)
     </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  loginHeader: {
-    width: "100%",
-    height: HEADER_HEIGHT,
-    overflow: "hidden",
-    paddingTop: "20%",
-    marginBottom: "-15%",
-    marginTop: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F5F6F8",
-  },
-  loginHeaderImage: {
-    width: "90%",
-    height: "100%"
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F5F6F8",
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#59627A",
-  },
+  loginHeader: { width: "100%", height: HEADER_HEIGHT, overflow: "hidden", paddingTop: "20%", marginBottom: "-15%", marginTop: 0, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F6F8" },
+  loginHeaderImage: { width: "90%", height: "100%" },
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F5F6F8" },
+  loadingText: { marginTop: 10, fontSize: 14, color: "#59627A" },
 });
