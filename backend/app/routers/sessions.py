@@ -8,10 +8,18 @@
 - PATCH  /sessions/{session_id}  - update session (status, reschedule, notes)
 - DELETE /sessions/{session_id}  - cancel/delete a session
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy.orm import Session  # type: ignore[import]
 
-from app.auth import get_current_admin, get_current_user
+from app.auth import get_current_admin, get_current_user, get_user_from_token
 from app.crud.sessions import (
     create_tutoring_session,
     get_recent_sessions_for_admin as get_recent_sessions_for_admin_crud,
@@ -23,13 +31,16 @@ from app.crud.sessions import (
     get_tutor_sessions_past as get_tutor_sessions_past_crud,
     get_student_sessions_past as get_student_sessions_past_crud,
     set_session_status,
+    get_current_session_for_user,
     verify_session_verification_code,
 )
 from app.database import get_db
+from app.services.session_verification_ws import session_verification_ws_manager
 from app.schemas import AdminTutoringSessionPublic, TutoringSessionPublic
 from app.models import TutoringSession, User, Admin
 from app.services.notification_events import build_and_store_notification
 from app.schemas import (
+    CurrentSessionExistsPublic,
     Message,
     SessionVerificationCodePublic,
     SessionVerificationVerifyRequest,
@@ -42,6 +53,7 @@ from app.schemas import (
 router = APIRouter()
 
 
+
 def _display_name(user: User) -> str:
     return f"{user.first_name} {user.last_name}".strip()
 
@@ -49,6 +61,22 @@ def _display_name(user: User) -> str:
 def _format_session_time(value) -> str:
     local_dt = value.astimezone()
     return local_dt.strftime("%b %d, %I:%M %p").replace(" 0", " ")
+
+@router.websocket("/ws/verification")
+async def session_verification_ws(
+    websocket: WebSocket,
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+) -> None:
+    """Realtime session verification status updates for the authenticated user."""
+    user = get_user_from_token(token, db)
+    await session_verification_ws_manager.connect(websocket, user.id)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        session_verification_ws_manager.disconnect(websocket, user.id)
+
 
 
 @router.post("/", response_model=TutoringSessionPublic, status_code=status.HTTP_201_CREATED)
@@ -162,6 +190,31 @@ def get_student_sessions_future(
     return [TutoringSessionPublic.model_validate(s) for s in sessions]
 
 
+@router.get(
+    "/current/exists",
+    response_model=CurrentSessionExistsPublic,
+    response_model_exclude_none=True,
+)
+def get_current_user_has_current_session(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CurrentSessionExistsPublic:
+    """Return whether the authenticated user is in an active tutoring session now."""
+    session = get_current_session_for_user(db, current_user.id)
+    if session is None:
+        return CurrentSessionExistsPublic(has_current_session=False)
+
+    other_user_id = (
+        session.student_id if session.tutor_id == current_user.id else session.tutor_id
+    )
+    return CurrentSessionExistsPublic(
+        has_current_session=True,
+        session_id=session.id,
+        other_user_id=other_user_id,
+        is_verified=session.is_verified,
+    )
+
+
 
 @router.get("/admin/recent", response_model=list[AdminTutoringSessionPublic])
 def get_recent_sessions_for_admin(
@@ -205,7 +258,7 @@ def create_session_verification_code(
 
 
 @router.post("/{session_id}/verify-code", response_model=Message)
-def verify_session_code(
+async def verify_session_code(
     session_id: int,
     data: SessionVerificationVerifyRequest,
     db: Session = Depends(get_db),
@@ -236,6 +289,13 @@ def verify_session_code(
             detail="Invalid verification code",
         )
 
+    payload = {
+        "event_type": "session_verification_updated",
+        "session_id": session_id,
+        "is_verified": True,
+    }
+    await session_verification_ws_manager.send_to_user(session.student_id, payload)
+    await session_verification_ws_manager.send_to_user(session.tutor_id, payload)
     return Message(message="Verification code accepted")
 
 

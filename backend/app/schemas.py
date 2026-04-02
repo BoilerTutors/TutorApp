@@ -338,6 +338,13 @@ class SessionVerificationCodePublic(BaseModel):
 class SessionVerificationVerifyRequest(BaseModel):
     pin: str = Field(min_length=6, max_length=6)
 
+
+class CurrentSessionExistsPublic(BaseModel):
+    has_current_session: bool
+    session_id: Optional[int] = None
+    other_user_id: Optional[int] = None
+    is_verified: Optional[bool] = None
+
 # ===========================================================
 # ---- Review schemas ----
 # ===========================================================
