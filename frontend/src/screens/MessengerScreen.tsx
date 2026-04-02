@@ -60,6 +60,14 @@ type AvailabilitySlot = {
   start_time: string;
   end_time: string;
 };
+type TutoringSessionCreate = {
+  tutor_id: number;
+  subject: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  cost_cents: number;
+  notes?: string;
+};
 type SidebarItem =
   | {
       kind: "match";
@@ -113,6 +121,13 @@ export default function MessengerScreen() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityStudentName, setAvailabilityStudentName] = useState<string>("");
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleSavingSlotId, setScheduleSavingSlotId] = useState<number | null>(null);
+  const [scheduleTutorUserId, setScheduleTutorUserId] = useState<number | null>(null);
+  const [scheduleTutorName, setScheduleTutorName] = useState<string>("");
+  const [scheduleSlots, setScheduleSlots] = useState<AvailabilitySlot[]>([]);
+  const [scheduleSubject, setScheduleSubject] = useState("Tutoring Session");
   const [unmatchingStudentId, setUnmatchingStudentId] = useState<number | null>(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
@@ -343,6 +358,25 @@ export default function MessengerScreen() {
     return `${hour12}:${minuteStr} ${suffix}`;
   };
 
+  const getNextDateForDay = (dayOfWeek: number) => {
+    const now = new Date();
+    const jsTarget = (dayOfWeek + 1) % 7; // app 0=Mon..6=Sun => js 1..0
+    const candidate = new Date(now);
+    const delta = (jsTarget - now.getDay() + 7) % 7;
+    candidate.setDate(now.getDate() + delta);
+    candidate.setHours(0, 0, 0, 0);
+    return candidate;
+  };
+
+  const toIsoForNextDayTime = (dayOfWeek: number, timeValue: string) => {
+    const [rawHour = "0", rawMinute = "0"] = timeValue.split(":");
+    const hour = Number.parseInt(rawHour, 10);
+    const minute = Number.parseInt(rawMinute, 10);
+    const d = getNextDateForDay(dayOfWeek);
+    d.setHours(Number.isNaN(hour) ? 0 : hour, Number.isNaN(minute) ? 0 : minute, 0, 0);
+    return d.toISOString();
+  };
+
   const onViewStudentAvailability = async (studentUserId: number, studentName: string) => {
     setAvailabilityStudentName(studentName);
     setAvailabilitySlots([]);
@@ -359,6 +393,52 @@ export default function MessengerScreen() {
   const onViewUserProfile = (userId: number) => {
     setSelectedProfileUserId(userId);
     setProfileModalVisible(true);
+  };
+
+  const onOpenScheduleSession = async (tutorUserId: number, tutorName: string) => {
+    setScheduleTutorUserId(tutorUserId);
+    setScheduleTutorName(tutorName);
+    setScheduleSlots([]);
+    setScheduleSubject("Tutoring Session");
+    setScheduleLoading(true);
+    setScheduleModalVisible(true);
+    try {
+      const slots = await api.get<AvailabilitySlot[]>(`/availability/users/${tutorUserId}`);
+      setScheduleSlots(slots);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load tutor availability.";
+      Alert.alert("Error", message);
+      setScheduleModalVisible(false);
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
+  const onBookSessionSlot = async (slot: AvailabilitySlot) => {
+    if (!scheduleTutorUserId || scheduleSavingSlotId != null) {
+      return;
+    }
+    const subject = scheduleSubject.trim() || "Tutoring Session";
+    const body: TutoringSessionCreate = {
+      tutor_id: scheduleTutorUserId,
+      subject,
+      scheduled_start: toIsoForNextDayTime(slot.day_of_week, slot.start_time),
+      scheduled_end: toIsoForNextDayTime(slot.day_of_week, slot.end_time),
+      cost_cents: 0,
+    };
+
+    try {
+      setScheduleSavingSlotId(slot.id);
+      await api.post("/sessions/", body);
+      Alert.alert("Booked", "Session has been scheduled.");
+      setScheduleModalVisible(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to schedule session.";
+      Alert.alert("Booking failed", message);
+    } finally {
+      setScheduleSavingSlotId(null);
+    }
   };
 
   const performUnmatchStudent = useCallback(
@@ -426,6 +506,21 @@ export default function MessengerScreen() {
       timeRanges,
     }));
   }, [availabilitySlots]);
+
+  const groupedScheduleAvailability = useMemo(() => {
+    const groups = new Map<number, AvailabilitySlot[]>();
+    for (const slot of scheduleSlots) {
+      const existing = groups.get(slot.day_of_week) ?? [];
+      existing.push(slot);
+      groups.set(slot.day_of_week, existing);
+    }
+    return Array.from(groups.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([dayOfWeek, slots]) => ({
+        dayOfWeek,
+        slots: slots.sort((a, b) => a.start_time.localeCompare(b.start_time)),
+      }));
+  }, [scheduleSlots]);
 
   useEffect(() => {
     const tutorId = route.params?.openTutorUserId;
@@ -553,6 +648,17 @@ export default function MessengerScreen() {
                       }}
                     >
                       <Text style={styles.infoBtnText}>View Profile</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.scheduleBtn}
+                      onPress={() => {
+                        void onOpenScheduleSession(
+                          item.tutor_id,
+                          `${item.tutor_first_name} ${item.tutor_last_name}`
+                        );
+                      }}
+                    >
+                      <Text style={styles.scheduleBtnText}>Schedule Session</Text>
                     </Pressable>
                   </View>
                 );
@@ -732,6 +838,61 @@ export default function MessengerScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        visible={scheduleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setScheduleModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Schedule Session</Text>
+            <Text style={styles.modalEmpty}>
+              Tutor: {scheduleTutorName || "Selected tutor"}
+            </Text>
+            <TextInput
+              value={scheduleSubject}
+              onChangeText={setScheduleSubject}
+              placeholder="Session subject"
+              style={styles.composeInput}
+              autoCorrect={false}
+            />
+            {scheduleLoading ? (
+              <ActivityIndicator size="small" color="#2E57A2" />
+            ) : groupedScheduleAvailability.length === 0 ? (
+              <Text style={styles.modalEmpty}>No availability slots found.</Text>
+            ) : (
+              <ScrollView style={styles.modalList}>
+                {groupedScheduleAvailability.map((group) => (
+                  <View key={group.dayOfWeek} style={styles.modalRow}>
+                    <Text style={styles.modalRowDay}>{formatDay(group.dayOfWeek)}</Text>
+                    <View style={styles.modalRowTimes}>
+                      {group.slots.map((slot) => (
+                        <Pressable
+                          key={slot.id}
+                          style={styles.slotPickBtn}
+                          onPress={() => {
+                            void onBookSessionSlot(slot);
+                          }}
+                          disabled={scheduleSavingSlotId === slot.id}
+                        >
+                          <Text style={styles.slotPickBtnText}>
+                            {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                            {scheduleSavingSlotId === slot.id ? " (Booking...)" : ""}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <Pressable style={styles.modalCloseBtn} onPress={() => setScheduleModalVisible(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -886,6 +1047,21 @@ const styles = StyleSheet.create({
     color: "#2E57A2",
     fontSize: 12,
     fontWeight: "600",
+  },
+  scheduleBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#D4AF4A",
+    backgroundColor: "#FFF7D6",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  scheduleBtnText: {
+    color: "#8A6A00",
+    fontSize: 12,
+    fontWeight: "700",
   },
   helperText: {
     marginTop: 8,
@@ -1053,6 +1229,20 @@ const styles = StyleSheet.create({
   },
   modalRowTimes: {
     alignItems: "flex-end",
+  },
+  slotPickBtn: {
+    borderWidth: 1,
+    borderColor: "#D5DCE8",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  slotPickBtnText: {
+    color: "#1B2D50",
+    fontSize: 12,
+    fontWeight: "600",
   },
   modalCloseBtn: {
     alignSelf: "flex-end",

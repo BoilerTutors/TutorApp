@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -16,31 +16,42 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api } from "../api/client";
 
 type RootStackParamList = {
-  "Student Dashboard": undefined;
+  "Tutor Dashboard": undefined;
 };
 
 type AvailabilitySlot = {
   id: number;
   user_id: number;
-  day_of_week: number; // 0=Mon ... 6=Sun
-  start_time: string;  // "HH:MM:SS"
+  day_of_week: number;
+  start_time: string;
   end_time: string;
 };
 
+type TutoringSessionPublic = {
+  id: number;
+  tutor_id: number;
+  student_id: number;
+  subject: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  cost_cents: number;
+  notes: string | null;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  purchased_at: string;
+};
+
 type SessionBlock = {
-  id: number; // session id
+  id: number;
   day_of_week: number;
   start_time: string;
   end_time: string;
   subject: string;
-  tutorName: string;
-  status?: "pending" | "confirmed" | "completed" | "cancelled";
+  studentName: string;
+  status: TutoringSessionPublic["status"];
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const FULL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-// Hours to display: 7am - 10pm
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7);
 
 function formatHour(hour: number): string {
@@ -93,70 +104,47 @@ function slotOverlapsAnySession(slot: AvailabilitySlot, sessions: SessionBlock[]
   });
 }
 
-export default function AvailabilityScreen() {
+export default function TutorCalendarScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [sessionBlocks, setSessionBlocks] = useState<SessionBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // Add slot modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
   const [startHour, setStartHour] = useState(9);
   const [startMinute, setStartMinute] = useState(0);
   const [endHour, setEndHour] = useState(10);
   const [endMinute, setEndMinute] = useState(0);
-
-  // Detail modal (tap on existing slot)
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
   const [selectedSessionBlock, setSelectedSessionBlock] = useState<SessionBlock | null>(null);
-
-  // Delete confirm
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [availSlots, pastSessions, futureSessions] = await Promise.all([
+      const [availSlots, futureSessions, pastSessions] = await Promise.all([
         api.get<AvailabilitySlot[]>("/availability/me"),
-        api.get<
-          Array<{
-            id: number;
-            tutor_id: number;
-            scheduled_start: string;
-            scheduled_end: string;
-            subject: string;
-            status: "pending" | "confirmed" | "completed" | "cancelled";
-          }>
-        >("/sessions/student/past"),
-        api.get<
-          Array<{
-            id: number;
-            tutor_id: number;
-            scheduled_start: string;
-            scheduled_end: string;
-            subject: string;
-            status: "pending" | "confirmed" | "completed" | "cancelled";
-          }>
-        >("/sessions/student/future"),
+        api.get<TutoringSessionPublic[]>("/sessions/tutor/future"),
+        api.get<TutoringSessionPublic[]>("/sessions/tutor/past"),
       ]);
-      const allSessions = [...pastSessions, ...futureSessions];
-      const uniqueTutorIds = Array.from(new Set(allSessions.map((s) => s.tutor_id)));
-      const tutorNamePairs = await Promise.all(
-        uniqueTutorIds.map(async (id) => {
+
+      const allSessions = [...futureSessions, ...pastSessions];
+      const uniqueStudentIds = Array.from(new Set(allSessions.map((s) => s.student_id)));
+      const studentNamePairs = await Promise.all(
+        uniqueStudentIds.map(async (id) => {
           try {
             const user = await api.get<{ first_name: string; last_name: string }>(`/users/${id}`);
             return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
           } catch {
-            return [id, `Tutor #${id}`] as const;
+            return [id, `Student #${id}`] as const;
           }
         })
       );
-      const tutorNameById = new Map<number, string>(tutorNamePairs);
+      const studentNameById = new Map<number, string>(studentNamePairs);
 
-      const blocks: SessionBlock[] = allSessions.map((s) => {
+      const mappedBlocks: SessionBlock[] = allSessions.map((s) => {
         const start = new Date(s.scheduled_start);
         const end = new Date(s.scheduled_end);
         return {
@@ -169,14 +157,15 @@ export default function AvailabilityScreen() {
             end.getMinutes()
           ).padStart(2, "0")}:00`,
           subject: s.subject,
-          tutorName: tutorNameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}`,
+          studentName: studentNameById.get(s.student_id) ?? `Student #${s.student_id}`,
           status: s.status,
         };
       });
+
       setSlots(availSlots);
-      setSessionBlocks(blocks);
+      setSessionBlocks(mappedBlocks);
     } catch {
-      Alert.alert("Error", "Failed to load availability.");
+      Alert.alert("Error", "Failed to load calendar data.");
     } finally {
       setLoading(false);
     }
@@ -189,12 +178,10 @@ export default function AvailabilityScreen() {
   const handleAddSlot = async () => {
     const startMin = startHour * 60 + startMinute;
     const endMin = endHour * 60 + endMinute;
-
     if (startMin >= endMin) {
       Alert.alert("Invalid time", "End time must be after start time.");
       return;
     }
-
     if (doSlotsOverlap(slots, selectedDay, startMin, endMin)) {
       Alert.alert("Conflict", "This slot overlaps with an existing availability slot.");
       return;
@@ -242,28 +229,8 @@ export default function AvailabilityScreen() {
     }
   };
 
-  const openAddModal = (day: number) => {
-    setSelectedDay(day);
-    setStartHour(9);
-    setStartMinute(0);
-    setEndHour(10);
-    setEndMinute(0);
-    setShowAddModal(true);
-  };
+  const groupedSessionCount = useMemo(() => sessionBlocks.length, [sessionBlocks]);
 
-  const openSlotDetail = (slot: AvailabilitySlot) => {
-    setSelectedSlot(slot);
-    setSelectedSessionBlock(null);
-    setShowDetailModal(true);
-  };
-
-  const openSessionDetail = (block: SessionBlock) => {
-    setSelectedSessionBlock(block);
-    setSelectedSlot(null);
-    setShowDetailModal(true);
-  };
-
-  // Render a single day column
   const renderDayColumn = (dayIndex: number) => {
     const daySessionBlocks = sessionBlocks.filter((s) => s.day_of_week === dayIndex);
     const daySlots = slots
@@ -276,15 +243,10 @@ export default function AvailabilityScreen() {
       <View key={dayIndex} style={styles.dayColumn}>
         <Text style={styles.dayHeader}>{DAYS[dayIndex]}</Text>
         <View style={[styles.dayGrid, { height: HOURS.length * HOUR_HEIGHT }]}>
-          {/* Hour lines */}
           {HOURS.map((h, i) => (
-            <View
-              key={h}
-              style={[styles.hourLine, { top: i * HOUR_HEIGHT }]}
-            />
+            <View key={h} style={[styles.hourLine, { top: i * HOUR_HEIGHT }]} />
           ))}
 
-          {/* Availability slots */}
           {daySlots.map((slot) => {
             const startMin = timeToMinutes(slot.start_time);
             const endMin = timeToMinutes(slot.end_time);
@@ -294,16 +256,19 @@ export default function AvailabilityScreen() {
               <TouchableOpacity
                 key={slot.id}
                 style={[styles.slotBlock, { top, height }]}
-                onPress={() => openSlotDetail(slot)}
+                onPress={() => {
+                  setSelectedSlot(slot);
+                  setSelectedSessionBlock(null);
+                  setShowDetailModal(true);
+                }}
               >
                 <Text style={styles.slotText} numberOfLines={1}>
-                  {slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}
+                  {slot.start_time.slice(0, 5)}-{slot.end_time.slice(0, 5)}
                 </Text>
               </TouchableOpacity>
             );
           })}
 
-          {/* Session blocks */}
           {daySessionBlocks.map((block) => {
             const startMin = timeToMinutes(block.start_time);
             const endMin = timeToMinutes(block.end_time);
@@ -313,19 +278,29 @@ export default function AvailabilityScreen() {
               <TouchableOpacity
                 key={`session-${block.id}`}
                 style={[styles.sessionBlock, { top, height }]}
-                onPress={() => openSessionDetail(block)}
+                onPress={() => {
+                  setSelectedSessionBlock(block);
+                  setSelectedSlot(null);
+                  setShowDetailModal(true);
+                }}
               >
                 <Text style={styles.sessionBlockText} numberOfLines={1}>
-                  📚 {block.subject}
+                  {block.subject}
                 </Text>
               </TouchableOpacity>
             );
           })}
 
-          {/* Add button at bottom */}
           <TouchableOpacity
             style={styles.addDayBtn}
-            onPress={() => openAddModal(dayIndex)}
+            onPress={() => {
+              setSelectedDay(dayIndex);
+              setStartHour(9);
+              setStartMinute(0);
+              setEndHour(10);
+              setEndMinute(0);
+              setShowAddModal(true);
+            }}
           >
             <Ionicons name="add" size={16} color="#2E57A2" />
           </TouchableOpacity>
@@ -336,16 +311,16 @@ export default function AvailabilityScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#2F3850" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Availability</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle}>Sessions Calendar</Text>
+        <TouchableOpacity onPress={() => void loadData()} style={styles.backBtn}>
+          <Ionicons name="refresh" size={20} color="#2F3850" />
+        </TouchableOpacity>
       </View>
 
-      {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#2E57A2" }]} />
@@ -353,7 +328,7 @@ export default function AvailabilityScreen() {
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#D4AF4A" }]} />
-          <Text style={styles.legendText}>Session</Text>
+          <Text style={styles.legendText}>Session ({groupedSessionCount})</Text>
         </View>
       </View>
 
@@ -365,7 +340,6 @@ export default function AvailabilityScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.calendarContainer}>
-              {/* Time labels */}
               <View style={styles.timeColumn}>
                 <View style={styles.dayHeader} />
                 {HOURS.map((h) => (
@@ -374,21 +348,13 @@ export default function AvailabilityScreen() {
                   </View>
                 ))}
               </View>
-
-              {/* Day columns */}
               {DAYS.map((_, i) => renderDayColumn(i))}
             </View>
           </ScrollView>
         </ScrollView>
       )}
 
-      {/* Add Slot Modal */}
-      <Modal
-        visible={showAddModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAddModal(false)}
-      >
+      <Modal visible={showAddModal} animationType="slide" transparent onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -397,8 +363,6 @@ export default function AvailabilityScreen() {
                 <Ionicons name="close" size={24} color="#5D667C" />
               </TouchableOpacity>
             </View>
-
-            {/* Day picker */}
             <Text style={styles.modalLabel}>Day</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {FULL_DAYS.map((day, i) => (
@@ -413,8 +377,6 @@ export default function AvailabilityScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-
-            {/* Start time */}
             <Text style={styles.modalLabel}>Start Time</Text>
             <View style={styles.timePickerRow}>
               <View style={styles.timePicker}>
@@ -438,7 +400,6 @@ export default function AvailabilityScreen() {
               </View>
             </View>
 
-            {/* End time */}
             <Text style={styles.modalLabel}>End Time</Text>
             <View style={styles.timePickerRow}>
               <View style={styles.timePicker}>
@@ -467,31 +428,21 @@ export default function AvailabilityScreen() {
               onPress={handleAddSlot}
               disabled={saving}
             >
-              {saving ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.saveBtnText}>Save Slot</Text>
-              )}
+              {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Save Slot</Text>}
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Detail Modal */}
-      <Modal
-        visible={showDetailModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowDetailModal(false)}
-      >
+      <Modal visible={showDetailModal} animationType="fade" transparent onRequestClose={() => setShowDetailModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowDetailModal(false)}>
           <View style={styles.detailModalContent}>
-            {selectedSlot && (
+            {selectedSlot ? (
               <>
                 <Text style={styles.detailTitle}>Availability Slot</Text>
                 <Text style={styles.detailDay}>{FULL_DAYS[selectedSlot.day_of_week]}</Text>
                 <Text style={styles.detailTime}>
-                  {selectedSlot.start_time.slice(0, 5)} – {selectedSlot.end_time.slice(0, 5)}
+                  {selectedSlot.start_time.slice(0, 5)} - {selectedSlot.end_time.slice(0, 5)}
                 </Text>
                 <TouchableOpacity
                   style={styles.deleteBtn}
@@ -504,36 +455,24 @@ export default function AvailabilityScreen() {
                   <Text style={styles.deleteBtnText}>Delete Slot</Text>
                 </TouchableOpacity>
               </>
-            )}
-            {selectedSessionBlock && (
+            ) : null}
+            {selectedSessionBlock ? (
               <>
                 <Text style={styles.detailTitle}>Session</Text>
                 <Text style={styles.detailDay}>{FULL_DAYS[selectedSessionBlock.day_of_week]}</Text>
                 <Text style={styles.detailTime}>
-                  {selectedSessionBlock.start_time.slice(0, 5)} – {selectedSessionBlock.end_time.slice(0, 5)}
+                  {selectedSessionBlock.start_time.slice(0, 5)} - {selectedSessionBlock.end_time.slice(0, 5)}
                 </Text>
-                <Text style={styles.detailSubject}>📚 {selectedSessionBlock.subject}</Text>
-                <Text style={styles.detailTutor}>Tutor: {selectedSessionBlock.tutorName}</Text>
-                {selectedSessionBlock.status ? (
-                  <Text style={styles.detailTutor}>Status: {selectedSessionBlock.status}</Text>
-                ) : null}
-                <View style={styles.sessionNotice}>
-                  <Ionicons name="lock-closed-outline" size={14} color="#5D667C" />
-                  <Text style={styles.sessionNoticeText}>This block is reserved for a session</Text>
-                </View>
+                <Text style={styles.detailSubject}>{selectedSessionBlock.subject}</Text>
+                <Text style={styles.detailTutor}>Student: {selectedSessionBlock.studentName}</Text>
+                <Text style={styles.detailTutor}>Status: {selectedSessionBlock.status}</Text>
               </>
-            )}
+            ) : null}
           </View>
         </Pressable>
       </Modal>
 
-      {/* Delete Confirm Modal */}
-      <Modal
-        visible={showDeleteConfirm}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowDeleteConfirm(false)}
-      >
+      <Modal visible={showDeleteConfirm} animationType="fade" transparent onRequestClose={() => setShowDeleteConfirm(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModal}>
             <Text style={styles.confirmTitle}>Delete Slot?</Text>
@@ -541,22 +480,11 @@ export default function AvailabilityScreen() {
               Are you sure you want to remove this availability slot?
             </Text>
             <View style={styles.confirmBtns}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => setShowDeleteConfirm(false)}
-              >
+              <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setShowDeleteConfirm(false)}>
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmDeleteBtn}
-                onPress={handleDeleteSlot}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <Text style={styles.confirmDeleteText}>Delete</Text>
-                )}
+              <TouchableOpacity style={styles.confirmDeleteBtn} onPress={handleDeleteSlot} disabled={saving}>
+                {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.confirmDeleteText}>Delete</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -568,7 +496,6 @@ export default function AvailabilityScreen() {
 
 const NAVY = "#1B2D50";
 const BLUE = "#2E57A2";
-const GOLD = "#D4AF4A";
 const HOUR_HEIGHT = 48;
 
 const styles = StyleSheet.create({
@@ -606,13 +533,7 @@ const styles = StyleSheet.create({
   dayColumn: { width: 80, marginHorizontal: 2 },
   dayHeader: { height: 28, justifyContent: "center", alignItems: "center" },
   dayGrid: { position: "relative" },
-  hourLine: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "#E8EBF0",
-  },
+  hourLine: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: "#E8EBF0" },
   slotBlock: {
     position: "absolute",
     left: 2,
@@ -628,7 +549,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 2,
     right: 2,
-    backgroundColor: GOLD,
+    backgroundColor: "#D4AF4A",
     borderRadius: 4,
     padding: 2,
     overflow: "hidden",
@@ -646,12 +567,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalContent: {
     backgroundColor: "#FFF",
     borderTopLeftRadius: 20,
@@ -659,12 +575,7 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: "80%",
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: "700", color: "#2F3850" },
   modalLabel: { fontSize: 14, fontWeight: "600", color: "#3A4357", marginBottom: 8 },
   dayChip: {
@@ -677,46 +588,19 @@ const styles = StyleSheet.create({
   dayChipActive: { backgroundColor: BLUE },
   dayChipText: { fontSize: 14, color: "#5D667C" },
   dayChipTextActive: { color: "#FFF", fontWeight: "600" },
-  timePickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
+  timePickerRow: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
   timePicker: { alignItems: "center", width: 60 },
   timePickerValue: { fontSize: 28, fontWeight: "700", color: NAVY, marginVertical: 4 },
   timeColon: { fontSize: 28, fontWeight: "700", color: NAVY, marginHorizontal: 8 },
-  saveBtn: {
-    backgroundColor: BLUE,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 4,
-  },
+  saveBtn: { backgroundColor: BLUE, borderRadius: 10, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   saveBtnDisabled: { backgroundColor: "#9CA3AF" },
   saveBtnText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
-  // Detail modal
-  detailModalContent: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 24,
-    margin: 32,
-    alignItems: "center",
-  },
+  detailModalContent: { backgroundColor: "#FFF", borderRadius: 16, padding: 24, margin: 32, alignItems: "center" },
   detailTitle: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 8 },
   detailDay: { fontSize: 16, color: "#5D667C", marginBottom: 4 },
   detailTime: { fontSize: 22, fontWeight: "700", color: BLUE, marginBottom: 16 },
   detailSubject: { fontSize: 16, fontWeight: "600", color: NAVY, marginBottom: 4 },
-  detailTutor: { fontSize: 14, color: "#5D667C", marginBottom: 12 },
-  sessionNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
-  },
-  sessionNoticeText: { fontSize: 13, color: "#5D667C" },
+  detailTutor: { fontSize: 14, color: "#5D667C", marginBottom: 8 },
   deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -727,13 +611,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deleteBtnText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
-  // Confirm modal
-  confirmModal: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 24,
-    margin: 32,
-  },
+  confirmModal: { backgroundColor: "#FFF", borderRadius: 16, padding: 24, margin: 32 },
   confirmTitle: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 8 },
   confirmBody: { fontSize: 14, color: "#5D667C", marginBottom: 20, lineHeight: 20 },
   confirmBtns: { flexDirection: "row", gap: 12 },
@@ -746,12 +624,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   confirmCancelText: { fontSize: 15, color: "#5D667C", fontWeight: "600" },
-  confirmDeleteBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#E74C3C",
-    alignItems: "center",
-  },
+  confirmDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#E74C3C", alignItems: "center" },
   confirmDeleteText: { fontSize: 15, color: "#FFF", fontWeight: "700" },
 });

@@ -11,6 +11,7 @@ type RootStackParamList = {
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
   "Student Reviews": undefined;
+  Availability: undefined;
   Matches:
     | {
         matches?: MatchItem[];
@@ -112,10 +113,10 @@ export default function StudentScreen() {
             onPress={() => {
               if (action.label === "Find Tutors") {
                 void handleComputeMatches();
-              } else if (action.label === "Messages") {
-                navigation.navigate("Messenger");
-              } else if (action.label === "Profile") {
-                navigation.navigate("Profile", { role: "STUDENT" });
+              } else if (action.label === "Book Session") {
+                navigation.navigate("Matches");
+              } else if (action.label === "My Schedule") {
+                navigation.navigate("Availability");
               }
             }}
           >
