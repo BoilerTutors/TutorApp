@@ -23,7 +23,19 @@ const STATUS_CONFIG: Record<
   cancelled: { icon: "close-circle", color: "#DC2626", label: "Cancelled" },
 };
 
-export default function SessionCard({ session }: { session: Session }) {
+type SessionCardProps = {
+  session: Session;
+  showCancelAction?: boolean;
+  onCancelPress?: (sessionId: number) => void;
+  cancelling?: boolean;
+};
+
+export default function SessionCard({
+  session,
+  showCancelAction = false,
+  onCancelPress,
+  cancelling = false,
+}: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { icon, color, label } = STATUS_CONFIG[session.status];
   const showEndTime = session.status === "completed" || session.status === "cancelled";
@@ -76,6 +88,17 @@ export default function SessionCard({ session }: { session: Session }) {
           <Pressable style={styles.detailsBtn}>
             <Text style={styles.detailsBtnText}>View Details</Text>
           </Pressable>
+          {showCancelAction && session.status !== "cancelled" ? (
+            <Pressable
+              style={styles.cancelBtn}
+              onPress={() => onCancelPress?.(session.id)}
+              disabled={cancelling}
+            >
+              <Text style={styles.cancelBtnText}>
+                {cancelling ? "Cancelling..." : "Cancel Session"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -163,6 +186,20 @@ const styles = StyleSheet.create({
   detailsBtnText: {
     color: NAVY,
     fontWeight: "600",
+    fontSize: 13,
+  },
+  cancelBtn: {
+    borderWidth: 1.5,
+    borderColor: "#DC2626",
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    alignSelf: "center",
+    marginTop: 8,
+  },
+  cancelBtnText: {
+    color: "#DC2626",
+    fontWeight: "700",
     fontSize: 13,
   },
 });

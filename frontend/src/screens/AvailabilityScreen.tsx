@@ -143,7 +143,8 @@ export default function AvailabilityScreen() {
         >("/sessions/student/future"),
       ]);
       const allSessions = [...pastSessions, ...futureSessions];
-      const uniqueTutorIds = Array.from(new Set(allSessions.map((s) => s.tutor_id)));
+      const activeSessions = allSessions.filter((s) => s.status !== "cancelled");
+      const uniqueTutorIds = Array.from(new Set(activeSessions.map((s) => s.tutor_id)));
       const tutorNamePairs = await Promise.all(
         uniqueTutorIds.map(async (id) => {
           try {
@@ -156,7 +157,7 @@ export default function AvailabilityScreen() {
       );
       const tutorNameById = new Map<number, string>(tutorNamePairs);
 
-      const blocks: SessionBlock[] = allSessions.map((s) => {
+      const blocks: SessionBlock[] = activeSessions.map((s) => {
         const start = new Date(s.scheduled_start);
         const end = new Date(s.scheduled_end);
         return {

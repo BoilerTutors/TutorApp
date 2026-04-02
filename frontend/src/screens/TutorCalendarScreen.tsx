@@ -131,7 +131,8 @@ export default function TutorCalendarScreen() {
       ]);
 
       const allSessions = [...futureSessions, ...pastSessions];
-      const uniqueStudentIds = Array.from(new Set(allSessions.map((s) => s.student_id)));
+      const activeSessions = allSessions.filter((s) => s.status !== "cancelled");
+      const uniqueStudentIds = Array.from(new Set(activeSessions.map((s) => s.student_id)));
       const studentNamePairs = await Promise.all(
         uniqueStudentIds.map(async (id) => {
           try {
@@ -144,7 +145,7 @@ export default function TutorCalendarScreen() {
       );
       const studentNameById = new Map<number, string>(studentNamePairs);
 
-      const mappedBlocks: SessionBlock[] = allSessions.map((s) => {
+      const mappedBlocks: SessionBlock[] = activeSessions.map((s) => {
         const start = new Date(s.scheduled_start);
         const end = new Date(s.scheduled_end);
         return {

@@ -169,3 +169,26 @@ def create_tutoring_session(
     db.commit()
     db.refresh(row)
     return row
+
+
+def get_session_for_tutor(db: Session, *, session_id: int, tutor_user_id: int) -> TutoringSession | None:
+    return (
+        db.query(TutoringSession)
+        .filter(
+            TutoringSession.id == session_id,
+            TutoringSession.tutor_id == tutor_user_id,
+        )
+        .first()
+    )
+
+
+def set_session_status(
+    db: Session,
+    *,
+    session: TutoringSession,
+    status: str,
+) -> TutoringSession:
+    session.status = status
+    db.commit()
+    db.refresh(session)
+    return session
