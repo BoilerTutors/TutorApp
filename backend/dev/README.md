@@ -30,6 +30,12 @@ From **backend**:
 python dev/create_tables.py
 ```
 
+If models changed and you need to force-sync schema locally:
+
+```bash
+python dev/create_tables.py --reset
+```
+
 ## 4. Seed test data
 
 Seed a test tutor and student user (safe to run multiple times):

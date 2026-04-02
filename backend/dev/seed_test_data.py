@@ -4,7 +4,7 @@ Run from backend/:
 
     python dev/seed_test_data.py
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 
@@ -14,7 +14,7 @@ if str(backend) not in sys.path:
     sys.path.insert(0, str(backend))
 
 from app.database import SessionLocal  # type: ignore  # noqa: E402
-from app.models import User, TutorProfile, StudentProfile  # type: ignore  # noqa: E402
+from app.models import User, TutorProfile, StudentProfile, TutoringSession  # type: ignore  # noqa: E402
 from app.auth import hash_password  # type: ignore  # noqa: E402
 
 
@@ -30,6 +30,46 @@ def get_or_create_user(session, email: str, **kwargs) -> User:
     session.add(user)
     session.flush()  # assign id
     return user
+
+
+def get_or_create_session(
+    session,
+    *,
+    tutor_id: int,
+    student_id: int,
+    subject: str,
+    scheduled_start: datetime,
+    scheduled_end: datetime,
+    cost_cents: int,
+    notes: str,
+) -> TutoringSession:
+    existing = (
+        session.query(TutoringSession)
+        .filter_by(
+            tutor_id=tutor_id,
+            student_id=student_id,
+            subject=subject,
+            scheduled_start=scheduled_start,
+            scheduled_end=scheduled_end,
+        )
+        .one_or_none()
+    )
+    if existing:
+        return existing
+
+    tutoring_session = TutoringSession(
+        tutor_id=tutor_id,
+        student_id=student_id,
+        subject=subject,
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_end,
+        cost_cents=cost_cents,
+        notes=notes,
+        status="confirmed",
+    )
+    session.add(tutoring_session)
+    session.flush()  # assign id
+    return tutoring_session
 
 
 def main() -> None:
@@ -101,12 +141,29 @@ def main() -> None:
             is_student=False,
         )
 
+        # Example session between seeded student and tutor users
+        start = datetime(2026, 4, 15, 15, 0, tzinfo=timezone.utc)
+        end = start + timedelta(hours=1)
+        example_session = get_or_create_session(
+            session,
+            tutor_id=tutor_user.id,
+            student_id=student_user.id,
+            subject="CS 251",
+            scheduled_start=start,
+            scheduled_end=end,
+            cost_cents=2500,
+            notes="Seeded example tutoring session",
+        )
+
         session.commit()
 
     print("Seeded local DB with:")
     print(f"  Tutor   -> id={tutor_user.id}, email=tutor@example.com, password={plain_password!r}")
     print(f"  Student -> id={student_user.id}, email=student@example.com, password={plain_password!r}")
     print(f"  Admin   -> id={admin_user.id}, email=admin@example.com, password={plain_password!r}")
+    print(
+        f"  Session -> id={example_session.id}, tutor_id={tutor_user.id}, student_id={student_user.id}, subject='CS 251'"
+    )
 
 
 if __name__ == "__main__":

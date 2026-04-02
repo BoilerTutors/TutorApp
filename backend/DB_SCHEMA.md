@@ -116,6 +116,8 @@ TABLE tutoring_sessions (   -- Booked tutoring session between a student and tut
     subject VARCHAR(255),
     cost_cents INTEGER,
     notes TEXT,
+    verification_code_hash VARCHAR(255),   -- Hash of 6-digit PIN used for tutor attendance verification
+    is_verified BOOLEAN DEFAULT false,   -- Set true after tutor successfully verifies the PIN
     status VARCHAR(30),   -- pending | confirmed | completed | cancelled
     purchased_at TIMESTAMP WITH TIME ZONE,
     CHECK (scheduled_end > scheduled_start),

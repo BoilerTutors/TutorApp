@@ -290,6 +290,14 @@ class TutoringSessionPublic(BaseModel):
     status: SessionStatus
     purchased_at: datetime
 
+
+class SessionVerificationCodePublic(BaseModel):
+    verification_code: str = Field(min_length=6, max_length=6)
+
+
+class SessionVerificationVerifyRequest(BaseModel):
+    pin: str = Field(min_length=6, max_length=6)
+
 # ===========================================================
 # ---- Review schemas ----
 # ===========================================================
