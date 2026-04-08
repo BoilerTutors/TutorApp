@@ -1,8 +1,7 @@
-"""Create all tables in the local Postgres. Run from backend/ so app is importable.
+"""Rebuild all tables in local Postgres to match current models.
 
   cd backend && python dev/create_tables.py
 """
-import argparse
 import sys
 from pathlib import Path
 
@@ -16,20 +15,10 @@ from app import models  # noqa: F401 — registers models with Base
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create local DB tables from SQLAlchemy models.")
-    parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="Drop all existing tables first, then recreate from current models.",
-    )
-    args = parser.parse_args()
-
-    if args.reset:
-        Base.metadata.drop_all(bind=engine)
-        print("Dropped existing tables.")
-
+    Base.metadata.drop_all(bind=engine)
+    print("Dropped existing tables.")
     Base.metadata.create_all(bind=engine)
-    print("Tables created.")
+    print("Tables rebuilt to match current schema.")
 
 
 if __name__ == "__main__":

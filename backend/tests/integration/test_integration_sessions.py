@@ -185,3 +185,52 @@ def test_student_forbidden_on_tutor_past_and_future(client, db_session):
 def test_tutor_sessions_unauthorized_without_token(client):
     assert client.get("/sessions/tutor/past").status_code == 401
     assert client.get("/sessions/tutor/future").status_code == 401
+
+
+def test_current_session_exists_returns_true_when_user_has_active_session(client, db_session):
+    tutor, student = _create_tutor_and_student(db_session)
+    now = datetime.now(timezone.utc)
+
+    active_session = _add_session(
+        db_session,
+        tutor_id=tutor.id,
+        student_id=student.id,
+        scheduled_start=now - timedelta(minutes=15),
+        scheduled_end=now + timedelta(minutes=45),
+        subject="CS 307",
+        cost_cents=2500,
+        status="confirmed",
+    )
+
+    headers = _auth_header(client, "int_student@purdue.edu", "password123")
+    r = client.get("/sessions/current/exists", headers=headers)
+
+    assert r.status_code == 200
+    assert r.json() == {
+        "has_current_session": True,
+        "session_id": active_session.id,
+        "other_user_id": tutor.id,
+        "is_verified": False,
+    }
+
+
+def test_current_session_exists_returns_false_without_active_session(client, db_session):
+    tutor, student = _create_tutor_and_student(db_session)
+    now = datetime.now(timezone.utc)
+
+    _add_session(
+        db_session,
+        tutor_id=tutor.id,
+        student_id=student.id,
+        scheduled_start=now + timedelta(hours=2),
+        scheduled_end=now + timedelta(hours=3),
+        subject="CS 252",
+        cost_cents=2500,
+        status="confirmed",
+    )
+
+    headers = _auth_header(client, "int_tutor@purdue.edu", "password123")
+    r = client.get("/sessions/current/exists", headers=headers)
+
+    assert r.status_code == 200
+    assert r.json() == {"has_current_session": False}

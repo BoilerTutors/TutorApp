@@ -2,17 +2,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import (
+    admin,
     auth,
     users,
     tutors,
     students,
     classes,
     sessions,
+    payment,
     availability,
     reviews,
     messages,
     matches,
     notifications,
+    reports,
+    admin_messages,
 )
 
 app = FastAPI(title="BoilerTutors API", version="0.1.0")
@@ -32,17 +36,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(tutors.router, prefix="/tutors", tags=["tutors"])
 app.include_router(students.router, prefix="/students", tags=["students"])
 app.include_router(classes.router, prefix="/classes", tags=["classes"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
+app.include_router(payment.router, prefix="/payment", tags=["payment"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(availability.router, prefix="/availability", tags=["availability"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(matches.router, prefix="/matches", tags=["matches"])
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(reports.router, prefix="/reports", tags=["reports"])
+app.include_router(admin_messages.router, prefix="/admin-messages", tags=["admin-messages"])
 
 
 @app.get("/")

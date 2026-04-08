@@ -10,7 +10,7 @@ export type Session = {
   startTime: string;
   endTime: string;
   duration: string;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
 };
 
 const STATUS_CONFIG: Record<
@@ -18,12 +18,25 @@ const STATUS_CONFIG: Record<
   { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }
 > = {
   pending: { icon: "hourglass", color: "#D97706", label: "Pending" },
-  confirmed: { icon: "checkmark-done", color: "#2563EB", label: "Confirmed" },
+  accepted: { icon: "checkmark-done", color: "#2563EB", label: "Accepted" },
+  declined: { icon: "close-circle", color: "#B91C1C", label: "Declined" },
   completed: { icon: "checkmark-circle", color: "#16A34A", label: "Completed" },
   cancelled: { icon: "close-circle", color: "#DC2626", label: "Cancelled" },
 };
 
-export default function SessionCard({ session }: { session: Session }) {
+type SessionCardProps = {
+  session: Session;
+  showCancelAction?: boolean;
+  onCancelPress?: (sessionId: number) => void;
+  cancelling?: boolean;
+};
+
+export default function SessionCard({
+  session,
+  showCancelAction = false,
+  onCancelPress,
+  cancelling = false,
+}: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { icon, color, label } = STATUS_CONFIG[session.status];
   const showEndTime = session.status === "completed" || session.status === "cancelled";
@@ -73,9 +86,22 @@ export default function SessionCard({ session }: { session: Session }) {
             </View>
           </View>
 
-          <Pressable style={styles.detailsBtn}>
-            <Text style={styles.detailsBtnText}>View Details</Text>
-          </Pressable>
+          <View style={styles.sessionActions}>
+            <Pressable style={styles.detailsBtn}>
+              <Text style={styles.detailsBtnText}>View Details</Text>
+            </Pressable>
+            {showCancelAction && session.status !== "cancelled" ? (
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={() => onCancelPress?.(session.id)}
+                disabled={cancelling}
+              >
+                <Text style={styles.cancelBtnText}>
+                  {cancelling ? "Cancelling..." : "Cancel Session"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       )}
     </View>
@@ -152,17 +178,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
   },
+  sessionActions: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    alignSelf: "flex-start",
+    gap: 8,
+  },
   detailsBtn: {
     borderWidth: 1.5,
     borderColor: NAVY,
     borderRadius: 8,
     paddingVertical: 7,
     paddingHorizontal: 12,
-    alignSelf: "center",
+    alignItems: "center",
   },
   detailsBtnText: {
     color: NAVY,
     fontWeight: "600",
+    fontSize: 13,
+  },
+  cancelBtn: {
+    borderWidth: 1.5,
+    borderColor: "#DC2626",
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    alignItems: "center",
+  },
+  cancelBtnText: {
+    color: "#DC2626",
+    fontWeight: "700",
     fontSize: 13,
   },
 });

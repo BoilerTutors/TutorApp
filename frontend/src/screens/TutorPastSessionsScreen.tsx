@@ -61,6 +61,9 @@ function formatSessionDateParts(startIso: string, endIso: string): {
 function mapBackendStatusToCardStatus(
   status: TutoringSession["status"]
 ): Session["status"] {
+  if (status === "confirmed") {
+    return "accepted";
+  }
   return status;
 }
 

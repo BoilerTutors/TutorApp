@@ -127,7 +127,7 @@ export type TutoringSessionPublic = {
   scheduled_end: string;
   cost_cents: number;
   notes?: string;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
   purchased_at: string;
 };
 

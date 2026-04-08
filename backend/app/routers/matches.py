@@ -240,17 +240,34 @@ def unmatch_student_from_tutor(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    if not current_user.is_tutor or current_user.tutor is None:
+    if current_user.is_tutor and current_user.tutor is not None:
+        if body.student_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="student_id is required for tutor unmatch.",
+            )
+        updated = unmatch_student_tutor_pair(
+            db,
+            student_id=body.student_id,
+            tutor_id=current_user.id,
+        )
+    elif current_user.is_student and current_user.student is not None:
+        if body.tutor_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tutor_id is required for student unmatch.",
+            )
+        updated = unmatch_student_tutor_pair(
+            db,
+            student_id=current_user.id,
+            tutor_id=body.tutor_id,
+        )
+    else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only tutor accounts can unmatch from messages.",
+            detail="Only tutor or student accounts can unmatch from messages.",
         )
 
-    updated = unmatch_student_tutor_pair(
-        db,
-        student_id=body.student_id,
-        tutor_id=current_user.id,
-    )
     if updated == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

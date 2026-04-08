@@ -4,7 +4,8 @@ Run from backend/:
 
     python dev/seed_sessions_this_week.py
 
-Safe to run multiple times (skips rows that already match tutor/student/subject/start/end).
+Safe to run multiple times: refreshes `scheduled_start` / `scheduled_end` for the same
+tutor, student, subject, and notes when rows already exist.
 
 Requires rows in `users` with id 1 and 2 (typical after a fresh `seed_test_data.py`: tutor then student).
 """
@@ -44,12 +45,14 @@ def get_or_create_session(
             tutor_id=tutor_id,
             student_id=student_id,
             subject=subject,
-            scheduled_start=scheduled_start,
-            scheduled_end=scheduled_end,
+            notes=notes,
         )
         .one_or_none()
     )
     if existing:
+        existing.scheduled_start = scheduled_start
+        existing.scheduled_end = scheduled_end
+        session.flush()
         return existing
     row = TutoringSession(
         tutor_id=tutor_id,
