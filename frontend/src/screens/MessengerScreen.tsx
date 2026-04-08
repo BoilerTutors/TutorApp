@@ -48,10 +48,12 @@ type MatchListRow = {
   tutor_first_name: string;
   tutor_last_name: string;
   similarity_score: number;
+  tutor_weekly_cap_reached?: boolean;
 };
-type MatchRefreshRow = {
+type MatchRefreshResponseRow = {
   tutor_id: number;
   similarity_score: number;
+  tutor_weekly_cap_reached?: boolean;
 };
 type AvailabilitySlot = {
   id: number;
@@ -68,6 +70,7 @@ type SidebarItem =
       tutor_first_name: string;
       tutor_last_name: string;
       similarity_score: number;
+      tutor_weekly_cap_reached: boolean;
     }
   | {
       kind: "conversation";
@@ -104,6 +107,7 @@ export default function MessengerScreen() {
   const [matchedTutors, setMatchedTutors] = useState<MatchListRow[]>([]);
   const [selectedTutorUserId, setSelectedTutorUserId] = useState<number | null>(null);
   const [selectedTutorName, setSelectedTutorName] = useState<string | null>(null);
+  const [selectedTutorWeeklyCapReached, setSelectedTutorWeeklyCapReached] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -128,6 +132,7 @@ export default function MessengerScreen() {
             tutor_first_name: m.tutor_first_name,
             tutor_last_name: m.tutor_last_name,
             similarity_score: m.similarity_score,
+            tutor_weekly_cap_reached: Boolean(m.tutor_weekly_cap_reached),
           }))
         : conversations.map((c) => ({
             kind: "conversation" as const,
@@ -164,15 +169,21 @@ export default function MessengerScreen() {
         try {
           // Keep the matched tutor set from /matches/me, but update displayed scores
           // from freshly recomputed rankings when the same tutor appears there.
-          const refreshed = await api.post<MatchRefreshRow[]>("/matches/me/refresh");
-          const refreshedScoreByTutorId = new Map<number, number>(
-            refreshed.map((row) => [row.tutor_id, row.similarity_score])
+          const refreshed = await api.post<MatchRefreshResponseRow[]>("/matches/me/refresh");
+          const refreshedByTutorId = new Map(
+            refreshed.map((r) => [r.tutor_id, r] as const)
           );
           setMatchedTutors(
-            rows.map((row) => ({
-              ...row,
-              similarity_score: refreshedScoreByTutorId.get(row.tutor_id) ?? row.similarity_score,
-            }))
+            rows.map((row) => {
+              const ref = refreshedByTutorId.get(row.tutor_id);
+              return {
+                ...row,
+                similarity_score: ref?.similarity_score ?? row.similarity_score,
+                tutor_weekly_cap_reached: ref
+                  ? Boolean(ref.tutor_weekly_cap_reached)
+                  : Boolean(row.tutor_weekly_cap_reached),
+              };
+            })
           );
         } catch {
           setMatchedTutors(rows);
@@ -220,17 +231,18 @@ export default function MessengerScreen() {
     }
   };
 
-  const onOpenConversationForTutor = async (otherUserId: number) => {
-    const conv = await api.post<Conversation>("/messages/conversations", {
-      other_user_id: otherUserId,
-    });
-    setSelectedTutorUserId(otherUserId);
-    if (route.params?.openTutorName) {
-      setSelectedTutorName(route.params.openTutorName);
-    }
-    setSelectedConversationId(conv.id);
-    await loadMessages(conv.id);
-  };
+  const onOpenConversationForTutor = useCallback(
+    async (otherUserId: number, weeklyCapReached = false) => {
+      const conv = await api.post<Conversation>("/messages/conversations", {
+        other_user_id: otherUserId,
+      });
+      setSelectedTutorUserId(otherUserId);
+      setSelectedTutorWeeklyCapReached(weeklyCapReached);
+      setSelectedConversationId(conv.id);
+      await loadMessages(conv.id);
+    },
+    [loadMessages]
+  );
 
   const onOpenExistingConversation = async (
     conversationId: number,
@@ -238,6 +250,7 @@ export default function MessengerScreen() {
     otherUserName?: string | null
   ) => {
     setSelectedTutorUserId(otherUserId);
+    setSelectedTutorWeeklyCapReached(false);
     setSelectedTutorName(otherUserName?.trim() ? otherUserName : null);
     setSelectedConversationId(conversationId);
     await loadMessages(conversationId);
@@ -370,6 +383,7 @@ export default function MessengerScreen() {
           setSelectedConversationId(null);
           setSelectedTutorUserId(null);
           setSelectedTutorName(null);
+          setSelectedTutorWeeklyCapReached(false);
           setMessages([]);
         }
         await loadSidebarItems();
@@ -429,13 +443,34 @@ export default function MessengerScreen() {
 
   useEffect(() => {
     const tutorId = route.params?.openTutorUserId;
-    if (!tutorId || !isStudentAccount || tutorId === lastOpenedTutorRef.current) {
+    if (!tutorId || !isStudentAccount || loading) {
+      return;
+    }
+    if (lastOpenedTutorRef.current === tutorId) {
       return;
     }
     lastOpenedTutorRef.current = tutorId;
     setSelectedTutorName(route.params?.openTutorName ?? null);
-    void onOpenConversationForTutor(tutorId);
-  }, [isStudentAccount, route.params?.openTutorName, route.params?.openTutorUserId]);
+    const match = matchedTutors.find((m) => m.tutor_id === tutorId);
+    void onOpenConversationForTutor(tutorId, Boolean(match?.tutor_weekly_cap_reached));
+  }, [
+    isStudentAccount,
+    loading,
+    matchedTutors,
+    onOpenConversationForTutor,
+    route.params?.openTutorName,
+    route.params?.openTutorUserId,
+  ]);
+
+  useEffect(() => {
+    if (!isStudentAccount || selectedTutorUserId == null) {
+      return;
+    }
+    const row = matchedTutors.find((m) => m.tutor_id === selectedTutorUserId);
+    if (row) {
+      setSelectedTutorWeeklyCapReached(Boolean(row.tutor_weekly_cap_reached));
+    }
+  }, [isStudentAccount, matchedTutors, selectedTutorUserId]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -535,8 +570,11 @@ export default function MessengerScreen() {
                   <View style={[styles.conversationRow, selected && styles.conversationSelected]}>
                     <Pressable
                       onPress={() => {
-                        void onOpenConversationForTutor(item.tutor_id);
                         setSelectedTutorName(`${item.tutor_first_name} ${item.tutor_last_name}`);
+                        void onOpenConversationForTutor(
+                          item.tutor_id,
+                          item.tutor_weekly_cap_reached
+                        );
                       }}
                     >
                       <Text style={styles.conversationTitle}>
@@ -626,6 +664,32 @@ export default function MessengerScreen() {
                 ? "Select a matched tutor"
                 : "Select a conversation"}
           </Text>
+          {isStudentAccount && selectedConversationId ? (
+            <View style={styles.bookSessionBlock}>
+              <Pressable
+                style={[
+                  styles.bookSessionBtn,
+                  selectedTutorWeeklyCapReached && styles.bookSessionBtnDisabled,
+                ]}
+                disabled={selectedTutorWeeklyCapReached}
+                onPress={() => {}}
+              >
+                <Text
+                  style={[
+                    styles.bookSessionBtnText,
+                    selectedTutorWeeklyCapReached && styles.bookSessionBtnTextDisabled,
+                  ]}
+                >
+                  Book Session
+                </Text>
+              </Pressable>
+              {selectedTutorWeeklyCapReached ? (
+                <Text style={styles.bookSessionCapNote}>
+                  This tutor has reached their weekly cap on sessions.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           <FlatList
             data={messages}
             keyExtractor={(item) => String(item.id)}
@@ -821,6 +885,33 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1B2D50",
     marginBottom: 10,
+  },
+  bookSessionBlock: {
+    marginBottom: 10,
+  },
+  bookSessionBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: "#22C55E",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  bookSessionBtnDisabled: {
+    backgroundColor: "#E5E7EB",
+  },
+  bookSessionBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  bookSessionBtnTextDisabled: {
+    color: "#9CA3AF",
+  },
+  bookSessionCapNote: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#6B7280",
+    lineHeight: 17,
   },
   conversationRow: {
     padding: 12,

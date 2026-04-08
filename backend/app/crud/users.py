@@ -47,6 +47,7 @@ def create_user(db: Session, data: UserCreate) -> User:
             preferred_locations=data.tutor_profile.preferred_locations or None,
             help_provided=data.tutor_profile.help_provided or None,
             session_mode=data.tutor_profile.session_mode or "both",
+            max_sessions_per_week=data.tutor_profile.max_sessions_per_week,
         )
         db.add(tutor)
         db.flush()
@@ -130,6 +131,8 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             user.tutor.session_mode = t.session_mode
         if t.matching_paused is not None:
             user.tutor.matching_paused = t.matching_paused
+        if "max_sessions_per_week" in t.model_fields_set:
+            user.tutor.max_sessions_per_week = t.max_sessions_per_week
         if t.classes is not None:
             for tc in user.tutor.classes_tutoring:
                 db.delete(tc)

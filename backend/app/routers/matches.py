@@ -9,6 +9,7 @@ from app.crud.matches import (
     unmatch_student_tutor_pair,
 )
 from app.database import get_db
+from app.crud.sessions import tutor_weekly_cap_reached as tutor_weekly_cap_reached_crud
 from app.models import Class, TutorClass, TutorProfile, User
 from app.schemas import MatchResultPublic, MatchSelectRequest, MatchUnmatchRequest
 from app.services.embeddings import knn_retrieve_candidates, rerank_candidates
@@ -53,6 +54,7 @@ def _serialize_reranked_rows(db: Session, reranked: list[dict]) -> list[MatchRes
                 availability_overlap=row.get("availability_overlap"),
                 location_match=row.get("location_match"),
                 tutor_matching_paused=bool(tutor_profile.matching_paused) if tutor_profile else False,
+                tutor_weekly_cap_reached=tutor_weekly_cap_reached_crud(db, tutor_id),
             )
         )
     return response
@@ -94,6 +96,7 @@ def _build_saved_match_payload(db: Session, current_user_id: int) -> list[MatchR
                 availability_overlap=match.availability_overlap,
                 location_match=match.location_match,
                 tutor_matching_paused=bool(tutor_profile.matching_paused) if tutor_profile else False,
+                tutor_weekly_cap_reached=tutor_weekly_cap_reached_crud(db, match.tutor_id),
             )
         )
     return response

@@ -262,6 +262,8 @@ class TutorProfile(Base):
         default=False,
         server_default="false",
     )
+    # Maximum booked sessions per calendar week (Mon–Sun UTC); NULL = no limit.
+    max_sessions_per_week: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
 
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(

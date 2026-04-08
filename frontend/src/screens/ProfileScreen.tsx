@@ -71,6 +71,8 @@ type MeResponse = {
     help_provided?: string[] | null;
     session_mode?: string | null;
     matching_paused?: boolean;
+    /** Maximum sessions per week; null/undefined = no cap */
+    max_sessions_per_week?: number | null;
     classes_tutoring?: TutorClassWithClass[];
   } | null;
   student?: {
@@ -132,6 +134,8 @@ export default function ProfileScreen() {
   const [editLocations, setEditLocations] = useState<string[]>([]);
   const [editSessionMode, setEditSessionMode] = useState<"online" | "in_person" | "both">("both");
   const [editHelpProvided, setEditHelpProvided] = useState<string[]>([]);
+  /** Whole number 1–168, or empty string = no weekly cap */
+  const [editMaxSessionsPerWeek, setEditMaxSessionsPerWeek] = useState("");
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [classSearchQuery, setClassSearchQuery] = useState("");
   const [matchingPausedSaving, setMatchingPausedSaving] = useState(false);
@@ -205,6 +209,10 @@ export default function ProfileScreen() {
     setEditLocations(t?.preferred_locations ?? []);
     setEditSessionMode((t?.session_mode as "online" | "in_person" | "both") ?? "both");
     setEditHelpProvided(t?.help_provided ?? []);
+    const cap = t?.max_sessions_per_week;
+    setEditMaxSessionsPerWeek(
+      cap != null && cap >= 1 ? String(cap) : ""
+    );
     setEditingPrefs(true);
   }, [me?.tutor]);
 
@@ -308,6 +316,19 @@ export default function ProfileScreen() {
         }
       }
     }
+    const capTrim = editMaxSessionsPerWeek.trim();
+    let max_sessions_per_week: number | null = null;
+    if (capTrim !== "") {
+      const n = parseInt(capTrim, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 168) {
+        Alert.alert(
+          "Invalid cap",
+          "Enter a whole number of sessions between 1 and 168, or leave blank for no weekly limit."
+        );
+        return;
+      }
+      max_sessions_per_week = n;
+    }
     setSavingPrefs(true);
     try {
       const classes = editClasses
@@ -336,6 +357,7 @@ export default function ProfileScreen() {
           help_provided?: string[];
           session_mode?: string;
           classes?: typeof classes;
+          max_sessions_per_week?: number | null;
         };
       } = {};
       body.tutor_profile = {
@@ -345,6 +367,7 @@ export default function ProfileScreen() {
         // (`if t.session_mode is not None`) and the previous value stays in the database.
         session_mode: editSessionMode,
         classes,
+        max_sessions_per_week,
       };
       await api.patch<MeResponse>("/users/me", body);
       await loadMe({ rethrow: true });
@@ -742,6 +765,20 @@ export default function ProfileScreen() {
                 ))}
               </View>
 
+              <Text style={styles.label}>Max sessions per week (optional)</Text>
+              <Text style={styles.sectionSubtitle}>
+                Limit how many tutoring sessions you accept per calendar week. Leave blank for no
+                limit.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={editMaxSessionsPerWeek}
+                onChangeText={setEditMaxSessionsPerWeek}
+                placeholder="e.g. 10"
+                placeholderTextColor="#B0B6C3"
+                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+              />
+
               {/* Locations */}
               {(editSessionMode === "in_person" || editSessionMode === "both") && (
                 <>
@@ -820,6 +857,12 @@ export default function ProfileScreen() {
                   : me.tutor.session_mode === "online"
                   ? "Online"
                   : "In-Person"}
+              </Text>
+              <Text style={styles.label}>Max sessions per week</Text>
+              <Text style={styles.value}>
+                {me.tutor?.max_sessions_per_week != null && me.tutor.max_sessions_per_week >= 1
+                  ? String(me.tutor.max_sessions_per_week)
+                  : "No limit"}
               </Text>
               {(me.tutor?.preferred_locations?.length ?? 0) > 0 && (
                 <>

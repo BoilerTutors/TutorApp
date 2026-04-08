@@ -51,7 +51,7 @@ def get_tutor_sessions_future(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[TutoringSessionPublic]:
-    """Get all future tutoring sessions where the current user is the tutor."""
+    """Get tutoring sessions that have not ended yet (current user is tutor)."""
     if not current_user.is_tutor:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

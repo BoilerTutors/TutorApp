@@ -6,8 +6,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../api/client";
@@ -72,12 +72,69 @@ function mapBackendStatusToCardStatus(
   return status;
 }
 
+/** Assumes `sessions` are already ordered; keeps that order within each day. */
+function groupSessionsByDateHeading(
+  sessions: Session[]
+): { heading: string; items: Session[] }[] {
+  const groups: { heading: string; items: Session[] }[] = [];
+  for (const s of sessions) {
+    const last = groups[groups.length - 1];
+    if (last && last.heading === s.date) {
+      last.items.push(s);
+    } else {
+      groups.push({ heading: s.date, items: [s] });
+    }
+  }
+  return groups;
+}
+
+/** Monday 00:00:00.000 UTC through Sunday 23:59:59.999 UTC for the week containing `anchor`. */
+function utcWeekBoundsMs(anchor: Date): { start: number; end: number } {
+  const y = anchor.getUTCFullYear();
+  const m = anchor.getUTCMonth();
+  const d = anchor.getUTCDate();
+  const dow = anchor.getUTCDay();
+  const delta = dow === 0 ? -6 : 1 - dow;
+  const start = Date.UTC(y, m, d + delta, 0, 0, 0, 0);
+  const end = start + 7 * 24 * 60 * 60 * 1000 - 1;
+  return { start, end };
+}
+
+function countSessionsInUtcWeek(sessions: TutoringSession[], now: Date): number {
+  const { start, end } = utcWeekBoundsMs(now);
+  return sessions.filter((s) => {
+    if (s.status === "cancelled") {
+      return false;
+    }
+    const t = new Date(s.scheduled_start).getTime();
+    return t >= start && t <= end;
+  }).length;
+}
+
+function formatWeeklyUsageLine(used: number, cap: number | null): string | null {
+  const sessionWord = used === 1 ? "session" : "sessions";
+  if (cap != null && cap >= 1) {
+    const remaining = Math.max(0, cap - used);
+    const base = `${used}/${cap} ${sessionWord} this week`;
+    if (remaining === 0) {
+      return `${base} · weekly cap reached`;
+    }
+    const remWord = remaining === 1 ? "1 more remaining" : `${remaining} more remaining`;
+    return `${base} · ${remWord}`;
+  }
+  if (used === 0) {
+    return null;
+  }
+  return `${used} ${sessionWord} this week`;
+}
+
 export default function TutorScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [firstName, setFirstName] = useState("Tutor");
   const [searchQuery, setSearchQuery] = useState("");
   const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([]);
   const [pastSessions, setPastSessions] = useState<Session[]>([]);
+  const [weeklyUsageLine, setWeeklyUsageLine] = useState<string | null>(null);
 
   const filterSessions = useCallback(
     (sessions: Session[]) => {
@@ -103,63 +160,98 @@ export default function TutorScreen() {
     [filterSessions, pastSessions]
   );
 
-  useEffect(() => {
-    let mounted = true;
-    const loadDashboardData = async () => {
-      try {
-        const [me, futureRaw, pastRaw] = await Promise.all([
-          api.get<{ first_name: string }>("/users/me"),
-          api.get<TutoringSession[]>("/sessions/tutor/future"),
-          api.get<TutoringSession[]>("/sessions/tutor/past"),
-        ]);
+  const groupedUpcoming = useMemo(
+    () => groupSessionsByDateHeading(filteredUpcoming),
+    [filteredUpcoming]
+  );
+  const recentPastFlat = useMemo(
+    () => filteredPast.slice(0, MAX_RECENT_PAST),
+    [filteredPast]
+  );
+  const groupedRecentPast = useMemo(
+    () => groupSessionsByDateHeading(recentPastFlat),
+    [recentPastFlat]
+  );
 
-        const uniqueStudentIds = Array.from(
-          new Set([...futureRaw, ...pastRaw].map((s) => s.student_id))
-        );
-        const studentLookupPairs = await Promise.all(
-          uniqueStudentIds.map(async (id) => {
-            try {
-              const user = await api.get<{ first_name: string; last_name: string }>(
-                `/users/${id}`
-              );
-              return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
-            } catch {
-              return [id, `Student #${id}`] as const;
-            }
-          })
-        );
-        const studentNameById = new Map<number, string>(studentLookupPairs);
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      const loadDashboardData = async () => {
+        try {
+          const [me, futureRaw, pastRaw] = await Promise.all([
+            api.get<{
+              first_name: string;
+              tutor?: { max_sessions_per_week?: number | null } | null;
+            }>("/users/me"),
+            api.get<TutoringSession[]>("/sessions/tutor/future"),
+            api.get<TutoringSession[]>("/sessions/tutor/past"),
+          ]);
 
-        const mapSession = (s: TutoringSession): Session => {
-          const parts = formatSessionDateParts(s.scheduled_start, s.scheduled_end);
-          return {
-            id: s.id,
-            studentName: studentNameById.get(s.student_id) ?? `Student #${s.student_id}`,
-            subject: s.subject,
-            date: parts.date,
-            startTime: parts.startTime,
-            endTime: parts.endTime,
-            duration: formatDuration(s.scheduled_start, s.scheduled_end),
-            status: mapBackendStatusToCardStatus(s.status),
+          const uniqueStudentIds = Array.from(
+            new Set([...futureRaw, ...pastRaw].map((s) => s.student_id))
+          );
+          const studentLookupPairs = await Promise.all(
+            uniqueStudentIds.map(async (id) => {
+              try {
+                const user = await api.get<{ first_name: string; last_name: string }>(
+                  `/users/${id}`
+                );
+                return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
+              } catch {
+                return [id, `Student #${id}`] as const;
+              }
+            })
+          );
+          const studentNameById = new Map<number, string>(studentLookupPairs);
+
+          const mapSession = (s: TutoringSession): Session => {
+            const parts = formatSessionDateParts(s.scheduled_start, s.scheduled_end);
+            return {
+              id: s.id,
+              studentName: studentNameById.get(s.student_id) ?? `Student #${s.student_id}`,
+              subject: s.subject,
+              date: parts.date,
+              startTime: parts.startTime,
+              endTime: parts.endTime,
+              duration: formatDuration(s.scheduled_start, s.scheduled_end),
+              status: mapBackendStatusToCardStatus(s.status),
+            };
           };
-        };
 
-        if (mounted) {
-          if (me.first_name?.trim()) {
-            setFirstName(me.first_name.trim());
+          const futureSorted = [...futureRaw].sort(
+            (a, b) =>
+              new Date(a.scheduled_start).getTime() -
+              new Date(b.scheduled_start).getTime()
+          );
+          const pastSorted = [...pastRaw].sort(
+            (a, b) =>
+              new Date(b.scheduled_start).getTime() -
+              new Date(a.scheduled_start).getTime()
+          );
+
+          const cap = me.tutor?.max_sessions_per_week ?? null;
+          const used = countSessionsInUtcWeek([...futureRaw, ...pastRaw], new Date());
+
+          if (mounted) {
+            if (me.first_name?.trim()) {
+              setFirstName(me.first_name.trim());
+            }
+            setUpcomingSessions(futureSorted.map(mapSession));
+            setPastSessions(pastSorted.map(mapSession));
+            setWeeklyUsageLine(formatWeeklyUsageLine(used, cap));
           }
-          setUpcomingSessions(futureRaw.map(mapSession));
-          setPastSessions(pastRaw.map(mapSession));
+        } catch {
+          if (mounted) {
+            setWeeklyUsageLine(null);
+          }
         }
-      } catch {
-        // Keep empty arrays if API calls fail.
-      }
-    };
-    void loadDashboardData();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+      };
+      void loadDashboardData();
+      return () => {
+        mounted = false;
+      };
+    }, [])
+  );
 
   const QUICK_ACTIONS: QuickAction[] = [
     {
@@ -245,10 +337,20 @@ export default function TutorScreen() {
       </View>
 
       {/* Upcoming Sessions */}
-      <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
+      <View style={styles.upcomingSectionHeader}>
+        <Text style={styles.sectionTitleShrink}>Upcoming Sessions</Text>
+        {weeklyUsageLine ? (
+          <Text style={styles.weekUsageHint}>{weeklyUsageLine}</Text>
+        ) : null}
+      </View>
       {filteredUpcoming.length > 0 ? (
-        filteredUpcoming.map((session) => (
-          <SessionCard key={session.id} session={session} />
+        groupedUpcoming.map((group) => (
+          <View key={`up-${group.heading}-${group.items[0]?.id ?? 0}`}>
+            <Text style={styles.dateSubheading}>{group.heading}</Text>
+            {group.items.map((session) => (
+              <SessionCard key={session.id} session={session} />
+            ))}
+          </View>
         ))
       ) : (
         <Text style={styles.emptyText}>
@@ -260,8 +362,13 @@ export default function TutorScreen() {
       <Text style={styles.sectionTitle}>Past Sessions</Text>
       {filteredPast.length > 0 ? (
         <>
-          {filteredPast.slice(0, MAX_RECENT_PAST).map((session) => (
-            <SessionCard key={session.id} session={session} />
+          {groupedRecentPast.map((group) => (
+            <View key={`past-${group.heading}-${group.items[0]?.id ?? 0}`}>
+              <Text style={styles.dateSubheading}>{group.heading}</Text>
+              {group.items.map((session) => (
+                <SessionCard key={session.id} session={session} />
+              ))}
+            </View>
           ))}
           {filteredPast.length > MAX_RECENT_PAST && (
             <Pressable
@@ -345,6 +452,36 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: NAVY,
     marginBottom: 10,
+    marginTop: 4,
+  },
+  upcomingSectionHeader: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  sectionTitleShrink: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+    flexShrink: 0,
+  },
+  weekUsageHint: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5B647A",
+    flex: 1,
+    textAlign: "right",
+    minWidth: 120,
+  },
+  dateSubheading: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4B5563",
+    marginBottom: 8,
     marginTop: 4,
   },
 

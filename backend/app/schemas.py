@@ -118,6 +118,7 @@ class TutorProfileCreate(BaseModel):
     classes: Optional[list["TutorClassCreate"]] = None
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    max_sessions_per_week: Optional[int] = Field(default=None, ge=1, le=168)
 
 
 class TutorProfileUpdate(BaseModel):
@@ -130,6 +131,7 @@ class TutorProfileUpdate(BaseModel):
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
     classes: Optional[list["TutorClassCreate"]] = None
     matching_paused: Optional[bool] = None
+    max_sessions_per_week: Optional[int] = Field(default=None, ge=1, le=168)
 
 
 class TutorClassWithClassPublic(BaseModel):
@@ -160,6 +162,7 @@ class TutorProfilePublic(BaseModel):
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None
     matching_paused: bool = False
+    max_sessions_per_week: Optional[int] = None
     classes_tutoring: list["TutorClassWithClassPublic"] = []
 
     @model_validator(mode="wrap")
@@ -200,6 +203,7 @@ class TutorProfilePublic(BaseModel):
                     "help_provided": tutor.help_provided,
                     "session_mode": getattr(tutor, "session_mode", None),
                     "matching_paused": getattr(tutor, "matching_paused", False),
+                    "max_sessions_per_week": getattr(tutor, "max_sessions_per_week", None),
                     "classes_tutoring": classes_data,
                 }
             )
@@ -507,6 +511,7 @@ class MatchResultPublic(BaseModel):
     availability_overlap: Optional[float] = None
     location_match: Optional[float] = None
     tutor_matching_paused: bool = False
+    tutor_weekly_cap_reached: bool = False
 
 
 class MatchSelectRequest(BaseModel):

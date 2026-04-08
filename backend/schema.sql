@@ -445,7 +445,12 @@ CREATE TABLE public.tutors (
     grad_year integer,
     preferred_locations text[] DEFAULT '{}'::text[],
     help_provided text[] DEFAULT '{}'::text[],
-    matching_paused boolean DEFAULT false NOT NULL
+    matching_paused boolean DEFAULT false NOT NULL,
+    max_sessions_per_week integer,
+    CONSTRAINT ck_tutors_max_sessions_per_week_range CHECK (
+        (max_sessions_per_week IS NULL)
+        OR ((max_sessions_per_week >= 1) AND (max_sessions_per_week <= 168))
+    )
 );
 
 
