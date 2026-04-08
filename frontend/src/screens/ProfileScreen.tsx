@@ -82,6 +82,7 @@ type MeResponse = {
     major: string | null;
     grad_year: number | null;
     preferred_locations?: string[] | null;
+    help_needed?: string[] | null;
     session_mode?: string | null;
     max_hourly_rate_cents?: number | null;
   } | null;
@@ -160,6 +161,7 @@ export default function ProfileScreen() {
   >("both");
   /** Dollars per hour, e.g. "25" — stored as max_hourly_rate_cents on save */
   const [editStudentMaxHourly, setEditStudentMaxHourly] = useState("");
+  const [editStudentHelpNeeded, setEditStudentHelpNeeded] = useState<string[]>([]);
 
   // Same class list as tutor registration (no backend fetch)
   const availableClasses = AVAILABLE_CLASSES_FALLBACK;
@@ -258,6 +260,7 @@ export default function ProfileScreen() {
     setEditStudentMaxHourly(
       cents != null && cents >= 0 ? String(cents / 100) : ""
     );
+    setEditStudentHelpNeeded(s?.help_needed ?? []);
     setEditingStudentPrefs(true);
   }, [me?.student]);
 
@@ -268,6 +271,12 @@ export default function ProfileScreen() {
   const toggleStudentLocation = (loc: string) => {
     setEditStudentLocations((prev) =>
       prev.includes(loc) ? prev.filter((l) => l !== loc) : [...prev, loc]
+    );
+  };
+
+  const toggleStudentHelpNeeded = (h: string) => {
+    setEditStudentHelpNeeded((prev) =>
+      prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]
     );
   };
 
@@ -455,6 +464,7 @@ export default function ProfileScreen() {
           preferred_locations: editStudentLocations,
           session_mode: editStudentSessionMode,
           max_hourly_rate_cents,
+          help_needed: editStudentHelpNeeded,
         },
       });
       await loadMe({ rethrow: true });
@@ -992,6 +1002,29 @@ export default function ProfileScreen() {
                 </>
               )}
 
+              <Text style={styles.label}>Type of help needed</Text>
+              <View style={styles.chipRowWrap}>
+                {HELP_TYPE_OPTIONS.map((h) => (
+                  <Pressable
+                    key={h}
+                    style={[
+                      styles.chip,
+                      editStudentHelpNeeded.includes(h) && styles.chipActive,
+                    ]}
+                    onPress={() => toggleStudentHelpNeeded(h)}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        editStudentHelpNeeded.includes(h) && styles.chipTextActive,
+                      ]}
+                    >
+                      {h}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
               <Text style={styles.label}>Max hourly budget (optional)</Text>
               <Text style={styles.sectionSubtitle}>
                 The most you prefer to pay per hour for tutoring (USD). Leave blank for no limit.
@@ -1041,6 +1074,12 @@ export default function ProfileScreen() {
                   <Text style={styles.value}>{me.student!.preferred_locations!.join(", ")}</Text>
                 </>
               )}
+              {(me.student?.help_needed?.length ?? 0) > 0 && (
+                <>
+                  <Text style={styles.label}>Type of help needed</Text>
+                  <Text style={styles.value}>{me.student!.help_needed!.join(", ")}</Text>
+                </>
+              )}
               {me.student?.max_hourly_rate_cents != null && me.student.max_hourly_rate_cents >= 0 && (
                 <>
                   <Text style={styles.label}>Max hourly budget</Text>
@@ -1051,7 +1090,8 @@ export default function ProfileScreen() {
               )}
               {(me.student?.preferred_locations?.length ?? 0) === 0 &&
                 me.student?.max_hourly_rate_cents == null &&
-                !me.student?.session_mode && (
+                !me.student?.session_mode &&
+                (me.student?.help_needed?.length ?? 0) === 0 && (
                   <Text style={styles.placeholder}>No preferences set yet.</Text>
                 )}
               <Pressable style={styles.button} onPress={startEditingStudentPrefs}>
