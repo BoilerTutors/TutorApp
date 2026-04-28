@@ -135,6 +135,7 @@ class TutorProfileCreate(BaseModel):
     classes: Optional[list["TutorClassCreate"]] = None
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    max_sessions_per_week: Optional[int] = Field(default=None, ge=1, le=168)
 
 
 class TutorProfileUpdate(BaseModel):
@@ -146,6 +147,8 @@ class TutorProfileUpdate(BaseModel):
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
     classes: Optional[list["TutorClassCreate"]] = None
+    matching_paused: Optional[bool] = None
+    max_sessions_per_week: Optional[int] = Field(default=None, ge=1, le=168)
 
 
 class TutorClassWithClassPublic(BaseModel):
@@ -157,6 +160,7 @@ class TutorClassWithClassPublic(BaseModel):
     year_taken: int
     grade_received: str
     has_taed: bool
+    hourly_rate_cents: Optional[int] = None
     course_code: str
     professor: Optional[str] = None
 
@@ -174,6 +178,8 @@ class TutorProfilePublic(BaseModel):
     average_rating: Optional[float] = None
     help_provided: Optional[list[str]] = None
     session_mode: Optional[str] = None
+    matching_paused: bool = False
+    max_sessions_per_week: Optional[int] = None
     classes_tutoring: list["TutorClassWithClassPublic"] = []
 
     @model_validator(mode="wrap")
@@ -195,16 +201,12 @@ class TutorProfilePublic(BaseModel):
                         year_taken=tc.year_taken,
                         grade_received=tc.grade_received,
                         has_taed=tc.has_taed,
+                        hourly_rate_cents=tc.hourly_rate_cents,
                         course_code=course_code,
                         professor=c.professor if c else None,
                     )
                 )
-            try:
-                avg_rating = getattr(tutor, "average_rating", None)
-            except Exception:
-                # Avoid hard-failing profile serialization if local DB schema lags
-                # on session/review-related columns.
-                avg_rating = None
+            avg_rating = tutor.average_rating
             return handler(
                 {
                     "id": tutor.id,
@@ -217,6 +219,8 @@ class TutorProfilePublic(BaseModel):
                     "average_rating": avg_rating,
                     "help_provided": tutor.help_provided,
                     "session_mode": getattr(tutor, "session_mode", None),
+                    "matching_paused": getattr(tutor, "matching_paused", False),
+                    "max_sessions_per_week": getattr(tutor, "max_sessions_per_week", None),
                     "classes_tutoring": classes_data,
                 }
             )
@@ -234,6 +238,7 @@ class StudentProfileCreate(BaseModel):
     classes: Optional[list["StudentClassCreate"]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    max_hourly_rate_cents: Optional[int] = Field(default=None, ge=0)
 
 
 class StudentProfileUpdate(BaseModel):
@@ -243,6 +248,7 @@ class StudentProfileUpdate(BaseModel):
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
+    max_hourly_rate_cents: Optional[int] = Field(default=None, ge=0)
 
 
 class StudentProfilePublic(BaseModel):
@@ -256,6 +262,7 @@ class StudentProfilePublic(BaseModel):
     preferred_locations: Optional[list[str]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None
+    max_hourly_rate_cents: Optional[int] = None
 
 
 # ===========================================================
@@ -317,6 +324,29 @@ class TutoringSessionPublic(BaseModel):
     purchased_at: datetime
 
 
+def tutoring_session_status_for_api(raw: str) -> SessionStatus:
+    """Map DB/session row status to API SessionStatus (legacy `confirmed` → `accepted`)."""
+    if raw == "confirmed":
+        return "accepted"
+    return raw  # type: ignore[return-value]
+
+
+def tutoring_session_to_public(row: "TutoringSession") -> TutoringSessionPublic:
+    """Build TutoringSessionPublic from an ORM row; normalizes legacy statuses."""
+    return TutoringSessionPublic(
+        id=row.id,
+        tutor_id=row.tutor_id,
+        student_id=row.student_id,
+        subject=row.subject,
+        scheduled_start=row.scheduled_start,
+        scheduled_end=row.scheduled_end,
+        cost_cents=row.cost_cents,
+        notes=row.notes,
+        status=tutoring_session_status_for_api(row.status),
+        purchased_at=row.purchased_at,
+    )
+
+
 class AdminTutoringSessionPublic(BaseModel):
     id: int
     tutor_id: int
@@ -330,6 +360,14 @@ class AdminTutoringSessionPublic(BaseModel):
     notes: Optional[str] = None
     status: SessionStatus
     purchased_at: datetime
+
+
+def admin_tutoring_session_dict_to_public(session: dict) -> AdminTutoringSessionPublic:
+    """Normalize legacy `status` for admin list payloads built from raw SQL rows."""
+    payload = dict(session)
+    if isinstance(payload.get("status"), str):
+        payload["status"] = tutoring_session_status_for_api(payload["status"])
+    return AdminTutoringSessionPublic.model_validate(payload)
       
       
 class SessionVerificationCodePublic(BaseModel):
@@ -426,6 +464,7 @@ class TutorClassCreate(BaseModel):
     year_taken: int
     grade_received: str = Field(max_length=2)
     has_taed: bool = False
+    hourly_rate_cents: Optional[int] = None
 
 
 class TutorClassPublic(BaseModel):
@@ -438,6 +477,7 @@ class TutorClassPublic(BaseModel):
     year_taken: int
     grade_received: str
     has_taed: bool
+    hourly_rate_cents: Optional[int] = None
 
 # ===========================================================
 # ---- Auth / misc schemas ----
@@ -541,6 +581,8 @@ class MatchResultPublic(BaseModel):
     class_strength: Optional[float] = None
     availability_overlap: Optional[float] = None
     location_match: Optional[float] = None
+    tutor_matching_paused: bool = False
+    tutor_weekly_cap_reached: bool = False
 
 
 class MatchSelectRequest(BaseModel):

@@ -173,6 +173,8 @@ def add_tutor_class(db: Session, tutor_id: int, data: TutorClassCreate) -> Tutor
         semester=data.semester,
         year_taken=data.year_taken,
         grade_received=data.grade_received,
+        has_taed=data.has_taed,
+        hourly_rate_cents=data.hourly_rate_cents,
     )
     db.add(tutor_class)
     db.commit()

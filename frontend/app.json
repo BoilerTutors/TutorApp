@@ -15,6 +15,9 @@
     "plugins": [
       "expo-secure-store"
     ],
+    "android": {
+      "usesCleartextTraffic": true
+    },
     "extra": {
       "apiUrl": "http://localhost:8000"
     }

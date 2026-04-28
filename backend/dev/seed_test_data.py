@@ -14,6 +14,7 @@ if str(backend) not in sys.path:
     sys.path.insert(0, str(backend))
 
 from app.database import SessionLocal  # type: ignore  # noqa: E402
+from app.crud.sessions import utc_week_start_end  # type: ignore  # noqa: E402
 from app.models import User, TutorProfile, StudentProfile, TutoringSession  # type: ignore  # noqa: E402
 from app.auth import hash_password  # type: ignore  # noqa: E402
 
@@ -53,6 +54,9 @@ def get_or_create_session(
         .one_or_none()
     )
     if existing:
+        existing.scheduled_start = scheduled_start
+        existing.scheduled_end = scheduled_end
+        session.flush()
         return existing
 
     tutoring_session = TutoringSession(
@@ -149,7 +153,7 @@ def main() -> None:
             )
             session.add(tutor_profile)
 
-        # Current session for Tutor A <-> Student.
+        # Current session for Tutor A <-> Student (in-window around now, always this UTC week).
         now = datetime.now(timezone.utc)
         current_start = now - timedelta(minutes=10)
         current_end = now + timedelta(minutes=10)
@@ -164,9 +168,13 @@ def main() -> None:
             notes="Seeded current tutoring session",
         )
 
-        # Upcoming session for Tutor B <-> Student.
+        # Upcoming session for Tutor B <-> Student (later this UTC week).
+        _, week_end = utc_week_start_end(now)
         upcoming_start = now + timedelta(days=1)
         upcoming_end = upcoming_start + timedelta(minutes=30)
+        if upcoming_start > week_end:
+            upcoming_end = week_end
+            upcoming_start = upcoming_end - timedelta(minutes=30)
         upcoming_session = get_or_create_session(
             session,
             tutor_id=tutor_user_b.id,

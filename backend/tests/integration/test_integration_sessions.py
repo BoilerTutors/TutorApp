@@ -131,6 +131,33 @@ def test_tutor_future_returns_only_upcoming(client, db_session):
     assert [x["subject"] for x in data] == ["Soon", "Later"]
 
 
+def test_tutor_future_includes_in_progress_session(client, db_session):
+    """Sessions that started but not ended yet appear under tutor future, not lost."""
+    tutor, student = _create_tutor_and_student(db_session)
+    now = datetime.now(timezone.utc)
+
+    _add_session(
+        db_session,
+        tutor_id=tutor.id,
+        student_id=student.id,
+        scheduled_start=now - timedelta(minutes=30),
+        scheduled_end=now + timedelta(minutes=30),
+        subject="In progress",
+        cost_cents=3000,
+        status="confirmed",
+    )
+
+    headers = _auth_header(client, "int_tutor@purdue.edu", "password123")
+    r_future = client.get("/sessions/tutor/future", headers=headers)
+    r_past = client.get("/sessions/tutor/past", headers=headers)
+
+    assert r_future.status_code == 200
+    assert r_past.status_code == 200
+    assert len(r_future.json()) == 1
+    assert r_future.json()[0]["subject"] == "In progress"
+    assert r_past.json() == []
+
+
 def test_student_forbidden_on_tutor_past_and_future(client, db_session):
     create_user(
         db_session,

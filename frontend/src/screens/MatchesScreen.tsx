@@ -26,6 +26,7 @@ type MatchItem = {
   tutor_major: string | null;
   tutor_hourly_rate_cents?: number | null;
   similarity_score: number;
+  tutor_matching_paused?: boolean;
 };
 type TutorClassLite = {
   class_id: number;
@@ -312,71 +313,82 @@ export default function MatchesScreen() {
           void loadLatestMatches(selectedClassId);
         }}
         refreshing={refreshing}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.headerRow}>
-              <Text style={styles.rank}>#{item.rank}</Text>
-              <Text style={styles.score}>{(item.similarity_score * 100).toFixed(1)}%</Text>
-            </View>
-            <Text style={styles.name}>{item.tutor_first_name} {item.tutor_last_name}</Text>
-            <Text style={styles.meta}>Tutor ID: {item.tutor_profile_id ?? "—"}</Text>
-            {/* TESTING ONLY: easy to remove once no longer needed */}
-            <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
-            <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
-            <Text style={styles.meta}>
-              Rate:{" "}
-              {item.tutor_hourly_rate_cents != null
-                ? `$${(item.tutor_hourly_rate_cents / 100).toFixed(2)}/hr`
-                : "—"}
-            </Text>
-            <Text style={styles.meta}>
-              Classes:{" "}
-              {(tutorClassesByTutorUserId[item.tutor_id] ?? [])
-                .map((c) => c.course_code)
-                .join(", ") || "—"}
-            </Text>
-            {selectedClassId != null ? (
-              <Text style={styles.filteredClassMeta}>
-                Filtered class match: {selectedClassLabel ?? `Class ${selectedClassId}`}
+        renderItem={({ item }) => {
+          const isMatched = !!matchedTutorIds[item.tutor_id];
+          const isMatching = !!matchingTutorIds[item.tutor_id];
+          const pausedNoNew = !!item.tutor_matching_paused && !isMatched;
+          return (
+            <View style={styles.card}>
+              <View style={styles.headerRow}>
+                <Text style={styles.rank}>#{item.rank}</Text>
+                <Text style={styles.score}>{(item.similarity_score * 100).toFixed(1)}%</Text>
+              </View>
+              <Text style={styles.name}>{item.tutor_first_name} {item.tutor_last_name}</Text>
+              <Text style={styles.meta}>Tutor ID: {item.tutor_profile_id ?? "—"}</Text>
+              {/* TESTING ONLY: easy to remove once no longer needed */}
+              <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
+              <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
+              <Text style={styles.meta}>
+                Rate:{" "}
+                {item.tutor_hourly_rate_cents != null
+                  ? `$${(item.tutor_hourly_rate_cents / 100).toFixed(2)}/hr`
+                  : "—"}
               </Text>
-            ) : null}
-            <View style={styles.actionsRow}>
-              <Pressable
-                style={[styles.actionBtn, styles.viewProfileBtn]}
-                onPress={() => {
-                  handleOpenProfile(item.tutor_id);
-                }}
-              >
-                <Text style={[styles.actionBtnText, styles.viewProfileBtnText]}>View Profile</Text>
-              </Pressable>
-              {(() => {
-                const isMatched = !!matchedTutorIds[item.tutor_id];
-                const isMatching = !!matchingTutorIds[item.tutor_id];
-                return (
-              <Pressable
-                style={[
-                  styles.actionBtn,
-                  styles.matchBtn,
-                  isMatched && styles.matchBtnMatched,
-                ]}
-                onPress={() => {
-                  void handleSelectMatch(item);
-                }}
-                disabled={isMatching || isMatched}
-              >
-                <Text style={[styles.actionBtnText, isMatched && styles.actionBtnTextMatched]}>
-                  {isMatched
-                    ? "Matched"
-                    : isMatching
-                      ? "Matching..."
-                      : "Match"}
+              <Text style={styles.meta}>
+                Classes:{" "}
+                {(tutorClassesByTutorUserId[item.tutor_id] ?? [])
+                  .map((c) => c.course_code)
+                  .join(", ") || "—"}
+              </Text>
+              {selectedClassId != null ? (
+                <Text style={styles.filteredClassMeta}>
+                  Filtered class match: {selectedClassLabel ?? `Class ${selectedClassId}`}
                 </Text>
-              </Pressable>
-                );
-              })()}
+              ) : null}
+              <View style={styles.actionsRow}>
+                <Pressable
+                  style={[styles.actionBtn, styles.viewProfileBtn]}
+                  onPress={() => {
+                    handleOpenProfile(item.tutor_id);
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, styles.viewProfileBtnText]}>View Profile</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.actionBtn,
+                    styles.matchBtn,
+                    isMatched && styles.matchBtnMatched,
+                    pausedNoNew && styles.matchBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    void handleSelectMatch(item);
+                  }}
+                  disabled={isMatching || isMatched || pausedNoNew}
+                >
+                  <Text
+                    style={[
+                      styles.actionBtnText,
+                      isMatched && styles.actionBtnTextMatched,
+                      pausedNoNew && styles.actionBtnTextDisabled,
+                    ]}
+                  >
+                    {isMatched
+                      ? "Matched"
+                      : pausedNoNew
+                        ? "Unavailable"
+                        : isMatching
+                          ? "Matching..."
+                          : "Match"}
+                  </Text>
+                </Pressable>
+              </View>
+              {pausedNoNew ? (
+                <Text style={styles.pauseMatchHint}>This tutor has paused new matches.</Text>
+              ) : null}
             </View>
-          </View>
-        )}
+          );
+        }}
         ListFooterComponent={
           <Pressable
             style={styles.refreshButton}
@@ -526,6 +538,18 @@ const styles = StyleSheet.create({
   },
   actionBtnTextMatched: {
     color: "#6B7280",
+  },
+  matchBtnDisabled: {
+    backgroundColor: "#D1D5DB",
+  },
+  actionBtnTextDisabled: {
+    color: "#6B7280",
+  },
+  pauseMatchHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
   },
   refreshButton: {
     marginTop: 4,

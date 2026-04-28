@@ -86,20 +86,22 @@ export default function SessionCard({
             </View>
           </View>
 
-          <Pressable style={styles.detailsBtn}>
-            <Text style={styles.detailsBtnText}>View Details</Text>
-          </Pressable>
-          {showCancelAction && session.status !== "cancelled" ? (
-            <Pressable
-              style={styles.cancelBtn}
-              onPress={() => onCancelPress?.(session.id)}
-              disabled={cancelling}
-            >
-              <Text style={styles.cancelBtnText}>
-                {cancelling ? "Cancelling..." : "Cancel Session"}
-              </Text>
+          <View style={styles.sessionActions}>
+            <Pressable style={styles.detailsBtn}>
+              <Text style={styles.detailsBtnText}>View Details</Text>
             </Pressable>
-          ) : null}
+            {showCancelAction && session.status !== "cancelled" ? (
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={() => onCancelPress?.(session.id)}
+                disabled={cancelling}
+              >
+                <Text style={styles.cancelBtnText}>
+                  {cancelling ? "Cancelling..." : "Cancel Session"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       )}
     </View>
@@ -176,13 +178,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
   },
+  sessionActions: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    alignSelf: "flex-start",
+    gap: 8,
+  },
   detailsBtn: {
     borderWidth: 1.5,
     borderColor: NAVY,
     borderRadius: 8,
     paddingVertical: 7,
     paddingHorizontal: 12,
-    alignSelf: "center",
+    alignItems: "center",
   },
   detailsBtnText: {
     color: NAVY,
@@ -195,8 +203,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 7,
     paddingHorizontal: 12,
-    alignSelf: "center",
-    marginTop: 8,
+    alignItems: "center",
   },
   cancelBtnText: {
     color: "#DC2626",

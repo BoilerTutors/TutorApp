@@ -126,6 +126,7 @@ export default function StudentRegistrationScreen() {
   const [sessionMode, setSessionMode] = useState<SessionMode>("both");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [helpTypes, setHelpTypes] = useState<string[]>([]);
+  const [maxHourlyBudget, setMaxHourlyBudget] = useState("");
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -217,6 +218,13 @@ export default function StudentRegistrationScreen() {
           showAlert("Required", "Please select at least one preferred tutoring location.");
           return false;
         }
+        if (maxHourlyBudget.trim()) {
+          const n = parseFloat(maxHourlyBudget.trim());
+          if (!Number.isFinite(n) || n < 0) {
+            showAlert("Invalid amount", "Enter a valid max hourly budget in dollars, or leave it blank.");
+            return false;
+          }
+        }
         return true;
       default:
         return true;
@@ -240,6 +248,9 @@ export default function StudentRegistrationScreen() {
 
     const [firstName, lastName] = splitFullName(fullName);
     const gradYearNum = gradYear.trim() ? parseInt(gradYear.trim(), 10) : undefined;
+    const budgetTrim = maxHourlyBudget.trim();
+    const max_hourly_rate_cents =
+      budgetTrim === "" ? undefined : Math.round(parseFloat(budgetTrim) * 100);
 
     const studentClasses = selectedClasses
       .filter((c) => c.estimatedGrade)
@@ -264,6 +275,7 @@ export default function StudentRegistrationScreen() {
         preferred_locations: selectedLocations.length > 0 ? selectedLocations : undefined,
         help_needed: helpTypes.length > 0 ? helpTypes : undefined,
         session_mode: sessionMode,
+        max_hourly_rate_cents,
       },
     };
 
@@ -545,6 +557,22 @@ export default function StudentRegistrationScreen() {
         </>
       )}
 
+      <Text style={styles.label}>Max hourly budget (optional)</Text>
+      <Text style={[styles.stepSubtitle, { marginTop: 0, marginBottom: 10 }]}>
+        The most you prefer to pay per hour (USD). Leave blank if you do not want to set a limit yet.
+      </Text>
+      <View style={styles.inputWrap}>
+        <Ionicons name="cash-outline" size={18} color="#8C93A4" />
+        <TextInput
+          style={styles.input}
+          value={maxHourlyBudget}
+          onChangeText={setMaxHourlyBudget}
+          placeholder="e.g. 25"
+          placeholderTextColor="#B0B6C3"
+          keyboardType={Platform.OS === "ios" ? "decimal-pad" : "numeric"}
+        />
+      </View>
+
       <Text style={styles.label}>Type of help needed (optional)</Text>
       <View style={styles.locationsGrid}>
        {HELP_TYPE_OPTIONS.map((helpType) => (
@@ -625,6 +653,15 @@ export default function StudentRegistrationScreen() {
           <>
             <Text style={styles.overviewLabel}>Type of help</Text>
             <Text style={styles.overviewValue}>{helpTypes.join(", ")}</Text>
+          </>
+        )}
+
+        {maxHourlyBudget.trim() && (
+          <>
+            <Text style={styles.overviewLabel}>Max hourly budget</Text>
+            <Text style={styles.overviewValue}>
+              ${parseFloat(maxHourlyBudget.trim()).toFixed(2)}/hr
+            </Text>
           </>
         )}
       </View>

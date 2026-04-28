@@ -2,7 +2,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-import stripe
+#import stripe
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user

@@ -36,22 +36,25 @@ from app.crud.sessions import (
 )
 from app.database import get_db
 from app.services.session_verification_ws import session_verification_ws_manager
-from app.schemas import AdminTutoringSessionPublic, TutoringSessionPublic
 from app.models import TutoringSession, User, Admin
 from app.services.notification_events import build_and_store_notification
 from app.schemas import (
+    AdminTutoringSessionPublic,
     CurrentSessionExistsPublic,
     Message,
     SessionVerificationCodePublic,
     SessionVerificationVerifyRequest,
     TutoringSessionCreate,
-    TutoringSessionUpdate,
     TutoringSessionPublic,
-
+    TutoringSessionUpdate,
+    admin_tutoring_session_dict_to_public,
+    tutoring_session_to_public,
 )
 
 router = APIRouter()
 
+# Booked / active sessions: include legacy DB value `confirmed` (pre–accepted/declined migration).
+_ACTIVE_SESSION_STATUSES = frozenset({"pending", "accepted", "confirmed"})
 
 
 def _display_name(user: User) -> str:
@@ -131,7 +134,7 @@ def create_session(
             "status": row.status,
         },
     )
-    return TutoringSessionPublic.model_validate(row)
+    return tutoring_session_to_public(row)
 
 
 @router.get("/tutor/past", response_model=list[TutoringSessionPublic])
@@ -147,7 +150,7 @@ def get_tutor_sessions_past(
         )
 
     sessions = get_tutor_sessions_past_crud(db, current_user.id)
-    return [TutoringSessionPublic.model_validate(s) for s in sessions]
+    return [tutoring_session_to_public(s) for s in sessions]
 
 
 @router.get("/tutor/future", response_model=list[TutoringSessionPublic])
@@ -155,7 +158,7 @@ def get_tutor_sessions_future(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[TutoringSessionPublic]:
-    """Get all future tutoring sessions where the current user is the tutor."""
+    """Get tutoring sessions that have not ended yet (current user is tutor)."""
     if not current_user.is_tutor:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -165,9 +168,9 @@ def get_tutor_sessions_future(
     sessions = [
         s
         for s in get_tutor_sessions_future_crud(db, current_user.id)
-        if s.status in ("pending", "accepted")
+        if s.status in _ACTIVE_SESSION_STATUSES
     ]
-    return [TutoringSessionPublic.model_validate(s) for s in sessions]
+    return [tutoring_session_to_public(s) for s in sessions]
 
 
 
@@ -185,9 +188,9 @@ def get_student_sessions_future(
     sessions = [
         s
         for s in get_student_sessions_future_crud(db, current_user.id)
-        if s.status in ("pending", "accepted")
+        if s.status in _ACTIVE_SESSION_STATUSES
     ]
-    return [TutoringSessionPublic.model_validate(s) for s in sessions]
+    return [tutoring_session_to_public(s) for s in sessions]
 
 
 @router.get(
@@ -227,7 +230,7 @@ def get_recent_sessions_for_admin(
     _ = current_admin
     safe_limit = max(1, min(limit, 100))
     sessions = get_recent_sessions_for_admin_crud(db, limit=safe_limit, tutor_name=tutor_name)
-    return [AdminTutoringSessionPublic.model_validate(session) for session in sessions]
+    return [admin_tutoring_session_dict_to_public(session) for session in sessions]
   
   
 @router.post(
@@ -364,7 +367,7 @@ def update_session(
                 "reason": reason,
             },
         )
-        return TutoringSessionPublic.model_validate(row)
+        return tutoring_session_to_public(row)
 
     if not is_tutor_owner:
         raise HTTPException(
@@ -421,7 +424,7 @@ def update_session(
                 "status": data.status,
             },
         )
-    return TutoringSessionPublic.model_validate(row)
+    return tutoring_session_to_public(row)
 
 @router.get("/student/past", response_model=list[TutoringSessionPublic])
 def get_student_sessions_past(
@@ -435,4 +438,4 @@ def get_student_sessions_past(
             detail="Only students can access student sessions.",
         )
     sessions = get_student_sessions_past_crud(db, current_user.id)
-    return [TutoringSessionPublic.model_validate(s) for s in sessions]
+    return [tutoring_session_to_public(s) for s in sessions]

@@ -88,6 +88,25 @@ def get_latest_matches_for_student(db: Session, *, student_id: int) -> list[Matc
     )
 
 
+def get_active_matches_for_student(db: Session, *, student_id: int) -> list[Match]:
+    """All non-unmatched matches for the student (one row per tutor, most recent wins)."""
+    rows = (
+        db.query(Match)
+        .filter(Match.student_id == student_id, Match.unmatched.is_(False))
+        .order_by(Match.created_at.desc(), Match.id.desc())
+        .all()
+    )
+    seen: set[int] = set()
+    deduped: list[Match] = []
+    for m in rows:
+        if m.tutor_id in seen:
+            continue
+        seen.add(m.tutor_id)
+        deduped.append(m)
+    deduped.sort(key=lambda x: (-x.similarity_score, x.tutor_id))
+    return deduped
+
+
 def get_latest_match_run_for_student(db: Session, *, student_id: int) -> MatchRun | None:
     return (
         db.query(MatchRun)
@@ -121,6 +140,15 @@ def add_match_to_latest_run(
         .first()
     )
     if existing is not None:
+        if existing.unmatched:
+            existing.unmatched = False
+            existing.similarity_score = float(ranked_row["final_score"])
+            existing.embedding_similarity = ranked_row.get("embedding_similarity")
+            existing.class_strength = ranked_row.get("class_strength")
+            existing.availability_overlap = ranked_row.get("availability_overlap")
+            existing.location_match = ranked_row.get("location_match")
+            db.commit()
+            db.refresh(existing)
         return existing
 
     max_rank = (

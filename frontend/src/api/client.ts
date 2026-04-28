@@ -47,16 +47,45 @@ function headers(init?: RequestInitWithBody): HeadersInit {
   return h;
 }
 
+function isLikelyNetworkFailure(err: unknown): boolean {
+  if (err instanceof TypeError) {
+    return true;
+  }
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    return (
+      m.includes("failed to fetch") ||
+      m.includes("network request failed") ||
+      m.includes("load failed") ||
+      m.includes("networkerror")
+    );
+  }
+  return false;
+}
+
 async function request<T>(
   path: string,
   init: RequestInitWithBody = {}
 ): Promise<T> {
   const { body, ...rest } = init;
-  const res = await fetch(url(path), {
-    ...rest,
-    headers: headers(init),
-    ...(body !== undefined && { body: JSON.stringify(body) }),
-  });
+  const href = url(path);
+  let res: Response;
+  try {
+    res = await fetch(href, {
+      ...rest,
+      headers: headers(init),
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+  } catch (err) {
+    if (isLikelyNetworkFailure(err)) {
+      const devHint =
+        typeof __DEV__ !== "undefined" && __DEV__
+          ? ` The app is using ${API_BASE_URL}. Start the backend (uvicorn on port 8000; use --host 0.0.0.0 if testing on a phone). On a device, set EXPO_PUBLIC_API_URL or app.json extra.apiUrl to your computer’s LAN IP.`
+          : " Check your network and that the API server is running.";
+      throw new Error(`Cannot reach the server.${devHint}`);
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  }
   if (!res.ok) {
     if (res.status === 401) {
       // Had a token → session expired: clear and notify so app can redirect to Login.
