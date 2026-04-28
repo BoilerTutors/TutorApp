@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -122,7 +123,7 @@ def _candidate_tutor_user_ids_for_class(db: Session, class_id: int) -> list[int]
 def _compute_reranked_rows(
     db: Session,
     student_user_id: int,
-    class_id: int | None = None,
+    class_id: Optional[int] = None,
 ) -> list[dict]:
     candidate_tutor_user_ids: list[int] | None = None
     if class_id is not None:
@@ -147,7 +148,7 @@ def _compute_reranked_rows(
 
 @router.post("/me/refresh", response_model=list[MatchResultPublic])
 def refresh_my_match_candidates(
-    class_id: int | None = Query(default=None, ge=1),
+    class_id: Optional[int] = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[MatchResultPublic]:

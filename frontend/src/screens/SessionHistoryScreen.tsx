@@ -1,27 +1,26 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   TextInput,
   Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { api } from "../api/client";
 
 type RootStackParamList = {
   "Student Dashboard": undefined;
+  "Report Tutor": { tutorId: number; tutorName: string; sessionId?: number };
 };
 
-type TutoringSessionPublic = {
+type SessionWithTutor = {
   id: number;
   tutor_id: number;
-  student_id: number;
+  tutorName: string;
   subject: string;
   scheduled_start: string;
   scheduled_end: string;
@@ -31,14 +30,48 @@ type TutoringSessionPublic = {
   purchased_at: string;
 };
 
-type SessionWithTutor = TutoringSessionPublic & { tutorName: string };
+const DEMO_SESSIONS: SessionWithTutor[] = [
+  {
+    id: 1, tutor_id: 1, tutorName: "Alex Chen", subject: "CS 180",
+    scheduled_start: "2026-03-05T14:00:00Z", scheduled_end: "2026-03-05T15:00:00Z",
+    cost_cents: 1500, notes: "Helped with recursion and object-oriented concepts.",
+    status: "completed", purchased_at: "2026-03-01T00:00:00Z",
+  },
+  {
+    id: 2, tutor_id: 2, tutorName: "Jordan Smith", subject: "MA 265",
+    scheduled_start: "2026-03-10T10:00:00Z", scheduled_end: "2026-03-10T11:30:00Z",
+    cost_cents: 1800, notes: "Linear algebra exam prep, eigenvalues and matrix operations.",
+    status: "completed", purchased_at: "2026-03-07T00:00:00Z",
+  },
+  {
+    id: 3, tutor_id: 1, tutorName: "Alex Chen", subject: "CS 251",
+    scheduled_start: "2026-03-15T16:00:00Z", scheduled_end: "2026-03-15T17:00:00Z",
+    cost_cents: 1500, notes: null,
+    status: "completed", purchased_at: "2026-03-12T00:00:00Z",
+  },
+  {
+    id: 4, tutor_id: 3, tutorName: "Maya Patel", subject: "PHYS 172",
+    scheduled_start: "2026-03-20T13:00:00Z", scheduled_end: "2026-03-20T14:00:00Z",
+    cost_cents: 1200, notes: null,
+    status: "cancelled", purchased_at: "2026-03-17T00:00:00Z",
+  },
+  {
+    id: 5, tutor_id: 2, tutorName: "Jordan Smith", subject: "MA 162",
+    scheduled_start: "2026-03-25T09:00:00Z", scheduled_end: "2026-03-25T10:00:00Z",
+    cost_cents: 1200, notes: "Integral calculus review before midterm.",
+    status: "completed", purchased_at: "2026-03-22T00:00:00Z",
+  },
+  {
+    id: 6, tutor_id: 4, tutorName: "Chris Thompson", subject: "CS 354",
+    scheduled_start: "2026-03-28T15:00:00Z", scheduled_end: "2026-03-28T16:30:00Z",
+    cost_cents: 1800, notes: "Operating systems concepts, memory management.",
+    status: "completed", purchased_at: "2026-03-25T00:00:00Z",
+  },
+];
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+    weekday: "short", month: "short", day: "numeric", year: "numeric",
   });
 }
 
@@ -62,45 +95,13 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function SessionHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [sessions, setSessions] = useState<SessionWithTutor[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tutorSearch, setTutorSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const raw = await api.get<TutoringSessionPublic[]>("/sessions/student/past");
-
-        // Fetch unique tutor names
-        const uniqueTutorIds = Array.from(new Set(raw.map((s) => s.tutor_id)));
-        const tutorNamePairs = await Promise.all(
-          uniqueTutorIds.map(async (id) => {
-            try {
-              const user = await api.get<{ first_name: string; last_name: string }>(`/users/${id}`);
-              return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
-            } catch {
-              return [id, `Tutor #${id}`] as const;
-            }
-          })
-        );
-        const nameById = new Map<number, string>(tutorNamePairs);
-
-        setSessions(raw.map((s) => ({ ...s, tutorName: nameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}` })));
-      } catch {
-        setSessions([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, []);
-
   const filtered = useMemo(() => {
-    let result = sessions;
+    let result = DEMO_SESSIONS;
     if (tutorSearch.trim()) {
       result = result.filter((s) =>
         s.tutorName.toLowerCase().includes(tutorSearch.trim().toLowerCase())
@@ -116,10 +117,10 @@ export default function SessionHistoryScreen() {
       result = result.filter((s) => new Date(s.scheduled_start) <= to);
     }
     return result;
-  }, [sessions, tutorSearch, dateFrom, dateTo]);
+  }, [tutorSearch, dateFrom, dateTo]);
 
   const totalSpent = useMemo(
-    () => filtered.reduce((sum, s) => sum + s.cost_cents, 0),
+    () => filtered.filter((s) => s.status === "completed").reduce((sum, s) => sum + s.cost_cents, 0),
     [filtered]
   );
 
@@ -130,7 +131,6 @@ export default function SessionHistoryScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#2F3850" />
@@ -141,7 +141,6 @@ export default function SessionHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Payment Summary */}
       <View style={styles.summaryCard}>
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>{filtered.length}</Text>
@@ -159,7 +158,6 @@ export default function SessionHistoryScreen() {
         </View>
       </View>
 
-      {/* Filters */}
       {showFilters && (
         <View style={styles.filtersContainer}>
           <View style={styles.searchBar}>
@@ -211,25 +209,15 @@ export default function SessionHistoryScreen() {
         </View>
       )}
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={BLUE} />
-        </View>
-      ) : filtered.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="calendar-outline" size={48} color="#CCD1DC" />
-          <Text style={styles.emptyText}>
-            {sessions.length === 0 ? "No past sessions" : "No sessions match your filters"}
-          </Text>
-          <Text style={styles.emptySubtext}>
-            {sessions.length === 0
-              ? "Your completed sessions will appear here"
-              : "Try adjusting your search or date range"}
-          </Text>
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {filtered.map((session) => (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {filtered.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="calendar-outline" size={48} color="#CCD1DC" />
+            <Text style={styles.emptyText}>No sessions match your filters</Text>
+            <Text style={styles.emptySubtext}>Try adjusting your search or date range</Text>
+          </View>
+        ) : (
+          filtered.map((session) => (
             <View key={session.id} style={styles.sessionCard}>
               <View style={styles.sessionTop}>
                 <View style={styles.sessionInfo}>
@@ -261,10 +249,22 @@ export default function SessionHistoryScreen() {
               {session.notes ? (
                 <Text style={styles.notes} numberOfLines={2}>{session.notes}</Text>
               ) : null}
+
+              <TouchableOpacity
+                style={styles.reportBtn}
+                onPress={() => navigation.navigate("Report Tutor", {
+                  tutorId: session.tutor_id,
+                  tutorName: session.tutorName,
+                  sessionId: session.id,
+                })}
+              >
+                <Ionicons name="flag-outline" size={14} color="#E74C3C" />
+                <Text style={styles.reportBtnText}>Report Tutor</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </ScrollView>
-      )}
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -275,93 +275,67 @@ const BLUE = "#2E57A2";
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F5F6F8" },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBF0",
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16,
+    backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E8EBF0",
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#2F3850" },
   filterIconBtn: { padding: 4 },
   summaryCard: {
-    flexDirection: "row",
-    backgroundColor: "#FFF",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBF0",
+    flexDirection: "row", backgroundColor: "#FFF", padding: 16,
+    borderBottomWidth: 1, borderBottomColor: "#E8EBF0",
   },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryValue: { fontSize: 22, fontWeight: "700", color: NAVY },
   summaryLabel: { fontSize: 12, color: "#8C93A4", marginTop: 2 },
   summaryDivider: { width: 1, backgroundColor: "#E8EBF0", marginVertical: 4 },
   filtersContainer: {
-    backgroundColor: "#FFF",
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBF0",
+    backgroundColor: "#FFF", padding: 12,
+    borderBottomWidth: 1, borderBottomColor: "#E8EBF0",
   },
   searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 38,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
+    flexDirection: "row", alignItems: "center", backgroundColor: "#F5F6F8",
+    borderRadius: 8, paddingHorizontal: 10, height: 38, marginBottom: 10,
+    borderWidth: 1, borderColor: "#E1E5EE",
   },
   searchInput: { flex: 1, marginLeft: 6, fontSize: 14, color: NAVY },
   dateFilters: { flexDirection: "row", gap: 10 },
   dateInput: { flex: 1 },
   dateLabel: { fontSize: 12, color: "#5D667C", marginBottom: 4, fontWeight: "600" },
   dateField: {
-    backgroundColor: "#F5F6F8",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 36,
-    fontSize: 13,
-    color: NAVY,
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
+    backgroundColor: "#F5F6F8", borderRadius: 8, paddingHorizontal: 10,
+    height: 36, fontSize: 13, color: NAVY, borderWidth: 1, borderColor: "#E1E5EE",
   },
   clearBtn: { marginTop: 8, alignSelf: "flex-end" },
   clearBtnText: { fontSize: 13, color: BLUE, fontWeight: "600" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
+  emptyState: { alignItems: "center", justifyContent: "center", padding: 40 },
   emptyText: { marginTop: 12, fontSize: 16, fontWeight: "600", color: "#5D667C" },
   emptySubtext: { marginTop: 4, fontSize: 14, color: "#8C93A4", textAlign: "center" },
   scrollContent: { padding: 16, paddingBottom: 40 },
   sessionCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
+    backgroundColor: "#FFF", borderRadius: 12, padding: 16,
+    marginBottom: 12, borderWidth: 1, borderColor: "#E1E5EE",
   },
   sessionTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
+    flexDirection: "row", justifyContent: "space-between",
+    alignItems: "flex-start", marginBottom: 12,
   },
   sessionInfo: { flex: 1 },
   tutorName: { fontSize: 16, fontWeight: "700", color: NAVY },
   subject: { fontSize: 14, color: BLUE, marginTop: 2 },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 12, fontWeight: "700" },
   sessionDetails: { flexDirection: "row", gap: 14, flexWrap: "wrap" },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   detailText: { fontSize: 13, color: "#5D667C" },
   notes: { marginTop: 10, fontSize: 13, color: "#8C93A4", fontStyle: "italic" },
+  reportBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    marginTop: 12, alignSelf: "flex-end",
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1, borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+  },
+  reportBtnText: { fontSize: 13, color: "#E74C3C", fontWeight: "600" },
 });

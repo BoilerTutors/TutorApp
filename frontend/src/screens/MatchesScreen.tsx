@@ -26,7 +26,6 @@ type MatchItem = {
   tutor_major: string | null;
   tutor_hourly_rate_cents?: number | null;
   similarity_score: number;
-  tutor_matching_paused?: boolean;
 };
 type TutorClassLite = {
   class_id: number;
@@ -63,6 +62,7 @@ type RootStackParamList = {
         openTutorName?: string;
       }
     | undefined;
+  "Tutor Profile Reviews": { tutorUserId: number; tutorName: string };
 };
 
 export default function MatchesScreen() {
@@ -313,82 +313,74 @@ export default function MatchesScreen() {
           void loadLatestMatches(selectedClassId);
         }}
         refreshing={refreshing}
-        renderItem={({ item }) => {
-          const isMatched = !!matchedTutorIds[item.tutor_id];
-          const isMatching = !!matchingTutorIds[item.tutor_id];
-          const pausedNoNew = !!item.tutor_matching_paused && !isMatched;
-          return (
-            <View style={styles.card}>
-              <View style={styles.headerRow}>
-                <Text style={styles.rank}>#{item.rank}</Text>
-                <Text style={styles.score}>{(item.similarity_score * 100).toFixed(1)}%</Text>
-              </View>
-              <Text style={styles.name}>{item.tutor_first_name} {item.tutor_last_name}</Text>
-              <Text style={styles.meta}>Tutor ID: {item.tutor_profile_id ?? "—"}</Text>
-              {/* TESTING ONLY: easy to remove once no longer needed */}
-              <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
-              <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
-              <Text style={styles.meta}>
-                Rate:{" "}
-                {item.tutor_hourly_rate_cents != null
-                  ? `$${(item.tutor_hourly_rate_cents / 100).toFixed(2)}/hr`
-                  : "—"}
-              </Text>
-              <Text style={styles.meta}>
-                Classes:{" "}
-                {(tutorClassesByTutorUserId[item.tutor_id] ?? [])
-                  .map((c) => c.course_code)
-                  .join(", ") || "—"}
-              </Text>
-              {selectedClassId != null ? (
-                <Text style={styles.filteredClassMeta}>
-                  Filtered class match: {selectedClassLabel ?? `Class ${selectedClassId}`}
-                </Text>
-              ) : null}
-              <View style={styles.actionsRow}>
-                <Pressable
-                  style={[styles.actionBtn, styles.viewProfileBtn]}
-                  onPress={() => {
-                    handleOpenProfile(item.tutor_id);
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.viewProfileBtnText]}>View Profile</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.actionBtn,
-                    styles.matchBtn,
-                    isMatched && styles.matchBtnMatched,
-                    pausedNoNew && styles.matchBtnDisabled,
-                  ]}
-                  onPress={() => {
-                    void handleSelectMatch(item);
-                  }}
-                  disabled={isMatching || isMatched || pausedNoNew}
-                >
-                  <Text
-                    style={[
-                      styles.actionBtnText,
-                      isMatched && styles.actionBtnTextMatched,
-                      pausedNoNew && styles.actionBtnTextDisabled,
-                    ]}
-                  >
-                    {isMatched
-                      ? "Matched"
-                      : pausedNoNew
-                        ? "Unavailable"
-                        : isMatching
-                          ? "Matching..."
-                          : "Match"}
-                  </Text>
-                </Pressable>
-              </View>
-              {pausedNoNew ? (
-                <Text style={styles.pauseMatchHint}>This tutor has paused new matches.</Text>
-              ) : null}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <View style={styles.headerRow}>
+              <Text style={styles.rank}>#{item.rank}</Text>
+              <Text style={styles.score}>{(item.similarity_score * 100).toFixed(1)}%</Text>
             </View>
-          );
-        }}
+            <Text style={styles.name}>{item.tutor_first_name} {item.tutor_last_name}</Text>
+            <Text style={styles.meta}>Tutor ID: {item.tutor_profile_id ?? "—"}</Text>
+            {/* TESTING ONLY: easy to remove once no longer needed */}
+            <Text style={styles.meta}>Tutor Email: {tutorEmailsById[item.tutor_id] || "—"}</Text>
+            <Text style={styles.meta}>Major: {item.tutor_major || "—"}</Text>
+            <Text style={styles.meta}>
+              Rate:{" "}
+              {item.tutor_hourly_rate_cents != null
+                ? `$${(item.tutor_hourly_rate_cents / 100).toFixed(2)}/hr`
+                : "—"}
+            </Text>
+            <Text style={styles.meta}>
+              Classes:{" "}
+              {(tutorClassesByTutorUserId[item.tutor_id] ?? [])
+                .map((c) => c.course_code)
+                .join(", ") || "—"}
+            </Text>
+            {selectedClassId != null ? (
+              <Text style={styles.filteredClassMeta}>
+                Filtered class match: {selectedClassLabel ?? `Class ${selectedClassId}`}
+              </Text>
+            ) : null}
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={[styles.actionBtn, styles.viewProfileBtn]}
+                onPress={() => handleOpenProfile(item.tutor_id)}
+              >
+                <Text style={[styles.actionBtnText, styles.viewProfileBtnText]}>View Profile</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.actionBtn, styles.reviewsBtn]}
+                onPress={() => navigation.navigate("Tutor Profile Reviews", {
+                  tutorUserId: item.tutor_id,
+                  tutorName: `${item.tutor_first_name} ${item.tutor_last_name}`,
+                })}
+              >
+                <Text style={[styles.actionBtnText, styles.reviewsBtnText]}>⭐ Reviews</Text>
+              </Pressable>
+
+              {(() => {
+                const isMatched = !!matchedTutorIds[item.tutor_id];
+                const isMatching = !!matchingTutorIds[item.tutor_id];
+                return (
+                  <Pressable
+                    style={[
+                      styles.actionBtn,
+                      styles.matchBtn,
+                      isMatched && styles.matchBtnMatched,
+                    ]}
+                    onPress={() => void handleSelectMatch(item)}
+                    disabled={isMatching || isMatched}
+                  >
+                    <Text style={[styles.actionBtnText, isMatched && styles.actionBtnTextMatched]}>
+                      {isMatched ? "Matched" : isMatching ? "Matching..." : "Match"}
+                    </Text>
+                  </Pressable>
+                );
+              })()}
+            </View>
+          </View>
+        )}
         ListFooterComponent={
           <Pressable
             style={styles.refreshButton}
@@ -455,10 +447,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
-  suggestionText: {
-    color: "#111827",
-    fontSize: 14,
-  },
+  suggestionText: { color: "#111827", fontSize: 14 },
   clearFilterBtn: {
     marginTop: 8,
     alignSelf: "flex-start",
@@ -467,16 +456,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#EEF2FF",
   },
-  clearFilterBtnText: {
-    color: "#2E57A2",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  filterHint: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#4B5563",
-  },
+  clearFilterBtnText: { color: "#2E57A2", fontSize: 12, fontWeight: "600" },
+  filterHint: { marginTop: 8, fontSize: 12, color: "#4B5563" },
   centered: {
     flex: 1,
     alignItems: "center",
@@ -515,7 +496,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     fontWeight: "600",
   },
-  actionsRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  actionsRow: { flexDirection: "row", gap: 8, marginTop: 10, flexWrap: "wrap" },
   actionBtn: {
     borderRadius: 10,
     paddingHorizontal: 14,
@@ -528,29 +509,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2E57A2",
   },
-  viewProfileBtnText: {
-    color: "#2E57A2",
+  viewProfileBtnText: { color: "#2E57A2" },
+  reviewsBtn: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#D4AF4A",
   },
+  reviewsBtnText: { color: "#C9A23E" },
   matchBtnMatched: {
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: "#9CA3AF",
   },
-  actionBtnTextMatched: {
-    color: "#6B7280",
-  },
-  matchBtnDisabled: {
-    backgroundColor: "#D1D5DB",
-  },
-  actionBtnTextDisabled: {
-    color: "#6B7280",
-  },
-  pauseMatchHint: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#6B7280",
-    fontStyle: "italic",
-  },
+  actionBtnTextMatched: { color: "#6B7280" },
   refreshButton: {
     marginTop: 4,
     alignSelf: "center",

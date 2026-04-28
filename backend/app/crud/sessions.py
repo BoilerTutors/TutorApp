@@ -1,61 +1,12 @@
 """CRUD queries for tutoring sessions."""
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from sqlalchemy import func, or_
-from sqlalchemy.orm import Session, aliased  # type: ignore[import]
+from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import hash_password, verify_password
-from app.models import TutoringSession, TutorProfile, User
-
-
-def utc_week_start_end(now: datetime | None = None) -> tuple[datetime, datetime]:
-    """Monday 00:00 UTC through Sunday 23:59:59.999 UTC for the week containing `now` (UTC)."""
-    now = now or datetime.now(timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    midnight = now.astimezone(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    delta_days = midnight.weekday()
-    start = midnight - timedelta(days=delta_days)
-    end = start + timedelta(days=7) - timedelta(microseconds=1)
-    return start, end
-
-
-def count_tutor_sessions_in_utc_week(
-    db: Session, tutor_user_id: int, now: datetime | None = None
-) -> int:
-    """Non-cancelled sessions whose scheduled_start falls in the current UTC week."""
-    start, end = utc_week_start_end(now)
-    n = (
-        db.query(func.count(TutoringSession.id))
-        .filter(
-            TutoringSession.tutor_id == tutor_user_id,
-            TutoringSession.status != "cancelled",
-            TutoringSession.scheduled_start >= start,
-            TutoringSession.scheduled_start <= end,
-        )
-        .scalar()
-    )
-    return int(n or 0)
-
-
-def tutor_weekly_cap_reached(db: Session, tutor_user_id: int) -> bool:
-    """True when the tutor has a weekly cap and scheduled sessions this UTC week meet or exceed it."""
-    tutor = (
-        db.query(TutorProfile)
-        .filter(TutorProfile.user_id == tutor_user_id)
-        .first()
-    )
-    if tutor is None or tutor.max_sessions_per_week is None:
-        return False
-    cap = tutor.max_sessions_per_week
-    if cap < 1:
-        return False
-    used = count_tutor_sessions_in_utc_week(db, tutor_user_id)
-    return used >= cap
+from app.models import TutoringSession
 
 
 def get_tutor_sessions_past(db: Session, tutor_user_id: int) -> list[TutoringSession]:
@@ -71,75 +22,15 @@ def get_tutor_sessions_past(db: Session, tutor_user_id: int) -> list[TutoringSes
 
 
 def get_tutor_sessions_future(db: Session, tutor_user_id: int) -> list[TutoringSession]:
-    """Return sessions not yet ended (includes in-progress), soonest first."""
+    """Return upcoming sessions for a tutor (soonest first)."""
     now = datetime.now(timezone.utc)
     return (
         db.query(TutoringSession)
         .filter(TutoringSession.tutor_id == tutor_user_id)
-        .filter(TutoringSession.scheduled_end >= now)
+        .filter(TutoringSession.scheduled_start >= now)
         .order_by(TutoringSession.scheduled_start.asc())
         .all()
     )
-
-
-def get_recent_sessions_for_admin(
-    db: Session,
-    limit: int = 50,
-    tutor_name: str | None = None,
-) -> list[dict]:
-    tutor = aliased(User)
-    student = aliased(User)
-
-    stmt = (
-        db.query(
-            TutoringSession.id,
-            TutoringSession.tutor_id,
-            TutoringSession.student_id,
-            TutoringSession.subject,
-            TutoringSession.scheduled_start,
-            TutoringSession.scheduled_end,
-            TutoringSession.cost_cents,
-            TutoringSession.notes,
-            TutoringSession.status,
-            TutoringSession.purchased_at,
-            tutor.first_name.label("tutor_first_name"),
-            tutor.last_name.label("tutor_last_name"),
-            student.first_name.label("student_first_name"),
-            student.last_name.label("student_last_name"),
-        )
-        .join(tutor, TutoringSession.tutor_id == tutor.id)
-        .join(student, TutoringSession.student_id == student.id)
-    )
-
-    if tutor_name:
-        search = f"%{tutor_name.strip()}%"
-        stmt = stmt.filter(
-            or_(
-                tutor.first_name.ilike(search),
-                tutor.last_name.ilike(search),
-                (tutor.first_name + " " + tutor.last_name).ilike(search),
-            )
-        )
-
-    rows = stmt.order_by(TutoringSession.id.desc()).limit(limit).all()
-
-    return [
-        {
-            "id": row.id,
-            "tutor_id": row.tutor_id,
-            "student_id": row.student_id,
-            "tutor_name": f"{row.tutor_first_name} {row.tutor_last_name}".strip(),
-            "student_name": f"{row.student_first_name} {row.student_last_name}".strip(),
-            "subject": row.subject,
-            "scheduled_start": row.scheduled_start,
-            "scheduled_end": row.scheduled_end,
-            "cost_cents": row.cost_cents,
-            "notes": row.notes,
-            "status": row.status,
-            "purchased_at": row.purchased_at,
-        }
-        for row in rows
-    ]
 
 
 def generate_session_verification_code(db: Session, session_id: int) -> str:
@@ -168,7 +59,6 @@ def verify_session_verification_code(db: Session, session_id: int, pin: str) -> 
         db.commit()
     return is_valid
 
-
 def get_student_sessions_past(db: Session, student_user_id: int) -> list[TutoringSession]:
     """Return past sessions for a student (most recent first)."""
     now = datetime.now(timezone.utc)
@@ -179,92 +69,3 @@ def get_student_sessions_past(db: Session, student_user_id: int) -> list[Tutorin
         .order_by(TutoringSession.scheduled_start.desc())
         .all()
     )
-
-
-def get_student_sessions_future(db: Session, student_user_id: int) -> list[TutoringSession]:
-    """Return upcoming sessions for a student (soonest first)."""
-    now = datetime.now(timezone.utc)
-    return (
-        db.query(TutoringSession)
-        .filter(TutoringSession.student_id == student_user_id)
-        .filter(TutoringSession.scheduled_start >= now)
-        .order_by(TutoringSession.scheduled_start.asc())
-        .all()
-    )
-
-
-def get_current_session_for_user(db: Session, user_id: int) -> TutoringSession | None:
-    """Return the current active session for a user, if one exists."""
-    now = datetime.now(timezone.utc)
-    return (
-        db.query(TutoringSession)
-        .filter(or_(TutoringSession.tutor_id == user_id, TutoringSession.student_id == user_id))
-        .filter(TutoringSession.scheduled_start <= now)
-        .filter(TutoringSession.scheduled_end >= now)
-        .filter(TutoringSession.status.in_(("pending", "confirmed", "accepted")))
-        .order_by(TutoringSession.scheduled_start.desc())
-        .first()
-    )
-
-
-def create_tutoring_session(
-    db: Session,
-    *,
-    tutor_id: int,
-    student_id: int,
-    subject: str,
-    scheduled_start: datetime,
-    scheduled_end: datetime,
-    cost_cents: int,
-    notes: str | None = None,
-) -> TutoringSession:
-    row = TutoringSession(
-        tutor_id=tutor_id,
-        student_id=student_id,
-        subject=subject,
-        scheduled_start=scheduled_start,
-        scheduled_end=scheduled_end,
-        cost_cents=cost_cents,
-        notes=notes,
-        status="pending",
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
-
-
-def get_session_for_tutor(db: Session, *, session_id: int, tutor_user_id: int) -> TutoringSession | None:
-    return (
-        db.query(TutoringSession)
-        .filter(
-            TutoringSession.id == session_id,
-            TutoringSession.tutor_id == tutor_user_id,
-        )
-        .first()
-    )
-
-
-def get_session_for_student(
-    db: Session, *, session_id: int, student_user_id: int
-) -> TutoringSession | None:
-    return (
-        db.query(TutoringSession)
-        .filter(
-            TutoringSession.id == session_id,
-            TutoringSession.student_id == student_user_id,
-        )
-        .first()
-    )
-
-
-def set_session_status(
-    db: Session,
-    *,
-    session: TutoringSession,
-    status: str,
-) -> TutoringSession:
-    session.status = status
-    db.commit()
-    db.refresh(session)
-    return session

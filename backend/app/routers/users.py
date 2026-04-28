@@ -1,3 +1,4 @@
+from typing import Optional
 """API routes for User accounts.
 
 - POST   /users/          - register a new user
@@ -156,7 +157,7 @@ def get_user_profile_details(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    avg_help_level: float | None = None
+    avg_help_level: Optional[float] = None
     if user.student and user.student.classes_enrolled:
         levels = [c.help_level for c in user.student.classes_enrolled if c.help_level is not None]
         if levels:

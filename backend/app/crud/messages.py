@@ -9,6 +9,7 @@ from typing import Optional
 """
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.models import Conversation, Match, Message, MessageAttachment, User
 
@@ -174,7 +175,7 @@ def get_attachment_for_user(
     *,
     attachment_id: int,
     user_id: int,
-) -> MessageAttachment | None:
+) -> Optional[MessageAttachment]:
     row = (
         db.query(MessageAttachment)
         .join(Message, Message.id == MessageAttachment.message_id)

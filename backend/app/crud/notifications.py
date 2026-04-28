@@ -1,6 +1,6 @@
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
-
+from typing import Optional
 from app.models import Notification, UserDeviceToken, UserNotificationSetting
 
 
@@ -11,7 +11,7 @@ def create_notification(
     event_type: str,
     title: str,
     body: str,
-    payload_json: dict | None = None,
+payload_json: Optional[dict] = None,
 ) -> Notification:
     row = Notification(
         user_id=user_id,
@@ -35,7 +35,7 @@ def list_notifications_for_user(db: Session, *, user_id: int, limit: int = 50) -
     return list(db.execute(stmt).scalars().all())
 
 
-def mark_notification_read(db: Session, *, notification_id: int, user_id: int) -> Notification | None:
+def mark_notification_read(db: Session, *, notification_id: int, user_id: int) -> Optional[Notification]:    
     row = (
         db.query(Notification)
         .filter(Notification.id == notification_id, Notification.user_id == user_id)
@@ -54,7 +54,7 @@ def upsert_device_token(
     *,
     user_id: int,
     token: str,
-    platform: str | None = None,
+    platform: Optional[str] = None,
 ) -> UserDeviceToken:
     row = db.query(UserDeviceToken).filter(UserDeviceToken.token == token).first()
     if row is None:

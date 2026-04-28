@@ -17,21 +17,13 @@ from sqlalchemy import (
     CheckConstraint,
     JSON,
 )
-from sqlalchemy.orm import Mapped, mapped_column, object_session, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
 # ===========================================
 # Users, Tutor Profiles, and Student Profiles
 # ============================================
-class Admin(Base):
-    __tablename__ = "admins"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-
-
 class User(Base):
     # Name of the table in the database
     __tablename__ = "users"
@@ -52,7 +44,6 @@ class User(Base):
 
     # Account status: 0=active, 1=disabled, 2=banned
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    stripe_account_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -264,16 +255,6 @@ class TutorProfile(Base):
     )
     # Session mode: "online" | "in_person" | "both"
     session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
-    # When True, new students cannot add a match; existing active matches are unchanged.
-    matching_paused: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="false",
-    )
-    # Maximum booked sessions per calendar week (Mon–Sun UTC); NULL = no limit.
-    max_sessions_per_week: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
-
     user: Mapped["User"] = relationship(back_populates="tutor")
     classes_tutoring: Mapped[list["TutorClass"]] = relationship(
         back_populates="tutor",
@@ -282,13 +263,7 @@ class TutorProfile(Base):
 
     @property
     def reviews_received(self) -> list["Review"]:
-        sess = object_session(self)
-        try:
-            return [s.review for s in self.user.sessions_as_tutor if s.review is not None]
-        except Exception:
-            if sess is not None:
-                sess.rollback()
-            return []
+        return [s.review for s in self.user.sessions_as_tutor if s.review is not None]
 
     @property
     def average_rating(self) -> Optional[float]:
@@ -324,8 +299,6 @@ class StudentProfile(Base):
     )
     # Session mode: "online" | "in_person" | "both"
     session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
-    # Max the student is willing to pay per hour (same units as tutor hourly_rate_cents)
-    max_hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
 
     user: Mapped["User"] = relationship(back_populates="student")
     classes_enrolled: Mapped[list["StudentClass"]] = relationship(
@@ -335,13 +308,7 @@ class StudentProfile(Base):
 
     @property
     def reviews_written(self) -> list["Review"]:
-        sess = object_session(self)
-        try:
-            return [s.review for s in self.user.sessions_as_student if s.review is not None]
-        except Exception:
-            if sess is not None:
-                sess.rollback()
-            return []
+        return [s.review for s in self.user.sessions_as_student if s.review is not None]
 
 # ============================================
 # User/Tutor/Student One-to-Many Attributes.
@@ -369,7 +336,7 @@ class TutoringSession(Base):
     __table_args__ = (
         CheckConstraint("scheduled_end > scheduled_start", name="ck_session_time_order"),
         CheckConstraint(
-            "status IN ('pending', 'accepted', 'declined', 'completed', 'cancelled')",
+            "status IN ('pending', 'confirmed', 'completed', 'cancelled')",
             name="ck_session_status",
         ),
     )
@@ -395,7 +362,7 @@ class TutoringSession(Base):
         server_default="false",
     )
 
-    # pending | accepted | declined | completed | cancelled
+    # pending | confirmed | completed | cancelled
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="pending"
     ) 
@@ -620,7 +587,6 @@ class TutorClass(Base):
     year_taken: Mapped[int] = mapped_column(Integer, nullable=False)        # e.g. 2025
     grade_received: Mapped[str] = mapped_column(String(2), nullable=False)  # "A+", "A", "A-", "B+", etc.
     has_taed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    hourly_rate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     tutor: Mapped["TutorProfile"] = relationship(back_populates="classes_tutoring")
     class_: Mapped["Class"] = relationship(back_populates="tutor_classes")
@@ -714,30 +680,5 @@ class TutorReport(Base):
     reporter: Mapped["User"] = relationship(foreign_keys=[reporter_id])
     tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
     session: Mapped[Optional["TutoringSession"]] = relationship(foreign_keys=[session_id])
-
-
-class AdminMessage(Base):
-    __tablename__ = "admin_messages"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    student_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    tutor_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    refund_requested: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="false",
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    student: Mapped["User"] = relationship(foreign_keys=[student_id])
-    tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
 
     

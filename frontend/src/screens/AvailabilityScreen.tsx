@@ -23,28 +23,25 @@ type RootStackParamList = {
 type AvailabilitySlot = {
   id: number;
   user_id: number;
-  day_of_week: number; // 0=Mon ... 6=Sun
-  start_time: string;  // "HH:MM:SS"
+  day_of_week: number;
+  start_time: string;
   end_time: string;
 };
 
 type SessionBlock = {
-  id: number; // session id
-  tutor_id: number;
+  id: number;
   day_of_week: number;
   start_time: string;
   end_time: string;
-  scheduled_start_iso: string;
   subject: string;
   tutorName: string;
-  status?: "pending" | "accepted" | "declined" | "completed" | "cancelled";
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const FULL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-// Hours to display: 7am - 10pm
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7);
+const HOUR_HEIGHT = 48;
+const START_HOUR = 7;
 
 function formatHour(hour: number): string {
   if (hour === 0) return "12 AM";
@@ -64,36 +61,15 @@ function minutesToTime(m: number): string {
   return `${h}:${min}:00`;
 }
 
-function doSlotsOverlap(
-  slots: AvailabilitySlot[],
-  day: number,
-  startMin: number,
-  endMin: number,
-  excludeId?: number
-): boolean {
-  return slots
-    .filter((s) => s.day_of_week === day && s.id !== excludeId)
-    .some((s) => {
-      const sStart = timeToMinutes(s.start_time);
-      const sEnd = timeToMinutes(s.end_time);
-      return startMin < sEnd && endMin > sStart;
-    });
-}
-
-function jsDayToAppDay(jsDay: number): number {
-  // JS: 0=Sun..6=Sat; app: 0=Mon..6=Sun
-  return (jsDay + 6) % 7;
-}
-
-function slotOverlapsAnySession(slot: AvailabilitySlot, sessions: SessionBlock[]): boolean {
-  const slotStart = timeToMinutes(slot.start_time);
-  const slotEnd = timeToMinutes(slot.end_time);
-  return sessions.some((s) => {
-    if (s.day_of_week !== slot.day_of_week) return false;
-    const sStart = timeToMinutes(s.start_time);
-    const sEnd = timeToMinutes(s.end_time);
-    return slotStart < sEnd && slotEnd > sStart;
-  });
+// Parse "HH:MM" or "H:MM" into total minutes, returns null if invalid
+function parseTimeInput(input: string): number | null {
+  const clean = input.trim();
+  const match = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
 }
 
 export default function AvailabilityScreen() {
@@ -103,88 +79,25 @@ export default function AvailabilityScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Add slot modal
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addingSession, setAddingSession] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
-  const [startHour, setStartHour] = useState(9);
-  const [startMinute, setStartMinute] = useState(0);
-  const [endHour, setEndHour] = useState(10);
-  const [endMinute, setEndMinute] = useState(0);
+  const [startTimeInput, setStartTimeInput] = useState("09:00");
+  const [endTimeInput, setEndTimeInput] = useState("10:00");
+  const [sessionLabel, setSessionLabel] = useState("");
+  const [tutorLabel, setTutorLabel] = useState("");
 
-  // Detail modal (tap on existing slot)
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null);
   const [selectedSessionBlock, setSelectedSessionBlock] = useState<SessionBlock | null>(null);
 
-  // Delete confirm
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showCancelSessionModal, setShowCancelSessionModal] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [availSlots, pastSessions, futureSessions] = await Promise.all([
-        api.get<AvailabilitySlot[]>("/availability/me"),
-        api.get<
-          Array<{
-            id: number;
-            tutor_id: number;
-            scheduled_start: string;
-            scheduled_end: string;
-            subject: string;
-            status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
-          }>
-        >("/sessions/student/past"),
-        api.get<
-          Array<{
-            id: number;
-            tutor_id: number;
-            scheduled_start: string;
-            scheduled_end: string;
-            subject: string;
-            status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
-          }>
-        >("/sessions/student/future"),
-      ]);
-      const allSessions = [...pastSessions, ...futureSessions];
-      const activeSessions = allSessions.filter(
-        (s) => s.status === "pending" || s.status === "accepted"
-      );
-      const uniqueTutorIds = Array.from(new Set(activeSessions.map((s) => s.tutor_id)));
-      const tutorNamePairs = await Promise.all(
-        uniqueTutorIds.map(async (id) => {
-          try {
-            const user = await api.get<{ first_name: string; last_name: string }>(`/users/${id}`);
-            return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
-          } catch {
-            return [id, `Tutor #${id}`] as const;
-          }
-        })
-      );
-      const tutorNameById = new Map<number, string>(tutorNamePairs);
-
-      const blocks: SessionBlock[] = activeSessions.map((s) => {
-        const start = new Date(s.scheduled_start);
-        const end = new Date(s.scheduled_end);
-        return {
-          id: s.id,
-          tutor_id: s.tutor_id,
-          day_of_week: jsDayToAppDay(start.getDay()),
-          start_time: `${String(start.getHours()).padStart(2, "0")}:${String(
-            start.getMinutes()
-          ).padStart(2, "0")}:00`,
-          end_time: `${String(end.getHours()).padStart(2, "0")}:${String(
-            end.getMinutes()
-          ).padStart(2, "0")}:00`,
-          scheduled_start_iso: s.scheduled_start,
-          subject: s.subject,
-          tutorName: tutorNameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}`,
-          status: s.status,
-        };
-      });
+      const availSlots = await api.get<AvailabilitySlot[]>("/availability/me");
       setSlots(availSlots);
-      setSessionBlocks(blocks);
     } catch {
       Alert.alert("Error", "Failed to load availability.");
     } finally {
@@ -196,27 +109,101 @@ export default function AvailabilityScreen() {
     void loadData();
   }, [loadData]);
 
-  const handleAddSlot = async () => {
-    const startMin = startHour * 60 + startMinute;
-    const endMin = endHour * 60 + endMinute;
+  const openAddModal = (day: number, isSession = false) => {
+    setSelectedDay(day);
+    setStartTimeInput("09:00");
+    setEndTimeInput("10:00");
+    setSessionLabel("");
+    setTutorLabel("");
+    setAddingSession(isSession);
+    setShowAddModal(true);
+  };
 
+  const handleAddSlot = async () => {
+    const startMin = parseTimeInput(startTimeInput);
+    const endMin = parseTimeInput(endTimeInput);
+
+    if (startMin === null) {
+      Alert.alert("Invalid time", "Start time must be in HH:MM format (e.g. 09:00).");
+      return;
+    }
+    if (endMin === null) {
+      Alert.alert("Invalid time", "End time must be in HH:MM format (e.g. 10:00).");
+      return;
+    }
     if (startMin >= endMin) {
       Alert.alert("Invalid time", "End time must be after start time.");
       return;
     }
 
-    if (doSlotsOverlap(slots, selectedDay, startMin, endMin)) {
-      Alert.alert("Conflict", "This slot overlaps with an existing availability slot.");
+    const sessionOverlap = sessionBlocks
+      .filter((s) => s.day_of_week === selectedDay)
+      .some((s) => {
+        const sStart = timeToMinutes(s.start_time);
+        const sEnd = timeToMinutes(s.end_time);
+        return startMin < sEnd && endMin > sStart;
+      });
+
+    if (sessionOverlap) {
+      Alert.alert("Conflict", "This time overlaps with an existing session block.");
       return;
     }
-    const overlapsSession = sessionBlocks.some((s) => {
-      if (s.day_of_week !== selectedDay) return false;
-      const sStart = timeToMinutes(s.start_time);
-      const sEnd = timeToMinutes(s.end_time);
-      return startMin < sEnd && endMin > sStart;
-    });
-    if (overlapsSession) {
-      Alert.alert("Conflict", "This slot overlaps with an existing tutoring session.");
+
+    const availOverlap = slots
+      .filter((s) => s.day_of_week === selectedDay)
+      .some((s) => {
+        const sStart = timeToMinutes(s.start_time);
+        const sEnd = timeToMinutes(s.end_time);
+        return startMin < sEnd && endMin > sStart;
+      });
+
+    if (addingSession) {
+      if (availOverlap) {
+        Alert.alert("Conflict", "This session overlaps with an existing availability slot.");
+        return;
+      }
+      setSessionBlocks((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          day_of_week: selectedDay,
+          start_time: minutesToTime(startMin),
+          end_time: minutesToTime(endMin),
+          subject: sessionLabel.trim() || "Tutoring Session",
+          tutorName: tutorLabel.trim() || "Demo Tutor",
+        },
+      ]);
+      setShowAddModal(false);
+      return;
+    }
+
+    if (availOverlap) {
+      Alert.alert(
+        "Overlap Detected",
+        "This slot overlaps with another availability slot. It will be shown in red.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Add Anyway",
+            onPress: async () => {
+              setSaving(true);
+              try {
+                const newSlot = await api.post<AvailabilitySlot>("/availability/", {
+                  day_of_week: selectedDay,
+                  start_time: minutesToTime(startMin),
+                  end_time: minutesToTime(endMin),
+                });
+                setSlots((prev) => [...prev, newSlot]);
+                setShowAddModal(false);
+              } catch (e) {
+                Alert.alert("Error", e instanceof Error ? e.message : "Failed to save slot.");
+              } finally {
+                setSaving(false);
+              }
+            },
+          },
+        ]
+      );
       return;
     }
 
@@ -252,15 +239,6 @@ export default function AvailabilityScreen() {
     }
   };
 
-  const openAddModal = (day: number) => {
-    setSelectedDay(day);
-    setStartHour(9);
-    setStartMinute(0);
-    setEndHour(10);
-    setEndMinute(0);
-    setShowAddModal(true);
-  };
-
   const openSlotDetail = (slot: AvailabilitySlot) => {
     setSelectedSlot(slot);
     setSelectedSessionBlock(null);
@@ -273,73 +251,58 @@ export default function AvailabilityScreen() {
     setShowDetailModal(true);
   };
 
-  const handleCancelSession = async () => {
-    if (!selectedSessionBlock) return;
-    const reason = cancelReason.trim();
-    if (!reason) {
-      Alert.alert("Reason required", "Please provide a reason for cancellation.");
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.patch(`/sessions/${selectedSessionBlock.id}`, {
-        status: "cancelled",
-        cancel_reason: reason,
-      });
-      setShowCancelSessionModal(false);
-      setShowDetailModal(false);
-      setCancelReason("");
-      setSelectedSessionBlock(null);
-      await loadData();
-      Alert.alert("Session cancelled", "The tutor has been notified.");
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to cancel session.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Render a single day column
   const renderDayColumn = (dayIndex: number) => {
+    const daySlots = slots.filter((s) => s.day_of_week === dayIndex);
     const daySessionBlocks = sessionBlocks.filter((s) => s.day_of_week === dayIndex);
-    const daySlots = slots
-      .filter((s) => s.day_of_week === dayIndex)
-      .filter((s) => !slotOverlapsAnySession(s, daySessionBlocks));
-    const HOUR_HEIGHT = 48;
-    const START_HOUR = 7;
+
+    const slotOverlapsSession = (slot: AvailabilitySlot) => {
+      const sStart = timeToMinutes(slot.start_time);
+      const sEnd = timeToMinutes(slot.end_time);
+      return daySessionBlocks.some((b) => {
+        const bStart = timeToMinutes(b.start_time);
+        const bEnd = timeToMinutes(b.end_time);
+        return sStart < bEnd && sEnd > bStart;
+      });
+    };
+
+    const slotOverlapsAvailability = (slot: AvailabilitySlot) => {
+      return daySlots.some((other) => {
+        if (other.id === slot.id) return false;
+        const sStart = timeToMinutes(slot.start_time);
+        const sEnd = timeToMinutes(slot.end_time);
+        const oStart = timeToMinutes(other.start_time);
+        const oEnd = timeToMinutes(other.end_time);
+        return sStart < oEnd && sEnd > oStart;
+      });
+    };
 
     return (
       <View key={dayIndex} style={styles.dayColumn}>
         <Text style={styles.dayHeader}>{DAYS[dayIndex]}</Text>
         <View style={[styles.dayGrid, { height: HOURS.length * HOUR_HEIGHT }]}>
-          {/* Hour lines */}
           {HOURS.map((h, i) => (
-            <View
-              key={h}
-              style={[styles.hourLine, { top: i * HOUR_HEIGHT }]}
-            />
+            <View key={h} style={[styles.hourLine, { top: i * HOUR_HEIGHT }]} />
           ))}
 
-          {/* Availability slots */}
           {daySlots.map((slot) => {
             const startMin = timeToMinutes(slot.start_time);
             const endMin = timeToMinutes(slot.end_time);
             const top = ((startMin / 60) - START_HOUR) * HOUR_HEIGHT;
             const height = ((endMin - startMin) / 60) * HOUR_HEIGHT;
+            const hasConflict = slotOverlapsSession(slot) || slotOverlapsAvailability(slot);
             return (
               <TouchableOpacity
                 key={slot.id}
-                style={[styles.slotBlock, { top, height }]}
+                style={[styles.slotBlock, { top, height }, hasConflict && styles.slotBlockConflict]}
                 onPress={() => openSlotDetail(slot)}
               >
                 <Text style={styles.slotText} numberOfLines={1}>
-                  {slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}
+                  {hasConflict ? "⚠ " : ""}{slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)}
                 </Text>
               </TouchableOpacity>
             );
           })}
 
-          {/* Session blocks */}
           {daySessionBlocks.map((block) => {
             const startMin = timeToMinutes(block.start_time);
             const endMin = timeToMinutes(block.end_time);
@@ -358,12 +321,18 @@ export default function AvailabilityScreen() {
             );
           })}
 
-          {/* Add button at bottom */}
           <TouchableOpacity
             style={styles.addDayBtn}
-            onPress={() => openAddModal(dayIndex)}
+            onPress={() => openAddModal(dayIndex, false)}
           >
-            <Ionicons name="add" size={16} color="#2E57A2" />
+            <Ionicons name="add" size={14} color="#2E57A2" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.addSessionDayBtn}
+            onPress={() => openAddModal(dayIndex, true)}
+          >
+            <Ionicons name="calendar" size={14} color="#D4AF4A" />
           </TouchableOpacity>
         </View>
       </View>
@@ -372,7 +341,6 @@ export default function AvailabilityScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#2F3850" />
@@ -381,7 +349,6 @@ export default function AvailabilityScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#2E57A2" }]} />
@@ -390,6 +357,18 @@ export default function AvailabilityScreen() {
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#D4AF4A" }]} />
           <Text style={styles.legendText}>Session</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: "#E74C3C" }]} />
+          <Text style={styles.legendText}>Conflict</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <Ionicons name="add" size={14} color="#2E57A2" />
+          <Text style={styles.legendText}> Availability</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <Ionicons name="calendar" size={14} color="#D4AF4A" />
+          <Text style={styles.legendText}> Session</Text>
         </View>
       </View>
 
@@ -401,40 +380,60 @@ export default function AvailabilityScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.calendarContainer}>
-              {/* Time labels */}
               <View style={styles.timeColumn}>
-                <View style={styles.dayHeader} />
+                <View style={{ height: 28 }} />
                 {HOURS.map((h) => (
                   <View key={h} style={styles.timeLabel}>
                     <Text style={styles.timeLabelText}>{formatHour(h)}</Text>
                   </View>
                 ))}
               </View>
-
-              {/* Day columns */}
               {DAYS.map((_, i) => renderDayColumn(i))}
             </View>
           </ScrollView>
         </ScrollView>
       )}
 
-      {/* Add Slot Modal */}
+      {/* Add Modal */}
       <Modal
         visible={showAddModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowAddModal(false)}
+        onRequestClose={() => { setShowAddModal(false); setAddingSession(false); }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Availability</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+              <Text style={styles.modalTitle}>
+                {addingSession ? "Add Session Block" : "Add Availability"}
+              </Text>
+              <TouchableOpacity onPress={() => { setShowAddModal(false); setAddingSession(false); }}>
                 <Ionicons name="close" size={24} color="#5D667C" />
               </TouchableOpacity>
             </View>
 
-            {/* Day picker */}
+            {addingSession && (
+              <>
+                <Text style={styles.modalLabel}>Subject / Class</Text>
+                <TextInput
+                  style={styles.labelInput}
+                  placeholder="e.g. CS 180"
+                  placeholderTextColor="#B0B6C3"
+                  value={sessionLabel}
+                  onChangeText={setSessionLabel}
+                  autoCapitalize="characters"
+                />
+                <Text style={styles.modalLabel}>Tutor Name</Text>
+                <TextInput
+                  style={styles.labelInput}
+                  placeholder="e.g. Alex Chen"
+                  placeholderTextColor="#B0B6C3"
+                  value={tutorLabel}
+                  onChangeText={setTutorLabel}
+                />
+              </>
+            )}
+
             <Text style={styles.modalLabel}>Day</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {FULL_DAYS.map((day, i) => (
@@ -450,63 +449,49 @@ export default function AvailabilityScreen() {
               ))}
             </ScrollView>
 
-            {/* Start time */}
-            <Text style={styles.modalLabel}>Start Time</Text>
-            <View style={styles.timePickerRow}>
-              <View style={styles.timePicker}>
-                <TouchableOpacity onPress={() => setStartHour((h) => Math.min(22, h + 1))}>
-                  <Ionicons name="chevron-up" size={20} color="#2E57A2" />
-                </TouchableOpacity>
-                <Text style={styles.timePickerValue}>{startHour.toString().padStart(2, "0")}</Text>
-                <TouchableOpacity onPress={() => setStartHour((h) => Math.max(0, h - 1))}>
-                  <Ionicons name="chevron-down" size={20} color="#2E57A2" />
-                </TouchableOpacity>
+            <View style={styles.timeRow}>
+              <View style={styles.timeField}>
+                <Text style={styles.modalLabel}>Start Time</Text>
+                <TextInput
+                  style={styles.timeInput}
+                  value={startTimeInput}
+                  onChangeText={setStartTimeInput}
+                  placeholder="09:00"
+                  placeholderTextColor="#B0B6C3"
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
+                />
+                <Text style={styles.timeHint}>HH:MM (24hr)</Text>
               </View>
-              <Text style={styles.timeColon}>:</Text>
-              <View style={styles.timePicker}>
-                <TouchableOpacity onPress={() => setStartMinute((m) => (m + 15) % 60)}>
-                  <Ionicons name="chevron-up" size={20} color="#2E57A2" />
-                </TouchableOpacity>
-                <Text style={styles.timePickerValue}>{startMinute.toString().padStart(2, "0")}</Text>
-                <TouchableOpacity onPress={() => setStartMinute((m) => (m - 15 + 60) % 60)}>
-                  <Ionicons name="chevron-down" size={20} color="#2E57A2" />
-                </TouchableOpacity>
+              <View style={styles.timeSeparator}>
+                <Text style={styles.timeSeparatorText}>→</Text>
               </View>
-            </View>
-
-            {/* End time */}
-            <Text style={styles.modalLabel}>End Time</Text>
-            <View style={styles.timePickerRow}>
-              <View style={styles.timePicker}>
-                <TouchableOpacity onPress={() => setEndHour((h) => Math.min(23, h + 1))}>
-                  <Ionicons name="chevron-up" size={20} color="#2E57A2" />
-                </TouchableOpacity>
-                <Text style={styles.timePickerValue}>{endHour.toString().padStart(2, "0")}</Text>
-                <TouchableOpacity onPress={() => setEndHour((h) => Math.max(0, h - 1))}>
-                  <Ionicons name="chevron-down" size={20} color="#2E57A2" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.timeColon}>:</Text>
-              <View style={styles.timePicker}>
-                <TouchableOpacity onPress={() => setEndMinute((m) => (m + 15) % 60)}>
-                  <Ionicons name="chevron-up" size={20} color="#2E57A2" />
-                </TouchableOpacity>
-                <Text style={styles.timePickerValue}>{endMinute.toString().padStart(2, "0")}</Text>
-                <TouchableOpacity onPress={() => setEndMinute((m) => (m - 15 + 60) % 60)}>
-                  <Ionicons name="chevron-down" size={20} color="#2E57A2" />
-                </TouchableOpacity>
+              <View style={styles.timeField}>
+                <Text style={styles.modalLabel}>End Time</Text>
+                <TextInput
+                  style={styles.timeInput}
+                  value={endTimeInput}
+                  onChangeText={setEndTimeInput}
+                  placeholder="10:00"
+                  placeholderTextColor="#B0B6C3"
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
+                />
+                <Text style={styles.timeHint}>HH:MM (24hr)</Text>
               </View>
             </View>
 
             <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              style={[styles.saveBtn, addingSession && styles.saveBtnSession, saving && styles.saveBtnDisabled]}
               onPress={handleAddSlot}
               disabled={saving}
             >
               {saving ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
-                <Text style={styles.saveBtnText}>Save Slot</Text>
+                <Text style={styles.saveBtnText}>
+                  {addingSession ? "Add Session Block" : "Save Availability Slot"}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -531,10 +516,7 @@ export default function AvailabilityScreen() {
                 </Text>
                 <TouchableOpacity
                   style={styles.deleteBtn}
-                  onPress={() => {
-                    setShowDetailModal(false);
-                    setShowDeleteConfirm(true);
-                  }}
+                  onPress={() => { setShowDetailModal(false); setShowDeleteConfirm(true); }}
                 >
                   <Ionicons name="trash-outline" size={18} color="#FFF" />
                   <Text style={styles.deleteBtnText}>Delete Slot</Text>
@@ -550,76 +532,14 @@ export default function AvailabilityScreen() {
                 </Text>
                 <Text style={styles.detailSubject}>📚 {selectedSessionBlock.subject}</Text>
                 <Text style={styles.detailTutor}>Tutor: {selectedSessionBlock.tutorName}</Text>
-                {selectedSessionBlock.status ? (
-                  <Text style={styles.detailTutor}>Status: {selectedSessionBlock.status}</Text>
-                ) : null}
                 <View style={styles.sessionNotice}>
                   <Ionicons name="lock-closed-outline" size={14} color="#5D667C" />
                   <Text style={styles.sessionNoticeText}>This block is reserved for a session</Text>
                 </View>
-                <TouchableOpacity
-                  style={[styles.cancelSessionBtn, saving && styles.saveBtnDisabled]}
-                  disabled={saving}
-                  onPress={() => {
-                    setShowDetailModal(false);
-                    setShowCancelSessionModal(true);
-                  }}
-                >
-                  <Ionicons name="close-circle-outline" size={18} color="#FFF" />
-                  <Text style={styles.cancelSessionBtnText}>Cancel Session</Text>
-                </TouchableOpacity>
               </>
             )}
           </View>
         </Pressable>
-      </Modal>
-
-      <Modal
-        visible={showCancelSessionModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowCancelSessionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModal}>
-            <Text style={styles.confirmTitle}>Cancel Session</Text>
-            <Text style={styles.confirmBody}>
-              Tell your tutor why you need to cancel this session.
-            </Text>
-            <TextInput
-              style={styles.reasonInput}
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              placeholder="Enter cancellation reason..."
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-            <View style={styles.confirmBtns}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => {
-                  setShowCancelSessionModal(false);
-                  setCancelReason("");
-                }}
-                disabled={saving}
-              >
-                <Text style={styles.confirmCancelText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmDeleteBtn}
-                onPress={handleCancelSession}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <Text style={styles.confirmDeleteText}>Submit Cancel</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
       </Modal>
 
       {/* Delete Confirm Modal */}
@@ -664,138 +584,88 @@ export default function AvailabilityScreen() {
 const NAVY = "#1B2D50";
 const BLUE = "#2E57A2";
 const GOLD = "#D4AF4A";
-const HOUR_HEIGHT = 48;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F5F6F8" },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBF0",
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16,
+    backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E8EBF0",
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#2F3850" },
   legend: {
-    flexDirection: "row",
-    padding: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBF0",
-    gap: 16,
+    flexDirection: "row", padding: 12, paddingHorizontal: 16,
+    backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E8EBF0",
+    gap: 12, flexWrap: "wrap",
   },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendDot: { width: 12, height: 12, borderRadius: 3 },
-  legendText: { fontSize: 13, color: "#5D667C" },
+  legendText: { fontSize: 12, color: "#5D667C" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   calendarContainer: { flexDirection: "row", padding: 8 },
-  timeColumn: { width: 48, marginTop: 0 },
+  timeColumn: { width: 48 },
   timeLabel: { height: HOUR_HEIGHT, justifyContent: "flex-start", paddingTop: 2 },
   timeLabelText: { fontSize: 10, color: "#8C93A4", textAlign: "right", paddingRight: 4 },
   dayColumn: { width: 80, marginHorizontal: 2 },
-  dayHeader: { height: 28, justifyContent: "center", alignItems: "center" },
+  dayHeader: { height: 28, textAlign: "center", fontSize: 13, fontWeight: "600", color: NAVY, paddingTop: 4 },
   dayGrid: { position: "relative" },
-  hourLine: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "#E8EBF0",
-  },
+  hourLine: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: "#E8EBF0" },
   slotBlock: {
-    position: "absolute",
-    left: 2,
-    right: 2,
-    backgroundColor: BLUE,
-    borderRadius: 4,
-    padding: 2,
-    overflow: "hidden",
-    opacity: 0.85,
+    position: "absolute", left: 2, right: 2,
+    backgroundColor: BLUE, borderRadius: 4, padding: 2, overflow: "hidden", opacity: 0.85,
   },
+  slotBlockConflict: { backgroundColor: "#E74C3C", opacity: 1 },
   slotText: { fontSize: 9, color: "#FFF", fontWeight: "600" },
   sessionBlock: {
-    position: "absolute",
-    left: 2,
-    right: 2,
-    backgroundColor: GOLD,
-    borderRadius: 4,
-    padding: 2,
-    overflow: "hidden",
-    opacity: 0.9,
+    position: "absolute", left: 2, right: 2,
+    backgroundColor: GOLD, borderRadius: 4, padding: 2, overflow: "hidden", opacity: 0.9,
   },
   sessionBlockText: { fontSize: 9, color: "#1B2D50", fontWeight: "600" },
   addDayBtn: {
-    position: "absolute",
-    bottom: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
+    position: "absolute", bottom: 24, right: 4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center",
   },
-  // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
+  addSessionDayBtn: {
+    position: "absolute", bottom: 4, right: 4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: "#FFF8E7", alignItems: "center", justifyContent: "center",
   },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalContent: {
-    backgroundColor: "#FFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: "80%",
+    backgroundColor: "#FFF", borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, maxHeight: "85%",
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: "700", color: "#2F3850" },
   modalLabel: { fontSize: 14, fontWeight: "600", color: "#3A4357", marginBottom: 8 },
-  dayChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#F0F2F5",
-    marginRight: 8,
+  labelInput: {
+    borderWidth: 1, borderColor: "#E1E5EE", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: NAVY,
+    backgroundColor: "#FFF", marginBottom: 16,
   },
+  dayChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#F0F2F5", marginRight: 8 },
   dayChipActive: { backgroundColor: BLUE },
   dayChipText: { fontSize: 14, color: "#5D667C" },
   dayChipTextActive: { color: "#FFF", fontWeight: "600" },
-  timePickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
+  timeRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, gap: 8 },
+  timeField: { flex: 1 },
+  timeInput: {
+    borderWidth: 1, borderColor: "#E1E5EE", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 12, fontSize: 22,
+    fontWeight: "700", color: NAVY, textAlign: "center",
+    backgroundColor: "#FAFBFC",
   },
-  timePicker: { alignItems: "center", width: 60 },
-  timePickerValue: { fontSize: 28, fontWeight: "700", color: NAVY, marginVertical: 4 },
-  timeColon: { fontSize: 28, fontWeight: "700", color: NAVY, marginHorizontal: 8 },
-  saveBtn: {
-    backgroundColor: BLUE,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 4,
-  },
+  timeHint: { fontSize: 11, color: "#B0B6C3", textAlign: "center", marginTop: 4 },
+  timeSeparator: { paddingTop: 36, alignItems: "center" },
+  timeSeparatorText: { fontSize: 20, color: "#8C93A4" },
+  saveBtn: { backgroundColor: BLUE, borderRadius: 10, paddingVertical: 14, alignItems: "center", marginTop: 4 },
+  saveBtnSession: { backgroundColor: "#C9A23E" },
   saveBtnDisabled: { backgroundColor: "#9CA3AF" },
   saveBtnText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
-  // Detail modal
   detailModalContent: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 24,
-    margin: 32,
-    alignItems: "center",
+    backgroundColor: "#FFF", borderRadius: 16, padding: 24, margin: 32, alignItems: "center",
   },
   detailTitle: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 8 },
   detailDay: { fontSize: 16, color: "#5D667C", marginBottom: 4 },
@@ -803,72 +673,24 @@ const styles = StyleSheet.create({
   detailSubject: { fontSize: 16, fontWeight: "600", color: NAVY, marginBottom: 4 },
   detailTutor: { fontSize: 14, color: "#5D667C", marginBottom: 12 },
   sessionNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F6F8",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#F5F6F8", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6,
   },
   sessionNoticeText: { fontSize: 13, color: "#5D667C" },
-  cancelSessionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#DC2626",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 8,
-    marginTop: 12,
-  },
-  cancelSessionBtnText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
   deleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E74C3C",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 8,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#E74C3C", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, gap: 8,
   },
   deleteBtnText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
-  // Confirm modal
-  confirmModal: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 24,
-    margin: 32,
-  },
+  confirmModal: { backgroundColor: "#FFF", borderRadius: 16, padding: 24, margin: 32 },
   confirmTitle: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 8 },
   confirmBody: { fontSize: 14, color: "#5D667C", marginBottom: 20, lineHeight: 20 },
-  reasonInput: {
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 96,
-    color: "#1B2D50",
-    marginBottom: 16,
-    backgroundColor: "#FFFFFF",
-  },
   confirmBtns: { flexDirection: "row", gap: 12 },
   confirmCancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E1E5EE",
-    alignItems: "center",
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1, borderColor: "#E1E5EE", alignItems: "center",
   },
   confirmCancelText: { fontSize: 15, color: "#5D667C", fontWeight: "600" },
-  confirmDeleteBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#E74C3C",
-    alignItems: "center",
-  },
+  confirmDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#E74C3C", alignItems: "center" },
   confirmDeleteText: { fontSize: 15, color: "#FFF", fontWeight: "700" },
 });
