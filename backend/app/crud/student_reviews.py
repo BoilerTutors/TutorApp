@@ -34,6 +34,9 @@ def create_student_review(
     if not student_user.is_student:
         raise ValueError("Target user is not a student")
 
+    if tutor_user.tutor is None:
+        raise ValueError("Tutor profile not found for this account")
+
     if rating < 0.0 or rating > 5.0:
         raise ValueError("Rating must be between 0.0 and 5.0")
 
@@ -43,6 +46,7 @@ def create_student_review(
 
     review = StudentReview(
         student_id=student_user_id,
+        tutor_id=tutor_user.tutor.id,
         review_text=text,
         rating=rating,
     )

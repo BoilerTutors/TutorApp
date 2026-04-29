@@ -495,6 +495,11 @@ class StudentReview(Base):
         nullable=False,
         index=True,
     )
+    tutor_id: Mapped[int] = mapped_column(
+        ForeignKey("tutors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     review_timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -506,6 +511,7 @@ class StudentReview(Base):
     student: Mapped["User"] = relationship(
         foreign_keys=[student_id],
     )
+    tutor: Mapped["TutorProfile"] = relationship(foreign_keys=[tutor_id])
 
 
 # ============================================
