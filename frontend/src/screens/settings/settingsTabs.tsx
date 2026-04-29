@@ -2,6 +2,7 @@
 import React from "react";
 import NotificationPreferencesTab from "./NotificationPreferencesTab";
 import SecurityPreferencesTab from "./SecurityPreferencesTab";
+import TutorQuickRepliesTab from "./TutorQuickRepliesTab";
 import { Alert, Platform } from "react-native";
 
 export type SettingsTabConfig = {
@@ -19,6 +20,11 @@ export function showAlert(title: string, message: string) {
 }
 /** Add new tabs here and create a corresponding component in this folder. */
 export const SETTINGS_TABS: SettingsTabConfig[] = [
+  {
+    id: "tutor-quick-replies",
+    label: "Quick Replies",
+    component: () => <TutorQuickRepliesTab showAlert={showAlert} />,
+  },
   {
     id: "notification-preferences",
     label: "Notification Settings",
