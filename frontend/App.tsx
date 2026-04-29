@@ -40,12 +40,17 @@ type RootStackParamList = {
   "Tutor Reviews": undefined;
   "Tutor Past Sessions": undefined;
   "Tutor Schedule": undefined;
-  "Availability": undefined;
-  "Session History": undefined;
-  "Report Tutor": { tutorId: number; tutorName: string; sessionId?: number };
-  "Tutor Profile Reviews": { tutorUserId: number; tutorName: string };
-  Messenger: { openTutorUserId?: number; openTutorName?: string } | undefined;
-  Settings: { initialTab?: string } | undefined;
+  Messenger:
+    | {
+        openTutorUserId?: number;
+        openTutorName?: string;
+      }
+    | undefined;
+  Settings:
+    | {
+        initialTab?: string;
+      }
+    | undefined;
   Notifications: undefined;
   Help: undefined;
   Matches: {

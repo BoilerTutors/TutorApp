@@ -1,4 +1,3 @@
-from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.crud.notifications import create_notification
@@ -31,7 +30,7 @@ def build_and_store_notification(
     event_type: str,
     title: str,
     body: str,
-    payload_json: Optional[dict] = None,
+    payload_json: dict | None = None,
 ) -> Notification:
     row = create_notification(
         db,

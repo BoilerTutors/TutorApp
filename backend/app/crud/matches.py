@@ -1,4 +1,3 @@
-from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -11,7 +10,7 @@ def create_match_run(
     student_id: int,
     model_name: str,
     top_k: int,
-    weights_json: Optional[dict] = None,
+    weights_json: dict | None = None,
 ) -> MatchRun:
     run = MatchRun(
         student_id=student_id,
@@ -56,7 +55,7 @@ def save_match_results(
     student_id: int,
     ranked_rows: list[dict],
     model_name: str = "local-hash-v1",
-    weights_json: Optional[dict] = None,
+    weights_json: dict | None = None,
 ) -> MatchRun:
     run = create_match_run(
         db,
@@ -108,7 +107,7 @@ def get_active_matches_for_student(db: Session, *, student_id: int) -> list[Matc
     return deduped
 
 
-def get_latest_match_run_for_student(db: Session, *, student_id: int) -> Optional[MatchRun]:
+def get_latest_match_run_for_student(db: Session, *, student_id: int) -> MatchRun | None:
     return (
         db.query(MatchRun)
         .filter(MatchRun.student_id == student_id)
@@ -123,7 +122,7 @@ def add_match_to_latest_run(
     student_id: int,
     ranked_row: dict,
     model_name: str = "local-hash-v1",
-    weights_json: Optional[dict] = None,
+    weights_json: dict | None = None,
 ) -> Match:
     run = get_latest_match_run_for_student(db, student_id=student_id)
     if run is None:

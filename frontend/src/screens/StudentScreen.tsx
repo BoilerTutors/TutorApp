@@ -11,10 +11,13 @@ type RootStackParamList = {
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
   "Student Reviews": undefined;
-  "Session History": undefined;
-  "Availability": undefined;
-  "Tutor Profile Reviews": { tutorUserId: number; tutorName: string };
-  Matches: { matches?: MatchItem[] } | undefined;
+  Availability: undefined;
+  Matches:
+    | {
+        matches?: MatchItem[];
+      }
+    | undefined;
+  "Contact Admin": undefined;
 };
 
 type MatchItem = {
@@ -29,8 +32,13 @@ type MatchItem = {
 type QuickAction = {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  onPress?: () => void;
 };
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: "Find Tutors", icon: "search" },
+  { label: "Book Session", icon: "calendar" },
+  { label: "My Schedule", icon: "time" },
+];
 
 export default function StudentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -50,7 +58,9 @@ export default function StudentScreen() {
       }
     };
     void loadMe();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleComputeMatches = async () => {
@@ -64,48 +74,42 @@ export default function StudentScreen() {
       setComputingMatches(false);
     }
   };
-
-  const QUICK_ACTIONS: QuickAction[] = [
-    {
-      label: "Find Tutors",
-      icon: "search",
-      onPress: () => void handleComputeMatches(),
-    },
-    {
-      label: "My Schedule",
-      icon: "calendar",
-      onPress: () => navigation.navigate("Availability"),
-    },
-    {
-      label: "History",
-      icon: "time",
-      onPress: () => navigation.navigate("Session History"),
-    },
-  ];
-
+  
   return (
     <View style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>Welcome, {firstName}</Text>
         <Text style={styles.subtitle}>Find tutors and manage your sessions.</Text>
 
-        <Pressable style={styles.button} onPress={() => navigation.navigate("Student Reviews")}>
+        <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate("Student Reviews")}
+        >
           <Text style={styles.buttonText}>⭐ Leave a Review</Text>
         </Pressable>
 
-        <Pressable style={styles.button} onPress={() => navigation.navigate("Session History")}>
-          <Text style={styles.buttonText}>📋 Session History</Text>
-        </Pressable>
-
-        <Pressable style={styles.button} onPress={() => navigation.navigate("Messenger")}>
+        <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate("Messenger")}
+        >
           <Text style={styles.buttonText}>💬 Open Messenger</Text>
         </Pressable>
 
-        <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}>
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
+        >
           <Text style={styles.buttonText}>👤 My Profile</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate("Contact Admin")}
+        >
+          <Text style={styles.buttonText}>🛟 Contact Admin</Text>
         </Pressable>
       </View>
 
+      {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.actionsGrid}>
         {QUICK_ACTIONS.map((action) => (
@@ -113,7 +117,15 @@ export default function StudentScreen() {
             key={action.label}
             style={styles.actionButton}
             disabled={action.label === "Find Tutors" && computingMatches}
-            onPress={action.onPress}
+            onPress={() => {
+              if (action.label === "Find Tutors") {
+                void handleComputeMatches();
+              } else if (action.label === "Book Session") {
+                navigation.navigate("Matches");
+              } else if (action.label === "My Schedule") {
+                navigation.navigate("Availability");
+              }
+            }}
           >
             <Ionicons name={action.icon} size={20} color="#FFFFFF" />
             <Text style={styles.actionText}>
@@ -127,17 +139,72 @@ export default function StudentScreen() {
 }
 
 const NAVY = "#1B2D50";
+const GOLD = "#D4AF4A";
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F2F4F8", padding: 20 },
-  card: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 16, marginBottom: 18 },
-  title: { fontSize: 24, fontWeight: "700", color: "#1B2D50", marginBottom: 6 },
-  subtitle: { fontSize: 14, color: "#4B5563", marginBottom: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 12 },
-  actionsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 5 },
-  actionButton: { width: "31.5%", alignItems: "center", justifyContent: "center", backgroundColor: NAVY, borderRadius: 10, paddingVertical: 14 },
-  actionText: { color: "#FFFFFF", fontWeight: "600", fontSize: 12, marginTop: 6, textAlign: "center" },
-  button: { marginTop: 10, backgroundColor: "#2E57A2", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: "center" },
-  secondaryButton: { backgroundColor: "#1B2D50" },
-  buttonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
+  container: {
+    flex: 1,
+    backgroundColor: "#F2F4F8",
+    padding: 20,
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1B2D50",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#4B5563",
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 12,
+  },
+  actionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 5,
+  },
+  actionButton: {
+    width: "31.5%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: NAVY,
+    borderRadius: 10,
+    paddingVertical: 14,
+  },
+  actionText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  button: {
+    marginTop: 10,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  secondaryButton: {
+    backgroundColor: "#1B2D50",
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 15,
+  },
 });

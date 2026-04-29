@@ -1,4 +1,3 @@
-from typing import Optional
 """REST and WebSocket messaging.
 
 REST:
@@ -77,7 +76,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-def _get_other_participant_id(user1_id: int, user2_id: int, current_user_id: int) -> Optional[int]:
+def _get_other_participant_id(user1_id: int, user2_id: int, current_user_id: int) -> int | None:
     if current_user_id == user1_id:
         return user2_id
     if current_user_id == user2_id:
