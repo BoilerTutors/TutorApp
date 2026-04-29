@@ -92,7 +92,7 @@ export default function StudentScreen() {
           style={styles.button}
           onPress={() => navigation.navigate("Messenger")}
         >
-          <Text style={styles.buttonText}>💬 Open Messenger</Text>
+          <Text style={styles.buttonText}>💬 Messages</Text>
         </Pressable>
 
         <Pressable

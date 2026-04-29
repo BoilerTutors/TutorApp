@@ -315,6 +315,7 @@ class TutoringSessionPublic(BaseModel):
     id: int
     tutor_id: int
     student_id: int
+    class_id: Optional[int] = None
     subject: str
     scheduled_start: datetime
     scheduled_end: datetime
@@ -337,6 +338,7 @@ def tutoring_session_to_public(row: "TutoringSession") -> TutoringSessionPublic:
         id=row.id,
         tutor_id=row.tutor_id,
         student_id=row.student_id,
+        class_id=None,
         subject=row.subject,
         scheduled_start=row.scheduled_start,
         scheduled_end=row.scheduled_end,

@@ -346,7 +346,7 @@ export default function TutorScreen() {
           onPress={() => navigation.navigate("Messenger")}
         >
           <Ionicons name="chatbubble-ellipses" size={18} color={GOLD} />
-          <Text style={styles.primaryBtnText}>Open Messenger</Text>
+          <Text style={styles.primaryBtnText}>Messages</Text>
         </Pressable>
 
         <Pressable
@@ -354,7 +354,7 @@ export default function TutorScreen() {
           onPress={() => navigation.navigate("Profile", { role: "TUTOR" })}
         >
           <Ionicons name="person" size={18} color={GOLD} />
-          <Text style={styles.primaryBtnText}>Account & Availability</Text>
+          <Text style={styles.primaryBtnText}>My Profile</Text>
         </Pressable>
       </View>
 

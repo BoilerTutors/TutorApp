@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { api } from "../api/client";
 
 type RootStackParamList = {
   "Tutor Dashboard": undefined;
@@ -31,6 +32,22 @@ type Review = {
 };
 
 type SortOption = "recent" | "oldest" | "highest" | "lowest" | "class";
+
+type ReviewPublic = {
+  id: number;
+  session_id: number;
+  class_id: number;
+  rating: number;
+  comment: string | null;
+  is_anonymous: boolean;
+  created_at: string;
+};
+
+type ClassPublic = {
+  id: number;
+  subject: string;
+  class_number: number;
+};
 
 const showAlert = (title: string, message: string) => {
   if (Platform.OS === "web") {
@@ -61,64 +78,37 @@ export default function TutorReviewsScreen() {
 
   const fetchReviews = async () => {
     setIsLoading(true);
-    
-    // Mock data for demo
-    const mockReviews: Review[] = [
-      {
-        id: 1,
-        studentName: "Anonymous",
-        className: "CS 180",
-        rating: 5,
-        comment: "Amazing tutor! Explained recursion in a way that finally made sense. Very patient and knowledgeable.",
-        date: "2024-02-20",
-        isAnonymous: true,
+    try {
+      const me = await api.get<{ id: number }>("/users/me");
+      const rawReviews = await api.get<ReviewPublic[]>(`/reviews/tutor/${me.id}`);
+      const classIds = Array.from(new Set(rawReviews.map((r) => r.class_id)));
+      const classPairs = await Promise.all(
+        classIds.map(async (classId) => {
+          try {
+            const cls = await api.get<ClassPublic>(`/classes/${classId}`);
+            return [classId, `${cls.subject} ${cls.class_number}`] as const;
+          } catch {
+            return [classId, `Class #${classId}`] as const;
+          }
+        })
+      );
+      const classNameById = new Map<number, string>(classPairs);
+      const mapped: Review[] = rawReviews.map((r) => ({
+        id: r.id,
+        studentName: r.is_anonymous ? "Anonymous" : "Student",
+        className: classNameById.get(r.class_id) ?? `Class #${r.class_id}`,
+        rating: r.rating,
+        comment: r.comment ?? "",
+        date: r.created_at,
+        isAnonymous: r.is_anonymous,
         isFlagged: false,
-      },
-      {
-        id: 2,
-        studentName: "Mike Johnson",
-        className: "CS 251",
-        rating: 4,
-        comment: "Really helpful with data structures. Would recommend!",
-        date: "2024-02-18",
-        isAnonymous: false,
-        isFlagged: false,
-      },
-      {
-        id: 3,
-        studentName: "Anonymous",
-        className: "MA 265",
-        rating: 5,
-        comment: "Best linear algebra tutor I've had. Made matrices easy to understand.",
-        date: "2024-02-15",
-        isAnonymous: true,
-        isFlagged: false,
-      },
-      {
-        id: 4,
-        studentName: "Sarah Williams",
-        className: "CS 180",
-        rating: 3,
-        comment: "Decent tutoring session. Could explain things more clearly.",
-        date: "2024-02-10",
-        isAnonymous: false,
-        isFlagged: false,
-      },
-      {
-        id: 5,
-        studentName: "Anonymous",
-        className: "CS 251",
-        rating: 2,
-        comment: "Showed up late and seemed unprepared.",
-        date: "2024-02-08",
-        isAnonymous: true,
-        isFlagged: false,
-      },
-    ];
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setReviews(mockReviews);
-    setIsLoading(false);
+      }));
+      setReviews(mapped);
+    } catch {
+      setReviews([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Calculate statistics
