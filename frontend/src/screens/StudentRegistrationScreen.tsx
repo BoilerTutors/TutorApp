@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { api } from "../api/client";
+import { AVAILABLE_CLASSES_FALLBACK } from "../constants/classes";
+import { classesApi, ClassPublic } from "../services/api";
 
 type RootStackParamList = {
   Login: undefined;
@@ -25,24 +27,6 @@ type RootStackParamList = {
     role: "tutor" | "student";
   };
 };
-
-// Same class list as tutor registration; in production, fetch from backend
-const AVAILABLE_CLASSES = [
-  { id: 1, courseCode: "CS 180", title: "Problem Solving And Object-Oriented Programming" },
-  { id: 2, courseCode: "CS 182", title: "Foundations of Computer Science" },
-  { id: 3, courseCode: "CS 240", title: "Programming in C" },
-  { id: 4, courseCode: "CS 250", title: "Computer Architecture" },
-  { id: 5, courseCode: "CS 251", title: "Data Structures and Algorithms" },
-  { id: 6, courseCode: "CS 307", title: "Software Engineering I" },
-  { id: 7, courseCode: "CS 354", title: "Operating Systems" },
-  { id: 8, courseCode: "CS 373", title: "Data Mining & Machine Learning" },
-  { id: 9, courseCode: "CS 407", title: "Software Engineering II" },
-  { id: 10, courseCode: "MA 161", title: "Plane Analytic Geometry And Calculus I" },
-  { id: 11, courseCode: "MA 162", title: "Plane Analytic Geometry And Calculus II" },
-  { id: 12, courseCode: "MA 265", title: "Linear Algebra" },
-  { id: 13, courseCode: "PHYS 172", title: "Modern Mechanics" },
-  { id: 14, courseCode: "PHYS 272", title: "Electric and Magnetic Interactions" },
-];
 
 const GRADE_OPTIONS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"];
 const HELP_LEVEL_LABELS: Record<number, string> = {
@@ -85,6 +69,7 @@ type SelectedStudentClass = {
   estimatedGrade: string;
   helpLevel: number;
 };
+type ClassOption = { id: number; courseCode: string; title: string };
 
 const showAlert = (title: string, message: string, onOk?: () => void) => {
   if (Platform.OS === "web") {
@@ -119,6 +104,7 @@ export default function StudentRegistrationScreen() {
 
   // Step 2: Classes
   const [selectedClasses, setSelectedClasses] = useState<SelectedStudentClass[]>([]);
+  const [availableClasses, setAvailableClasses] = useState<ClassOption[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showClassPicker, setShowClassPicker] = useState(false);
 
@@ -131,14 +117,43 @@ export default function StudentRegistrationScreen() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const filteredClasses = AVAILABLE_CLASSES.filter(
+  useEffect(() => {
+    const mapFromBackend = (classes: ClassPublic[]): ClassOption[] =>
+      classes.map((c) => ({
+        id: c.id,
+        courseCode: `${c.subject} ${c.class_number}`,
+        title: `Prof. ${c.professor}`,
+      }));
+
+    const mapFallback = (): ClassOption[] =>
+      AVAILABLE_CLASSES_FALLBACK.map((c) => ({
+        id: c.id,
+        courseCode: c.courseCode,
+        title: c.title,
+      }));
+
+    (async () => {
+      try {
+        const classes = await classesApi.list();
+        if (classes.length > 0) {
+          setAvailableClasses(mapFromBackend(classes));
+          return;
+        }
+      } catch {
+        // fall through to static fallback
+      }
+      setAvailableClasses(mapFallback());
+    })();
+  }, []);
+
+  const filteredClasses = availableClasses.filter(
     (c) =>
       !selectedClasses.find((sc) => sc.id === c.id) &&
       (c.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.title.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const addClass = (classItem: (typeof AVAILABLE_CLASSES)[0]) => {
+  const addClass = (classItem: ClassOption) => {
     setSelectedClasses([
       ...selectedClasses,
       {

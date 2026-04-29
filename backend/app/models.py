@@ -262,6 +262,24 @@ class TutorProfile(Base):
     help_provided: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(Text), nullable=True, default=None
     )
+    quick_reply1: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="I am available for that time",
+        server_default="I am available for that time",
+    )
+    quick_reply2: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="No, I am not available. Do you want to try a different time?",
+        server_default="No, I am not available. Do you want to try a different time?",
+    )
+    quick_reply3: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="Send me the lecture notes",
+        server_default="Send me the lecture notes",
+    )
     # Session mode: "online" | "in_person" | "both"
     session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
     # When True, new students cannot add a match; existing active matches are unchanged.

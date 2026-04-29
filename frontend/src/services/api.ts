@@ -18,6 +18,10 @@ export type TutorProfileCreate = {
   hourly_rate_cents?: number;
   major?: string;
   grad_year?: number;
+  classes?: TutorClassCreate[];
+  quick_reply1?: string;
+  quick_reply2?: string;
+  quick_reply3?: string;
 };
 
 export type StudentProfileCreate = {
@@ -65,6 +69,9 @@ export type TutorProfilePublic = {
   major?: string;
   grad_year?: number;
   average_rating?: number;
+  quick_reply1?: string;
+  quick_reply2?: string;
+  quick_reply3?: string;
 };
 
 export type StudentProfilePublic = {
