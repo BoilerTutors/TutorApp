@@ -483,6 +483,31 @@ class Review(Base):
         return self.session.tutor
 
 
+class StudentReview(Base):
+    __tablename__ = "student_reviews"
+    __table_args__ = (
+        CheckConstraint("rating >= 0.0 AND rating <= 5.0", name="ck_student_reviews_rating_range"),
+    )
+
+    review_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    review_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    review_text: Mapped[str] = mapped_column(Text, nullable=False)
+    rating: Mapped[float] = mapped_column(Float, nullable=False)
+
+    student: Mapped["User"] = relationship(
+        foreign_keys=[student_id],
+    )
+
+
 # ============================================
 # Messaging: Conversations and Messages
 # ============================================
