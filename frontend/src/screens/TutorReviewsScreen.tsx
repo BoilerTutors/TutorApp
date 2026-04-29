@@ -43,6 +43,24 @@ type ReviewPublic = {
   created_at: string;
 };
 
+type TutoringSessionPublic = {
+  id: number;
+  tutor_id: number;
+  student_id: number;
+  subject: string;
+  scheduled_start: string;
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
+};
+
+type StudentPickTarget = {
+  studentId: number;
+  studentName: string;
+  latestSubject: string;
+  latestSessionStart: string;
+};
+
+type UserName = { first_name: string; last_name: string };
+
 type ClassPublic = {
   id: number;
   subject: string;
@@ -72,6 +90,13 @@ export default function TutorReviewsScreen() {
   const [flagReason, setFlagReason] = useState("");
   const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
 
+  const [studentPickTargets, setStudentPickTargets] = useState<StudentPickTarget[]>([]);
+  const [showStudentReviewModal, setShowStudentReviewModal] = useState(false);
+  const [studentReviewTarget, setStudentReviewTarget] = useState<StudentPickTarget | null>(null);
+  const [studentReviewRating, setStudentReviewRating] = useState(0);
+  const [studentReviewText, setStudentReviewText] = useState("");
+  const [submittingStudentReview, setSubmittingStudentReview] = useState(false);
+
   useEffect(() => {
     fetchReviews();
   }, []);
@@ -80,7 +105,46 @@ export default function TutorReviewsScreen() {
     setIsLoading(true);
     try {
       const me = await api.get<{ id: number }>("/users/me");
-      const rawReviews = await api.get<ReviewPublic[]>(`/reviews/tutor/${me.id}`);
+      const [rawReviews, rawPast] = await Promise.all([
+        api.get<ReviewPublic[]>(`/reviews/tutor/${me.id}`),
+        api.get<TutoringSessionPublic[]>("/sessions/tutor/past").catch(() => []),
+      ]);
+
+      const completed = rawPast.filter((s) => s.status === "completed");
+      const byStudent = new Map<number, TutoringSessionPublic>();
+      for (const s of completed) {
+        const prev = byStudent.get(s.student_id);
+        if (
+          !prev ||
+          new Date(s.scheduled_start).getTime() > new Date(prev.scheduled_start).getTime()
+        ) {
+          byStudent.set(s.student_id, s);
+        }
+      }
+      const studentIds = Array.from(byStudent.keys());
+      const namePairs = await Promise.all(
+        studentIds.map(async (id) => {
+          try {
+            const u = await api.get<UserName>(`/users/${id}`);
+            return [id, `${u.first_name} ${u.last_name}`.trim()] as const;
+          } catch {
+            return [id, `Student #${id}`] as const;
+          }
+        })
+      );
+      const studentNameById = new Map<number, string>(namePairs);
+      const targets: StudentPickTarget[] = studentIds.map((sid) => {
+        const s = byStudent.get(sid)!;
+        return {
+          studentId: sid,
+          studentName: studentNameById.get(sid) ?? `Student #${sid}`,
+          latestSubject: s.subject,
+          latestSessionStart: s.scheduled_start,
+        };
+      });
+      targets.sort((a, b) => a.studentName.localeCompare(b.studentName));
+      setStudentPickTargets(targets);
+
       const classIds = Array.from(new Set(rawReviews.map((r) => r.class_id)));
       const classPairs = await Promise.all(
         classIds.map(async (classId) => {
@@ -106,10 +170,62 @@ export default function TutorReviewsScreen() {
       setReviews(mapped);
     } catch {
       setReviews([]);
+      setStudentPickTargets([]);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const openStudentReviewModal = (target: StudentPickTarget) => {
+    setStudentReviewTarget(target);
+    setStudentReviewRating(0);
+    setStudentReviewText("");
+    setShowStudentReviewModal(true);
+  };
+
+  const submitStudentReview = async () => {
+    if (!studentReviewTarget) return;
+    if (studentReviewRating === 0) {
+      showAlert("Required", "Please select a rating");
+      return;
+    }
+    const text = studentReviewText.trim();
+    if (!text) {
+      showAlert("Required", "Please enter review feedback");
+      return;
+    }
+    setSubmittingStudentReview(true);
+    try {
+      await api.post("/reviews/students/", {
+        student_user_id: studentReviewTarget.studentId,
+        review_text: text,
+        rating: studentReviewRating,
+      });
+      setShowStudentReviewModal(false);
+      setStudentReviewTarget(null);
+      showAlert("Submitted", "Your review was saved. The student will not see your identity.");
+      await fetchReviews();
+    } catch (e) {
+      showAlert("Error", e instanceof Error ? e.message : "Failed to submit review");
+    } finally {
+      setSubmittingStudentReview(false);
+    }
+  };
+
+  const renderInteractiveStars = (currentRating: number) => (
+    <View style={styles.starsRow}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <TouchableOpacity key={star} onPress={() => setStudentReviewRating(star)}>
+          <Ionicons
+            name={star <= currentRating ? "star" : "star-outline"}
+            size={32}
+            color={star <= currentRating ? "#D4AF4A" : "#CCD1DC"}
+            style={{ marginHorizontal: 4 }}
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   // Calculate statistics
   const averageRating = reviews.length > 0
@@ -215,8 +331,35 @@ export default function TutorReviewsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          {studentPickTargets.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Review a student</Text>
+              <Text style={styles.sectionHint}>
+                After a completed session, you can leave feedback. Your name is not shown to the student.
+              </Text>
+              {studentPickTargets.map((t) => (
+                <View key={t.studentId} style={styles.leaveStudentCard}>
+                  <View style={styles.leaveStudentCardText}>
+                    <Text style={styles.leaveStudentName}>{t.studentName}</Text>
+                    <Text style={styles.leaveStudentMeta}>
+                      Last session: {t.latestSubject} ·{" "}
+                      {new Date(t.latestSessionStart).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.leaveStudentBtn}
+                    onPress={() => openStudentReviewModal(t)}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#2E57A2" />
+                    <Text style={styles.leaveStudentBtnText}>Review</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
+          ) : null}
+
           {/* Summary Card */}
-          <View style={styles.summaryCard}>
+          <View style={[styles.summaryCard, studentPickTargets.length > 0 && { marginTop: 16 }]}>
             <View style={styles.summaryTop}>
               <View style={styles.avgRatingSection}>
                 <Text style={styles.avgRating}>{averageRating}</Text>
@@ -310,6 +453,55 @@ export default function TutorReviewsScreen() {
           )}
         </ScrollView>
       )}
+
+      <Modal
+        visible={showStudentReviewModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowStudentReviewModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.studentReviewModalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Review student</Text>
+              <TouchableOpacity onPress={() => setShowStudentReviewModal(false)}>
+                <Ionicons name="close" size={24} color="#5D667C" />
+              </TouchableOpacity>
+            </View>
+            {studentReviewTarget ? (
+              <>
+                <Text style={styles.studentReviewModalName}>{studentReviewTarget.studentName}</Text>
+                <Text style={styles.sectionHint}>
+                  Rating and comments are visible to the student without your name.
+                </Text>
+                <Text style={styles.modalLabel}>Rating *</Text>
+                {renderInteractiveStars(studentReviewRating)}
+                <Text style={styles.modalLabel}>Feedback *</Text>
+                <TextInput
+                  style={styles.studentReviewInput}
+                  placeholder="Share constructive feedback..."
+                  placeholderTextColor="#B0B6C3"
+                  value={studentReviewText}
+                  onChangeText={setStudentReviewText}
+                  multiline
+                  numberOfLines={4}
+                />
+                <TouchableOpacity
+                  style={[styles.submitStudentReviewBtn, submittingStudentReview && styles.submitBtnDisabled]}
+                  onPress={() => void submitStudentReview()}
+                  disabled={submittingStudentReview}
+                >
+                  {submittingStudentReview ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.submitStudentReviewBtnText}>Submit review</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
 
       {/* Sort Modal */}
       <Modal
@@ -517,6 +709,85 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#2E57A2",
+  },
+  sectionHint: {
+    fontSize: 14,
+    color: "#5D667C",
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  leaveStudentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    gap: 12,
+  },
+  leaveStudentCardText: {
+    flex: 1,
+  },
+  leaveStudentName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2F3850",
+  },
+  leaveStudentMeta: {
+    fontSize: 12,
+    color: "#8C93A4",
+    marginTop: 4,
+  },
+  leaveStudentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F4FF",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  leaveStudentBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2E57A2",
+  },
+  studentReviewModalCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 20,
+    width: "90%",
+    maxWidth: 420,
+  },
+  studentReviewModalName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#2F3850",
+    marginBottom: 8,
+  },
+  studentReviewInput: {
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    color: "#2F3850",
+    minHeight: 100,
+    textAlignVertical: "top",
+    marginBottom: 16,
+  },
+  submitStudentReviewBtn: {
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  submitStudentReviewBtnText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
   emptyState: {
     alignItems: "center",

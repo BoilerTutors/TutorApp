@@ -428,6 +428,26 @@ class ReviewPublic(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class StudentReviewCreate(BaseModel):
+    """Tutor submits an anonymous (to the student) review of a student."""
+
+    student_user_id: int = Field(..., ge=1)
+    review_text: str = Field(..., min_length=1)
+    rating: float = Field(..., ge=0.0, le=5.0)
+
+
+class StudentReviewReceivedPublic(BaseModel):
+    """What students see: no tutor identity (`tutor_id` is never exposed)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    review_id: int
+    review_timestamp: datetime
+    review_text: str
+    rating: float
+
+
 # ===========================================================
 # ---- Class schemas ----
 # ===========================================================
