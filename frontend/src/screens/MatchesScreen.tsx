@@ -13,6 +13,7 @@ import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 
 import { api } from "../api/client";
 import ViewProfileModal from "../components/ViewProfileModal";
@@ -57,6 +58,7 @@ type UserLookup = {
 };
 type RootStackParamList = {
   Matches: { matches?: MatchItem[] } | undefined;
+  "Tutor Profile Reviews": { tutorUserId: number; tutorName: string };
   Messenger:
     | {
         openTutorUserId?: number;
@@ -85,6 +87,9 @@ export default function MatchesScreen() {
   const [showClassSuggestions, setShowClassSuggestions] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<number | null>(null);
+  const [ratingByTutorId, setRatingByTutorId] = useState<Record<number, { average: number; count: number }>>(
+    {}
+  );
 
   const loadTutorEmails = async (rows: MatchItem[]) => {
     const uniqueTutorIds = Array.from(new Set(rows.map((row) => row.tutor_id)));
@@ -148,6 +153,34 @@ export default function MatchesScreen() {
     setTutorClassesByTutorUserId(next);
   };
 
+  const loadTutorRatings = async (rows: MatchItem[]) => {
+    const uniqueTutorIds = Array.from(new Set(rows.map((row) => row.tutor_id)));
+    if (uniqueTutorIds.length === 0) {
+      setRatingByTutorId({});
+      return;
+    }
+
+    const pairs = await Promise.all(
+      uniqueTutorIds.map(async (id) => {
+        try {
+          const reviews = await api.get<Array<{ rating: number }>>(`/reviews/tutor/${id}`);
+          const count = reviews.length;
+          const average =
+            count > 0 ? reviews.reduce((sum, review) => sum + review.rating, 0) / count : 0;
+          return [id, { average, count }] as const;
+        } catch {
+          return [id, { average: 0, count: 0 }] as const;
+        }
+      })
+    );
+
+    const next: Record<number, { average: number; count: number }> = {};
+    for (const [id, stats] of pairs) {
+      next[id] = stats;
+    }
+    setRatingByTutorId(next);
+  };
+
   const selectedClassId = selectedClass?.classId ?? null;
   const selectedClassLabel = selectedClass?.label ?? null;
 
@@ -167,7 +200,7 @@ export default function MatchesScreen() {
         classId != null ? `/matches/me/refresh?class_id=${classId}` : "/matches/me/refresh";
       const data = await api.post<MatchItem[]>(path);
       setMatches(data);
-      await Promise.all([loadTutorEmails(data), loadTutorClasses(data)]);
+      await Promise.all([loadTutorEmails(data), loadTutorClasses(data), loadTutorRatings(data)]);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to load matches");
     } finally {
@@ -217,9 +250,35 @@ export default function MatchesScreen() {
     setProfileModalVisible(true);
   };
 
+  const renderAverageStars = (averageRating: number) => {
+    const fullStars = Math.floor(averageRating);
+    const hasHalfStar = averageRating - fullStars >= 0.5;
+    return (
+      <View style={styles.starRow}>
+        {[1, 2, 3, 4, 5].map((star) => {
+          const isFull = star <= fullStars;
+          const isHalf = !isFull && hasHalfStar && star === fullStars + 1;
+          return (
+            <Ionicons
+              key={star}
+              name={isFull ? "star" : isHalf ? "star-half" : "star-outline"}
+              size={14}
+              color={isFull || isHalf ? "#D4AF4A" : "#CCD1DC"}
+              style={styles.ratingStarIcon}
+            />
+          );
+        })}
+      </View>
+    );
+  };
+
   useEffect(() => {
     if (initialMatches.length > 0) {
-      void Promise.all([loadTutorEmails(initialMatches), loadTutorClasses(initialMatches)]);
+      void Promise.all([
+        loadTutorEmails(initialMatches),
+        loadTutorClasses(initialMatches),
+        loadTutorRatings(initialMatches),
+      ]);
     }
     void loadClassCatalog();
     void loadSavedMatches();
@@ -317,6 +376,9 @@ export default function MatchesScreen() {
           const isMatched = !!matchedTutorIds[item.tutor_id];
           const isMatching = !!matchingTutorIds[item.tutor_id];
           const pausedNoNew = !!item.tutor_matching_paused && !isMatched;
+          const ratingStats = ratingByTutorId[item.tutor_id];
+          const reviewCount = ratingStats?.count ?? 0;
+          const averageRating = ratingStats?.average ?? 0;
           return (
             <View style={styles.card}>
               <View style={styles.headerRow}>
@@ -382,6 +444,30 @@ export default function MatchesScreen() {
                           : "Match"}
                   </Text>
                 </Pressable>
+                <View style={styles.actionsRightMeta}>
+                  {reviewCount > 0 ? (
+                    <View style={styles.ratingSummaryRow}>
+                      <View style={styles.ratingTextBlock}>
+                        {renderAverageStars(averageRating)}
+                        <Text style={styles.ratingValueText}>
+                          {averageRating.toFixed(1)} ({reviewCount})
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() =>
+                          navigation.navigate("Tutor Profile Reviews", {
+                            tutorUserId: item.tutor_id,
+                            tutorName: `${item.tutor_first_name} ${item.tutor_last_name}`,
+                          })
+                        }
+                      >
+                        <Text style={styles.seeReviewsLink}>See reviews</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={styles.noReviewsText}>No reviews yet</Text>
+                  )}
+                </View>
               </View>
               {pausedNoNew ? (
                 <Text style={styles.pauseMatchHint}>This tutor has paused new matches.</Text>
@@ -515,7 +601,42 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     fontWeight: "600",
   },
-  actionsRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  actionsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
+  actionsRightMeta: {
+    marginLeft: "auto",
+    alignItems: "flex-end",
+  },
+  ratingSummaryRow: {
+    alignItems: "flex-end",
+  },
+  ratingTextBlock: {
+    alignItems: "flex-end",
+  },
+  starRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  ratingStarIcon: {
+    marginLeft: 1,
+  },
+  ratingValueText: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+  seeReviewsLink: {
+    fontSize: 12,
+    color: "#2E57A2",
+    fontWeight: "700",
+    textDecorationLine: "underline",
+    marginTop: 4,
+  },
+  noReviewsText: {
+    fontSize: 12,
+    color: "#8C93A4",
+    fontStyle: "italic",
+  },
   actionBtn: {
     borderRadius: 10,
     paddingHorizontal: 14,

@@ -41,6 +41,12 @@ type Message = {
 type UserMe = {
   id: number;
   is_student: boolean;
+  is_tutor?: boolean;
+  tutor?: {
+    quick_reply1?: string | null;
+    quick_reply2?: string | null;
+    quick_reply3?: string | null;
+  } | null;
 };
 
 type MatchListRow = {
@@ -119,6 +125,7 @@ export default function MessengerScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isStudentAccount, setIsStudentAccount] = useState(false);
+  const [tutorQuickReplies, setTutorQuickReplies] = useState<string[]>([]);
   const [conversations, setConversations] = useState<
     Array<{
       id: number;
@@ -193,6 +200,12 @@ export default function MessengerScreen() {
     ]);
     setCurrentUserId(me.id);
     setIsStudentAccount(me.is_student);
+    const quickReplies = [
+      me.tutor?.quick_reply1?.trim(),
+      me.tutor?.quick_reply2?.trim(),
+      me.tutor?.quick_reply3?.trim(),
+    ].filter((value): value is string => Boolean(value));
+    setTutorQuickReplies(quickReplies);
     setCurrentSessionExists(currentSession);
     if (
       currentSession.has_current_session &&
@@ -390,8 +403,7 @@ export default function MessengerScreen() {
     await loadMessages(conversationId);
   };
 
-  const onSend = async () => {
-    const content = draft.trim();
+  const sendMessageContent = async (content: string, clearDraft: boolean) => {
     if (!selectedConversationId || !content || sending) {
       return;
     }
@@ -399,17 +411,30 @@ export default function MessengerScreen() {
       setSending(true);
       if (wsRef.current && wsConnected) {
         wsRef.current.send(JSON.stringify({ content }));
-        setDraft("");
+        if (clearDraft) {
+          setDraft("");
+        }
         return;
       }
       const msg = await api.post<Message>(`/messages/conversations/${selectedConversationId}/messages`, {
         content,
       });
-      setDraft("");
+      if (clearDraft) {
+        setDraft("");
+      }
       setMessages((prev) => [...prev, msg].sort((a, b) => a.id - b.id));
     } finally {
       setSending(false);
     }
+  };
+
+  const onSend = async () => {
+    const content = draft.trim();
+    await sendMessageContent(content, true);
+  };
+
+  const onQuickReplySend = async (quickReply: string) => {
+    await sendMessageContent(quickReply, false);
   };
 
   const onAttachPdf = async () => {
@@ -1123,6 +1148,22 @@ export default function MessengerScreen() {
             ListEmptyComponent={<Text style={styles.helperText}>No messages yet.</Text>}
             contentContainerStyle={styles.messageListContent}
           />
+          {!isStudentAccount && tutorQuickReplies.length > 0 ? (
+            <View style={styles.quickRepliesRow}>
+              {tutorQuickReplies.map((reply, index) => (
+                <Pressable
+                  key={`${index}-${reply}`}
+                  style={styles.quickReplyBtn}
+                  onPress={() => {
+                    void onQuickReplySend(reply);
+                  }}
+                  disabled={!selectedConversationId || sending}
+                >
+                  <Text style={styles.quickReplyBtnText}>{reply}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <View style={styles.composeRow}>
             <TextInput
               style={styles.composeInput}
@@ -1566,6 +1607,26 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: "center",
     marginTop: 12,
+  },
+  quickRepliesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  quickReplyBtn: {
+    borderWidth: 1,
+    borderColor: "#D4AF4A",
+    backgroundColor: "#FFF8E1",
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: "100%",
+  },
+  quickReplyBtnText: {
+    color: "#2E2A1A",
+    fontSize: 12,
+    fontWeight: "600",
   },
   composeInput: {
     flex: 1,

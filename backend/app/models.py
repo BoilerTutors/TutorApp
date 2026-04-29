@@ -262,6 +262,24 @@ class TutorProfile(Base):
     help_provided: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(Text), nullable=True, default=None
     )
+    quick_reply1: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="I am available for that time",
+        server_default="I am available for that time",
+    )
+    quick_reply2: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="No, I am not available. Do you want to try a different time?",
+        server_default="No, I am not available. Do you want to try a different time?",
+    )
+    quick_reply3: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="Send me the lecture notes",
+        server_default="Send me the lecture notes",
+    )
     # Session mode: "online" | "in_person" | "both"
     session_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="both")
     # When True, new students cannot add a match; existing active matches are unchanged.
@@ -463,6 +481,31 @@ class Review(Base):
     @property
     def tutor(self) -> "User":
         return self.session.tutor
+
+
+class StudentReview(Base):
+    __tablename__ = "student_reviews"
+    __table_args__ = (
+        CheckConstraint("rating >= 0.0 AND rating <= 5.0", name="ck_student_reviews_rating_range"),
+    )
+
+    review_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    review_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    review_text: Mapped[str] = mapped_column(Text, nullable=False)
+    rating: Mapped[float] = mapped_column(Float, nullable=False)
+
+    student: Mapped["User"] = relationship(
+        foreign_keys=[student_id],
+    )
 
 
 # ============================================

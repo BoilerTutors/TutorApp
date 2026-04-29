@@ -17,6 +17,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import get_current_admin, get_current_user, get_user_from_token
@@ -36,7 +37,7 @@ from app.crud.sessions import (
 )
 from app.database import get_db
 from app.services.session_verification_ws import session_verification_ws_manager
-from app.models import TutoringSession, User, Admin
+from app.models import Class, TutoringSession, User, Admin
 from app.services.notification_events import build_and_store_notification
 from app.schemas import (
     AdminTutoringSessionPublic,
@@ -55,6 +56,35 @@ router = APIRouter()
 
 # Booked / active sessions: include legacy DB value `confirmed` (pre–accepted/declined migration).
 _ACTIVE_SESSION_STATUSES = frozenset({"pending", "accepted", "confirmed"})
+
+
+def _parse_subject(subject: str) -> tuple[str, int] | None:
+    parts = subject.strip().split()
+    if len(parts) != 2:
+        return None
+    subject_code = parts[0].upper()
+    if not parts[1].isdigit():
+        return None
+    return subject_code, int(parts[1])
+
+
+def _resolve_class_id_for_subject(db: Session, subject: str) -> int | None:
+    parsed = _parse_subject(subject)
+    if parsed is None:
+        return None
+    subject_code, class_number = parsed
+    return db.execute(
+        select(Class.id)
+        .where(Class.subject == subject_code, Class.class_number == class_number)
+        .order_by(Class.id.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _session_to_public_with_class_id(db: Session, row: TutoringSession) -> TutoringSessionPublic:
+    payload = tutoring_session_to_public(row)
+    payload.class_id = _resolve_class_id_for_subject(db, row.subject)
+    return payload
 
 
 def _display_name(user: User) -> str:
@@ -134,7 +164,7 @@ def create_session(
             "status": row.status,
         },
     )
-    return tutoring_session_to_public(row)
+    return _session_to_public_with_class_id(db, row)
 
 
 @router.get("/tutor/past", response_model=list[TutoringSessionPublic])
@@ -150,7 +180,7 @@ def get_tutor_sessions_past(
         )
 
     sessions = get_tutor_sessions_past_crud(db, current_user.id)
-    return [tutoring_session_to_public(s) for s in sessions]
+    return [_session_to_public_with_class_id(db, s) for s in sessions]
 
 
 @router.get("/tutor/future", response_model=list[TutoringSessionPublic])
@@ -170,7 +200,7 @@ def get_tutor_sessions_future(
         for s in get_tutor_sessions_future_crud(db, current_user.id)
         if s.status in _ACTIVE_SESSION_STATUSES
     ]
-    return [tutoring_session_to_public(s) for s in sessions]
+    return [_session_to_public_with_class_id(db, s) for s in sessions]
 
 
 
@@ -190,7 +220,7 @@ def get_student_sessions_future(
         for s in get_student_sessions_future_crud(db, current_user.id)
         if s.status in _ACTIVE_SESSION_STATUSES
     ]
-    return [tutoring_session_to_public(s) for s in sessions]
+    return [_session_to_public_with_class_id(db, s) for s in sessions]
 
 
 @router.get(
@@ -367,7 +397,7 @@ def update_session(
                 "reason": reason,
             },
         )
-        return tutoring_session_to_public(row)
+        return _session_to_public_with_class_id(db, row)
 
     if not is_tutor_owner:
         raise HTTPException(
@@ -424,7 +454,7 @@ def update_session(
                 "status": data.status,
             },
         )
-    return tutoring_session_to_public(row)
+    return _session_to_public_with_class_id(db, row)
 
 @router.get("/student/past", response_model=list[TutoringSessionPublic])
 def get_student_sessions_past(
@@ -438,4 +468,4 @@ def get_student_sessions_past(
             detail="Only students can access student sessions.",
         )
     sessions = get_student_sessions_past_crud(db, current_user.id)
-    return [tutoring_session_to_public(s) for s in sessions]
+    return [_session_to_public_with_class_id(db, s) for s in sessions]

@@ -134,6 +134,9 @@ class TutorProfileCreate(BaseModel):
     preferred_locations: Optional[list[str]] = None
     classes: Optional[list["TutorClassCreate"]] = None
     help_provided: Optional[list[str]] = None
+    quick_reply1: Optional[str] = None
+    quick_reply2: Optional[str] = None
+    quick_reply3: Optional[str] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
     max_sessions_per_week: Optional[int] = Field(default=None, ge=1, le=168)
 
@@ -145,6 +148,9 @@ class TutorProfileUpdate(BaseModel):
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
     help_provided: Optional[list[str]] = None
+    quick_reply1: Optional[str] = None
+    quick_reply2: Optional[str] = None
+    quick_reply3: Optional[str] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
     classes: Optional[list["TutorClassCreate"]] = None
     matching_paused: Optional[bool] = None
@@ -177,6 +183,9 @@ class TutorProfilePublic(BaseModel):
     preferred_locations: Optional[list[str]] = None
     average_rating: Optional[float] = None
     help_provided: Optional[list[str]] = None
+    quick_reply1: str = "I am available for that time"
+    quick_reply2: str = "No, I am not available. Do you want to try a different time?"
+    quick_reply3: str = "Send me the lecture notes"
     session_mode: Optional[str] = None
     matching_paused: bool = False
     max_sessions_per_week: Optional[int] = None
@@ -218,6 +227,9 @@ class TutorProfilePublic(BaseModel):
                     "preferred_locations": tutor.preferred_locations,
                     "average_rating": avg_rating,
                     "help_provided": tutor.help_provided,
+                    "quick_reply1": getattr(tutor, "quick_reply1", "I am available for that time"),
+                    "quick_reply2": getattr(tutor, "quick_reply2", "No, I am not available. Do you want to try a different time?"),
+                    "quick_reply3": getattr(tutor, "quick_reply3", "Send me the lecture notes"),
                     "session_mode": getattr(tutor, "session_mode", None),
                     "matching_paused": getattr(tutor, "matching_paused", False),
                     "max_sessions_per_week": getattr(tutor, "max_sessions_per_week", None),
@@ -315,6 +327,7 @@ class TutoringSessionPublic(BaseModel):
     id: int
     tutor_id: int
     student_id: int
+    class_id: Optional[int] = None
     subject: str
     scheduled_start: datetime
     scheduled_end: datetime
@@ -337,6 +350,7 @@ def tutoring_session_to_public(row: "TutoringSession") -> TutoringSessionPublic:
         id=row.id,
         tutor_id=row.tutor_id,
         student_id=row.student_id,
+        class_id=None,
         subject=row.subject,
         scheduled_start=row.scheduled_start,
         scheduled_end=row.scheduled_end,

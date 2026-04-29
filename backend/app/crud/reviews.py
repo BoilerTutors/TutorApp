@@ -8,6 +8,7 @@
 - update_review
 - delete_review
 """
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -17,15 +18,18 @@ from app.schemas import ReviewCreate, ReviewUpdate
 
 
 def create_review(db: Session, student_id: int, data: ReviewCreate) -> Review:
-    """Create a new review for a completed tutoring session."""
+    """Create a new review for a completed/past tutoring session."""
     # Verify the session exists and belongs to this student
     session = db.get(TutoringSession, data.session_id)
     if not session:
         raise ValueError("Session not found")
     if session.student_id != student_id:
         raise ValueError("You can only review sessions you participated in as a student")
-    if session.status != "completed":
-        raise ValueError("You can only review completed sessions")
+    if session.status in {"cancelled", "declined"}:
+        raise ValueError("You cannot review cancelled or declined sessions")
+    now = datetime.now(timezone.utc)
+    if session.scheduled_end > now:
+        raise ValueError("You can only review sessions that have already ended")
     
     # Check if review already exists for this session
     existing = db.execute(

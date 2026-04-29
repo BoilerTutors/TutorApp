@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { api } from "../api/client";
 
 type RootStackParamList = {
   "Student Dashboard": undefined;
@@ -23,8 +24,19 @@ type Session = {
   id: number;
   tutorName: string;
   className: string;
+  classId: number | null;
   date: string;
   hasReview: boolean;
+  tutorId: number;
+};
+
+type ReviewGroup = {
+  key: string;
+  tutorId: number;
+  tutorName: string;
+  className: string;
+  count: number;
+  latestSession: Session;
 };
 
 type Review = {
@@ -37,6 +49,37 @@ type Review = {
   isAnonymous: boolean;
   date: string;
 };
+
+type TutoringSessionPublic = {
+  id: number;
+  tutor_id: number;
+  class_id: number | null;
+  subject: string;
+  scheduled_start: string;
+  status: "pending" | "accepted" | "declined" | "completed" | "cancelled";
+};
+
+type ReviewPublic = {
+  id: number;
+  session_id: number;
+  class_id: number;
+  rating: number;
+  comment: string | null;
+  is_anonymous: boolean;
+  created_at: string;
+};
+
+type UserName = { first_name: string; last_name: string };
+type ClassPublic = { id: number; subject: string; class_number: number };
+
+function parseSubjectAndClassNumber(subject: string): { subjectCode: string; classNumber: number } | null {
+  const match = subject.trim().match(/^([A-Za-z]+)\s+(\d{2,4})$/);
+  if (!match) return null;
+  return {
+    subjectCode: match[1].toUpperCase(),
+    classNumber: Number(match[2]),
+  };
+}
 
 const showAlert = (title: string, message: string) => {
   if (Platform.OS === "web") {
@@ -65,36 +108,84 @@ export default function StudentReviewsScreen() {
   const [editingReview, setEditingReview] = useState<Review | null>(null);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, []);
 
   const fetchData = async () => {
     setIsLoading(true);
-    
-    // Mock data for demo
-    const mockSessions: Session[] = [
-      { id: 1, tutorName: "Alex Chen", className: "CS 180", date: "2024-02-20", hasReview: false },
-      { id: 2, tutorName: "Jordan Smith", className: "MA 265", date: "2024-02-18", hasReview: false },
-      { id: 3, tutorName: "Alex Chen", className: "CS 251", date: "2024-02-15", hasReview: true },
-    ];
+    try {
+      const [rawSessions, rawReviews] = await Promise.all([
+        api.get<TutoringSessionPublic[]>("/sessions/student/past"),
+        api.get<ReviewPublic[]>("/reviews/student/me"),
+      ]);
 
-    const mockReviews: Review[] = [
-      {
-        id: 1,
-        sessionId: 3,
-        tutorName: "Alex Chen",
-        className: "CS 251",
-        rating: 5,
-        comment: "Great help with data structures! Very patient and clear explanations.",
-        isAnonymous: false,
-        date: "2024-02-15",
-      },
-    ];
+      const tutorIds = Array.from(new Set(rawSessions.map((s) => s.tutor_id)));
+      const tutorPairs = await Promise.all(
+        tutorIds.map(async (id) => {
+          try {
+            const user = await api.get<UserName>(`/users/${id}`);
+            return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
+          } catch {
+            return [id, `Tutor #${id}`] as const;
+          }
+        })
+      );
+      const tutorNameById = new Map<number, string>(tutorPairs);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setSessions(mockSessions);
-    setMyReviews(mockReviews);
-    setIsLoading(false);
+      const reviewedSessionIds = new Set(rawReviews.map((r) => r.session_id));
+      const sessionById = new Map<number, Session>();
+      const mappedSessions: Session[] = rawSessions
+        .filter((s) => s.status !== "cancelled" && s.status !== "declined")
+        .map((s) => {
+          const mapped: Session = {
+            id: s.id,
+            tutorName: tutorNameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}`,
+            className: s.subject,
+            classId: s.class_id,
+            date: s.scheduled_start,
+            hasReview: reviewedSessionIds.has(s.id),
+            tutorId: s.tutor_id,
+          };
+          sessionById.set(mapped.id, mapped);
+          return mapped;
+        });
+
+      const classIdsFromReviews = Array.from(new Set(rawReviews.map((r) => r.class_id)));
+      const classPairs = await Promise.all(
+        classIdsFromReviews.map(async (classId) => {
+          try {
+            const c = await api.get<ClassPublic>(`/classes/${classId}`);
+            return [classId, `${c.subject} ${c.class_number}`] as const;
+          } catch {
+            return [classId, `Class #${classId}`] as const;
+          }
+        })
+      );
+      const classNameById = new Map<number, string>(classPairs);
+
+      const mappedReviews: Review[] = rawReviews.map((r) => {
+        const relatedSession = sessionById.get(r.session_id);
+        return {
+          id: r.id,
+          sessionId: r.session_id,
+          tutorName: relatedSession?.tutorName ?? "Tutor",
+          className: relatedSession?.className ?? classNameById.get(r.class_id) ?? `Class #${r.class_id}`,
+          rating: r.rating,
+          comment: r.comment ?? "",
+          isAnonymous: r.is_anonymous,
+          date: r.created_at,
+        };
+      });
+
+      setSessions(mappedSessions);
+      setMyReviews(mappedReviews);
+    } catch {
+      showAlert("Error", "Failed to load review data");
+      setSessions([]);
+      setMyReviews([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const openReviewModal = (session: Session) => {
@@ -107,13 +198,16 @@ export default function StudentReviewsScreen() {
   };
 
   const openEditModal = (review: Review) => {
+    const existingSession = sessions.find((s) => s.id === review.sessionId);
     setEditingReview(review);
     setSelectedSession({ 
       id: review.sessionId, 
       tutorName: review.tutorName, 
       className: review.className, 
+      classId: existingSession?.classId ?? null,
       date: review.date,
-      hasReview: true 
+      hasReview: true,
+      tutorId: existingSession?.tutorId ?? 0,
     });
     setRating(review.rating);
     setComment(review.comment);
@@ -128,58 +222,91 @@ export default function StudentReviewsScreen() {
     }
 
     setIsSubmitting(true);
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    if (editingReview) {
-      // Update existing review
-      setMyReviews(myReviews.map(r => 
-        r.id === editingReview.id 
-          ? { ...r, rating, comment, isAnonymous }
-          : r
-      ));
-      showAlert("Success", "Review updated!");
-    } else {
-      // Create new review
-      const newReview: Review = {
-        id: Date.now(),
-        sessionId: selectedSession!.id,
-        tutorName: selectedSession!.tutorName,
-        className: selectedSession!.className,
-        rating,
-        comment,
-        isAnonymous,
-        date: new Date().toISOString().split('T')[0],
-      };
-      setMyReviews([newReview, ...myReviews]);
-      
-      // Mark session as reviewed
-      setSessions(sessions.map(s => 
-        s.id === selectedSession!.id ? { ...s, hasReview: true } : s
-      ));
-      showAlert("Success", "Review submitted!");
+    try {
+      if (editingReview) {
+        await api.patch<ReviewPublic>(`/reviews/${editingReview.id}`, {
+          rating,
+          comment: comment.trim() || null,
+          is_anonymous: isAnonymous,
+        });
+        setMyReviews(
+          myReviews.map((r) =>
+            r.id === editingReview.id ? { ...r, rating, comment, isAnonymous } : r
+          )
+        );
+        showAlert("Success", "Review updated!");
+      } else {
+        if (!selectedSession) return;
+        let classId = selectedSession.classId;
+        if (classId === null) {
+          const parsed = parseSubjectAndClassNumber(selectedSession.className);
+          if (parsed) {
+            try {
+              const classes = await api.get<ClassPublic[]>(
+                `/classes/?subject=${encodeURIComponent(parsed.subjectCode)}`
+              );
+              const matched = classes.find((c) => c.class_number === parsed.classNumber);
+              classId = matched?.id ?? null;
+            } catch {
+              classId = null;
+            }
+          }
+        }
+        if (classId === null) {
+          showAlert("Cannot submit review", "Could not determine class for this session.");
+          return;
+        }
+        const created = await api.post<ReviewPublic>("/reviews/", {
+          session_id: selectedSession.id,
+          class_id: classId,
+          rating,
+          comment: comment.trim() || null,
+          is_anonymous: isAnonymous,
+        });
+        const newReview: Review = {
+          id: created.id,
+          sessionId: created.session_id,
+          tutorName: selectedSession.tutorName,
+          className: selectedSession.className,
+          rating: created.rating,
+          comment: created.comment ?? "",
+          isAnonymous: created.is_anonymous,
+          date: created.created_at,
+        };
+        setMyReviews([newReview, ...myReviews]);
+        setSessions(
+          sessions.map((s) =>
+            s.id === selectedSession.id ? { ...s, hasReview: true } : s
+          )
+        );
+        showAlert("Success", "Review submitted!");
+      }
+      setShowReviewModal(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to submit review";
+      showAlert("Error", message);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
-    setShowReviewModal(false);
   };
 
   const deleteReview = async (reviewId: number) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    const review = myReviews.find(r => r.id === reviewId);
-    setMyReviews(myReviews.filter(r => r.id !== reviewId));
-    
-    // Mark session as not reviewed
-    if (review) {
-      setSessions(sessions.map(s => 
-        s.id === review.sessionId ? { ...s, hasReview: false } : s
-      ));
+    try {
+      await api.delete<void>(`/reviews/${reviewId}`);
+      const review = myReviews.find((r) => r.id === reviewId);
+      setMyReviews(myReviews.filter((r) => r.id !== reviewId));
+      if (review) {
+        setSessions(
+          sessions.map((s) =>
+            s.id === review.sessionId ? { ...s, hasReview: false } : s
+          )
+        );
+      }
+      showAlert("Deleted", "Review has been deleted");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to delete review";
+      showAlert("Error", message);
     }
-    
-    showAlert("Deleted", "Review has been deleted");
   };
 
   const renderStars = (currentRating: number, interactive: boolean = false) => {
@@ -204,6 +331,28 @@ export default function StudentReviewsScreen() {
   };
 
   const sessionsToReview = sessions.filter(s => !s.hasReview);
+  const reviewGroupsByTutor = sessionsToReview.reduce<Record<number, ReviewGroup[]>>((acc, session) => {
+    const tutorGroups = acc[session.tutorId] ?? [];
+    const existing = tutorGroups.find((g) => g.className === session.className);
+    if (!existing) {
+      tutorGroups.push({
+        key: `${session.tutorId}:${session.className}`,
+        tutorId: session.tutorId,
+        tutorName: session.tutorName,
+        className: session.className,
+        count: 1,
+        latestSession: session,
+      });
+    } else {
+      existing.count += 1;
+      if (new Date(session.date).getTime() > new Date(existing.latestSession.date).getTime()) {
+        existing.latestSession = session;
+      }
+    }
+    acc[session.tutorId] = tutorGroups;
+    return acc;
+  }, {});
+  const reviewTutorGroups = Object.values(reviewGroupsByTutor);
 
   return (
     <View style={styles.screen}>
@@ -226,24 +375,33 @@ export default function StudentReviewsScreen() {
           {sessionsToReview.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Sessions to Review</Text>
-              <Text style={styles.sectionSubtitle}>Leave feedback for your completed sessions</Text>
+              <Text style={styles.sectionSubtitle}>Choose a tutor, then a class to review</Text>
               
-              {sessionsToReview.map((session) => (
-                <TouchableOpacity
-                  key={session.id}
-                  style={styles.sessionCard}
-                  onPress={() => openReviewModal(session)}
-                >
+              {reviewTutorGroups.map((groups) => (
+                <View key={groups[0].tutorId} style={styles.sessionCard}>
                   <View style={styles.sessionInfo}>
-                    <Text style={styles.tutorName}>{session.tutorName}</Text>
-                    <Text style={styles.className}>{session.className}</Text>
-                    <Text style={styles.sessionDate}>{new Date(session.date).toLocaleDateString()}</Text>
+                    <Text style={styles.tutorName}>{groups[0].tutorName}</Text>
+                    <Text style={styles.sessionDate}>
+                      {groups.reduce((sum, g) => sum + g.count, 0)} session
+                      {groups.reduce((sum, g) => sum + g.count, 0) === 1 ? "" : "s"} to review
+                    </Text>
                   </View>
-                  <View style={styles.reviewBtn}>
-                    <Ionicons name="create-outline" size={20} color="#2E57A2" />
-                    <Text style={styles.reviewBtnText}>Review</Text>
+                  <View style={styles.groupClassList}>
+                    {groups.map((group) => (
+                      <TouchableOpacity
+                        key={group.key}
+                        style={styles.reviewBtn}
+                        onPress={() => openReviewModal(group.latestSession)}
+                      >
+                        <Ionicons name="create-outline" size={18} color="#2E57A2" />
+                        <Text style={styles.reviewBtnText}>
+                          {group.className}
+                          {group.count > 1 ? ` (${group.count})` : ""}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                </TouchableOpacity>
+                </View>
               ))}
             </>
           )}
@@ -326,6 +484,11 @@ export default function StudentReviewsScreen() {
               <View style={styles.modalSessionInfo}>
                 <Text style={styles.modalTutorName}>{selectedSession.tutorName}</Text>
                 <Text style={styles.modalClassName}>{selectedSession.className}</Text>
+                {!editingReview && (
+                  <Text style={styles.modalSessionHint}>
+                    This review will be submitted for your most recent session in this class with this tutor.
+                  </Text>
+                )}
               </View>
             )}
 
@@ -461,12 +624,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+    marginTop: 6,
+    alignSelf: "flex-start",
   },
   reviewBtnText: {
     marginLeft: 6,
     fontSize: 14,
     fontWeight: "600",
     color: "#2E57A2",
+  },
+  groupClassList: {
+    marginTop: 8,
   },
   emptyState: {
     alignItems: "center",
@@ -582,6 +750,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2E57A2",
     marginTop: 2,
+  },
+  modalSessionHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#5D667C",
+    lineHeight: 18,
   },
   modalLabel: {
     fontSize: 14,

@@ -40,8 +40,6 @@ type RootStackParamList = {
   "Tutor Registration": undefined;
 };
 
-const AVAILABLE_CLASSES = AVAILABLE_CLASSES_FALLBACK;
-
 type SelectedClass = ClassPublic & {
   semester: "F" | "S";
   year_taken: number;
@@ -99,23 +97,38 @@ export default function TutorRegistrationScreen() {
 
   const fetchClasses = async () => {
     setIsLoadingClasses(true);
-    
-    // Use mock data for demo - replace with API call when backend has classes
-    const mockClasses = [
-      { id: 1, subject: "CS", class_number: 180, professor: "Dunsmore" },
-      { id: 2, subject: "CS", class_number: 182, professor: "Adams" },
-      { id: 3, subject: "CS", class_number: 240, professor: "Turkstra" },
-      { id: 4, subject: "CS", class_number: 251, professor: "Turkstra" },
-      { id: 5, subject: "CS", class_number: 307, professor: "Hashemi" },
-      { id: 6, subject: "CS", class_number: 354, professor: "Gustafson" },
-      { id: 7, subject: "MA", class_number: 161, professor: "Chen" },
-      { id: 8, subject: "MA", class_number: 162, professor: "Chen" },
-      { id: 9, subject: "MA", class_number: 265, professor: "Dey" },
-      { id: 10, subject: "PHYS", class_number: 172, professor: "Bhatt" },
-    ];
-  
-    setAvailableClasses(mockClasses);
-    setIsLoadingClasses(false);
+    try {
+      const classes = await classesApi.list();
+      if (classes.length > 0) {
+        setAvailableClasses(classes);
+        return;
+      }
+
+      // If backend returns no classes, use fallback catalog for local/dev UX.
+      const fallbackClasses: ClassPublic[] = AVAILABLE_CLASSES_FALLBACK.map((c) => {
+        const [subject = "", classNum = "0"] = c.courseCode.split(/\s+/, 2);
+        return {
+          id: c.id,
+          subject,
+          class_number: Number.parseInt(classNum, 10) || 0,
+          professor: c.title.replace(/^Prof\.\s*/i, "") || "TBA",
+        };
+      });
+      setAvailableClasses(fallbackClasses);
+    } catch {
+      const fallbackClasses: ClassPublic[] = AVAILABLE_CLASSES_FALLBACK.map((c) => {
+        const [subject = "", classNum = "0"] = c.courseCode.split(/\s+/, 2);
+        return {
+          id: c.id,
+          subject,
+          class_number: Number.parseInt(classNum, 10) || 0,
+          professor: c.title.replace(/^Prof\.\s*/i, "") || "TBA",
+        };
+      });
+      setAvailableClasses(fallbackClasses);
+    } finally {
+      setIsLoadingClasses(false);
+    }
   };
 
   // Filter classes based on search
@@ -220,37 +233,45 @@ export default function TutorRegistrationScreen() {
     
     try {
       console.log("Starting registration...");
-      
-      // For demo: Skip API call and show success
-      // TODO: Re-enable when backend is ready
-      /*
+      const tutorClasses: TutorClassCreate[] = selectedClasses
+        .filter((c) => c.grade_received)
+        .map((c) => ({
+          class_id: c.id,
+          semester: c.semester,
+          year_taken: c.year_taken,
+          grade_received: c.grade_received,
+        }));
+
       const userData: UserCreate = {
         email: email.toLowerCase().trim(),
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         password: password,
         is_tutor: true,
-        is_student: true,
+        is_student: false,
         tutor_profile: {
           bio: bio.trim() || undefined,
           major: major.trim() || undefined,
           grad_year: gradYear ? parseInt(gradYear) : undefined,
           hourly_rate_cents: hourlyRate ? Math.round(parseFloat(hourlyRate) * 100) : undefined,
+          classes: tutorClasses.length > 0 ? tutorClasses : undefined,
         },
       };
-  
-      await register(userData);
-      await login({ email: userData.email, password: password });
-      */
-      
-      // Simulate success for demo
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      console.log("A: before register");
+      const created = await register(userData);
+      console.log("B: after register", created);
+      console.log("C: before login");
+      await login({ email: userData.email, password });
+      console.log("D: after login");
+
       setIsSubmitted(true);
+      console.log("registered");
       
     } catch (err) {
-      console.error("Registration error:", err);
-      const message = err instanceof Error ? err.message : "Registration failed";
+      console.error("Registration error raw:", err);
+      const message =
+        err instanceof Error ? err.message : JSON.stringify(err, null, 2);
+      console.error("Registration error message:", message);
       showAlert("Error", message);
     } finally {
       setIsSubmitting(false);
