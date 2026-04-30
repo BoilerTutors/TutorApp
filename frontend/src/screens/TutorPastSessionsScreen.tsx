@@ -9,7 +9,9 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import SessionCard, { type Session } from "../components/SessionCard";
+import SessionNotesModal from "../components/SessionNotesModal";
 import { api } from "../api/client";
 import type { TutoringSession } from "../types/models";
 
@@ -84,12 +86,14 @@ function sortSessions(sessions: Session[], sort: SortOption): Session[] {
 }
 
 export default function TutorPastSessionsScreen() {
+  const navigation = useNavigation<any>();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const [pastSessions, setPastSessions] = useState<Session[]>([]);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -184,12 +188,30 @@ export default function TutorPastSessionsScreen() {
     setPageInput("1");
   };
 
+  const handleViewDetailsPress = (sessionId: number) => {
+    const found = pastSessions.find((s) => s.id === sessionId);
+    if (found) {
+      setSelectedSession(found);
+    }
+  };
+
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {/* Top action bar */}
+      <View style={styles.topBar}>
+        <Pressable
+          style={styles.notesBtn}
+          onPress={() => navigation.navigate("Tutor Notes Overview")}
+        >
+          <Ionicons name="document-text-outline" size={16} color={NAVY} />
+          <Text style={styles.notesBtnText}>My Notes</Text>
+        </Pressable>
+      </View>
+
       {/* Search + Sort Row */}
       <View style={styles.searchRow}>
         <View style={styles.searchBar}>
@@ -266,7 +288,11 @@ export default function TutorPastSessionsScreen() {
       {/* Session Cards */}
       {pageItems.length > 0 ? (
         pageItems.map((session) => (
-          <SessionCard key={session.id} session={session} />
+          <SessionCard
+            key={session.id}
+            session={session}
+            onViewDetailsPress={handleViewDetailsPress}
+          />
         ))
       ) : (
         <Text style={styles.emptyText}>No sessions found.</Text>
@@ -320,6 +346,12 @@ export default function TutorPastSessionsScreen() {
       )}
 
       <View style={styles.bottomSpacer} />
+
+      <SessionNotesModal
+        visible={selectedSession !== null}
+        session={selectedSession}
+        onClose={() => setSelectedSession(null)}
+      />
     </ScrollView>
   );
 }
@@ -333,6 +365,27 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: 10,
+  },
+  notesBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFF",
+    borderWidth: 1.5,
+    borderColor: NAVY,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  notesBtnText: {
+    color: NAVY,
+    fontWeight: "600",
+    fontSize: 13,
   },
 
   // Search + Sort

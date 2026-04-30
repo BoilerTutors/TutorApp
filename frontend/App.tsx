@@ -16,6 +16,7 @@ import HelpScreen from "./src/screens/HelpScreen";
 import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
 import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
 import TutorPastSessionsScreen from "./src/screens/TutorPastSessionsScreen";
+import TutorNotesOverviewScreen from "./src/screens/TutorNotesOverviewScreen";
 import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
@@ -39,6 +40,7 @@ type RootStackParamList = {
   "Student Reviews": undefined;
   "Tutor Reviews": undefined;
   "Tutor Past Sessions": undefined;
+  "Tutor Notes Overview": undefined;
   "Tutor Schedule": undefined;
   Messenger:
     | {
@@ -127,8 +129,6 @@ export default function App() {
         }
       } catch (e) {
         setAuthToken(null);
-        // Only clear token on auth failure (401). For network/timeout errors,
-        // keep the token so a refresh or retry can restore the session.
         const isAuthError = e instanceof Error && e.message.includes("session has expired");
         if (isAuthError) {
           await clearToken();
@@ -245,6 +245,11 @@ export default function App() {
             options={{ header: () => <GeneralHeader title="Past Sessions" /> }}
           />
           <Stack.Screen
+            name="Tutor Notes Overview"
+            component={TutorNotesOverviewScreen}
+            options={{ header: () => <GeneralHeader title="My Notes" /> }}
+          />
+          <Stack.Screen
             name="Tutor Schedule"
             component={TutorCalendarScreen}
             options={{ headerShown: false }}
@@ -301,19 +306,19 @@ export default function App() {
             component={AvailabilityScreen}
             options={{ headerShown: false }}
           />
-          
+
           <Stack.Screen
             name="Session History"
             component={SessionHistoryScreen}
             options={{ headerShown: false }}
           />
-          
+
           <Stack.Screen
             name="Report Tutor"
             component={ReportTutorScreen}
             options={{ headerShown: false }}
           />
-          
+
           <Stack.Screen
             name="Tutor Profile Reviews"
             component={TutorProfileReviewsScreen}

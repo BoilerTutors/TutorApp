@@ -29,6 +29,7 @@ type SessionCardProps = {
   showCancelAction?: boolean;
   onCancelPress?: (sessionId: number) => void;
   cancelling?: boolean;
+  onViewDetailsPress?: (sessionId: number) => void;
 };
 
 export default function SessionCard({
@@ -36,6 +37,7 @@ export default function SessionCard({
   showCancelAction = false,
   onCancelPress,
   cancelling = false,
+  onViewDetailsPress,
 }: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { icon, color, label } = STATUS_CONFIG[session.status];
@@ -87,7 +89,10 @@ export default function SessionCard({
           </View>
 
           <View style={styles.sessionActions}>
-            <Pressable style={styles.detailsBtn}>
+            <Pressable
+              style={styles.detailsBtn}
+              onPress={() => onViewDetailsPress?.(session.id)}
+            >
               <Text style={styles.detailsBtnText}>View Details</Text>
             </Pressable>
             {showCancelAction && session.status !== "cancelled" ? (

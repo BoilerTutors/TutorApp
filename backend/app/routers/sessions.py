@@ -1,3 +1,4 @@
+from typing import Optional
 """API routes for TutoringSession (purchases).
 
 - POST   /sessions/              - student purchases/books a session
@@ -58,7 +59,7 @@ router = APIRouter()
 _ACTIVE_SESSION_STATUSES = frozenset({"pending", "accepted", "confirmed"})
 
 
-def _parse_subject(subject: str) -> tuple[str, int] | None:
+def _parse_subject(subject: str) -> Optional[tuple[str, int]]:
     parts = subject.strip().split()
     if len(parts) != 2:
         return None
@@ -68,7 +69,7 @@ def _parse_subject(subject: str) -> tuple[str, int] | None:
     return subject_code, int(parts[1])
 
 
-def _resolve_class_id_for_subject(db: Session, subject: str) -> int | None:
+def _resolve_class_id_for_subject(db: Session, subject: str) -> Optional[int]:
     parsed = _parse_subject(subject)
     if parsed is None:
         return None
@@ -251,7 +252,7 @@ def get_current_user_has_current_session(
 
 @router.get("/admin/recent", response_model=list[AdminTutoringSessionPublic])
 def get_recent_sessions_for_admin(
-    tutor_name: str | None = None,
+    tutor_name: Optional[str] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),

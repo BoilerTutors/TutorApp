@@ -708,3 +708,23 @@ class ReportPublic(BaseModel):
     reason: str
     status: str
     created_at: datetime
+
+class SessionNotePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: int
+    tutor_id: int
+    student_id: int
+    content: str
+    subject: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionNoteCreate(BaseModel):
+    content: str
+
+
+class SessionNoteUpdate(BaseModel):
+    content: str

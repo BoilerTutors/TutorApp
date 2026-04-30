@@ -174,7 +174,7 @@ def get_attachment_for_user(
     *,
     attachment_id: int,
     user_id: int,
-) -> MessageAttachment | None:
+) -> Optional[MessageAttachment]:
     row = (
         db.query(MessageAttachment)
         .join(Message, Message.id == MessageAttachment.message_id)

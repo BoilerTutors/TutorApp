@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import hashlib
 import math
 from datetime import time
-from typing import Sequence, TypedDict
+from typing import Optional, Sequence, TypedDict
 
 from sqlalchemy.orm import Session
 
@@ -79,7 +79,7 @@ def _embed_from_text(text: str) -> list[float]:
     return _normalize(vector)
 
 
-def join_list(values: Sequence[str] | None) -> str:
+def join_list(values: Optional[Sequence[str]]) -> str:
     if not values:
         return ""
     return ", ".join(v.strip() for v in values if v and v.strip())
@@ -274,8 +274,8 @@ def _availability_overlap_score(
 
 
 def _location_match_score(
-    student_locations: Sequence[str] | None,
-    tutor_locations: Sequence[str] | None,
+    student_locations: Optional[Sequence[str]],
+    tutor_locations: Optional[Sequence[str]],
 ) -> float:
     student_set = {loc.strip() for loc in (student_locations or []) if loc and loc.strip()}
     if not student_set:
@@ -288,7 +288,7 @@ def knn_retrieve_candidates(
     db: Session,
     *,
     student_id: int,
-    candidate_tutor_user_ids: Sequence[int] | None = None,
+    candidate_tutor_user_ids: Optional[Sequence[int]] = None,
     top_k: int = 50,
     model_name: str = "local-hash-v1",
     bio_weight: float = 1.0,

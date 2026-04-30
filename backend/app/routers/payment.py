@@ -1,3 +1,4 @@
+from typing import Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -77,8 +78,8 @@ def _get_or_create_connected_account(current_user: User, db: Session) -> str:
 def create_connect_onboarding(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    refresh_url: str | None = Query(default=None),
-    return_url: str | None = Query(default=None),
+    refresh_url: Optional[str] = Query(default=None),
+    return_url: Optional[str] = Query(default=None),
 ):
     """
     Create a Stripe Connect account onboarding link and return it as JSON.

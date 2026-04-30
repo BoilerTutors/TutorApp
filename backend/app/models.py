@@ -739,5 +739,33 @@ class AdminMessage(Base):
 
     student: Mapped["User"] = relationship(foreign_keys=[student_id])
     tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
+class SessionNote(Base):
+    __tablename__ = "session_notes"
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_session_note_per_session"),
+    )
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("tutoring_sessions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    tutor_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)  # denormalized
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(), onupdate=func.now(), nullable=False,
+    )
+
+    session: Mapped["TutoringSession"] = relationship()
     

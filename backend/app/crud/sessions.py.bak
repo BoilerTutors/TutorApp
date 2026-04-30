@@ -3,7 +3,6 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from typing import Optional
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased  # type: ignore[import]
@@ -12,7 +11,7 @@ from app.auth import hash_password, verify_password
 from app.models import TutoringSession, TutorProfile, User
 
 
-def utc_week_start_end(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
+def utc_week_start_end(now: datetime | None = None) -> tuple[datetime, datetime]:
     """Monday 00:00 UTC through Sunday 23:59:59.999 UTC for the week containing `now` (UTC)."""
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -27,7 +26,7 @@ def utc_week_start_end(now: Optional[datetime] = None) -> tuple[datetime, dateti
 
 
 def count_tutor_sessions_in_utc_week(
-    db: Session, tutor_user_id: int, now: Optional[datetime] = None
+    db: Session, tutor_user_id: int, now: datetime | None = None
 ) -> int:
     """Non-cancelled sessions whose scheduled_start falls in the current UTC week."""
     start, end = utc_week_start_end(now)
@@ -87,7 +86,7 @@ def get_tutor_sessions_future(db: Session, tutor_user_id: int) -> list[TutoringS
 def get_recent_sessions_for_admin(
     db: Session,
     limit: int = 50,
-    tutor_name: Optional[str] = None,
+    tutor_name: str | None = None,
 ) -> list[dict]:
     tutor = aliased(User)
     student = aliased(User)
@@ -195,7 +194,7 @@ def get_student_sessions_future(db: Session, student_user_id: int) -> list[Tutor
     )
 
 
-def get_current_session_for_user(db: Session, user_id: int) -> Optional[TutoringSession]:
+def get_current_session_for_user(db: Session, user_id: int) -> TutoringSession | None:
     """Return the current active session for a user, if one exists."""
     now = datetime.now(timezone.utc)
     return (
@@ -218,7 +217,7 @@ def create_tutoring_session(
     scheduled_start: datetime,
     scheduled_end: datetime,
     cost_cents: int,
-    notes: Optional[str] = None,
+    notes: str | None = None,
 ) -> TutoringSession:
     row = TutoringSession(
         tutor_id=tutor_id,
@@ -236,7 +235,7 @@ def create_tutoring_session(
     return row
 
 
-def get_session_for_tutor(db: Session, *, session_id: int, tutor_user_id: int) -> Optional[TutoringSession]:
+def get_session_for_tutor(db: Session, *, session_id: int, tutor_user_id: int) -> TutoringSession | None:
     return (
         db.query(TutoringSession)
         .filter(
@@ -249,7 +248,7 @@ def get_session_for_tutor(db: Session, *, session_id: int, tutor_user_id: int) -
 
 def get_session_for_student(
     db: Session, *, session_id: int, student_user_id: int
-) -> Optional[TutoringSession]:
+) -> TutoringSession | None:
     return (
         db.query(TutoringSession)
         .filter(
