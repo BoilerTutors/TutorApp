@@ -23,19 +23,51 @@ def upgrade() -> None:
         ADD COLUMN IF NOT EXISTS max_sessions_per_week INTEGER NULL;
         """
     )
+    # Schema drift: constraint may already exist from a prior partial run or manual SQL.
     op.execute(
         """
-        ALTER TABLE public.tutors
-        ADD CONSTRAINT ck_tutors_max_sessions_per_week_range
-        CHECK (
-            max_sessions_per_week IS NULL
-            OR (max_sessions_per_week >= 1 AND max_sessions_per_week <= 168)
-        )
-        NOT VALID;
+        DO $body$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint c
+                JOIN pg_class rel ON rel.oid = c.conrelid
+                JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+                WHERE c.conname = 'ck_tutors_max_sessions_per_week_range'
+                  AND nsp.nspname = 'public'
+                  AND rel.relname = 'tutors'
+            ) THEN
+                ALTER TABLE public.tutors
+                ADD CONSTRAINT ck_tutors_max_sessions_per_week_range
+                CHECK (
+                    max_sessions_per_week IS NULL
+                    OR (max_sessions_per_week >= 1 AND max_sessions_per_week <= 168)
+                )
+                NOT VALID;
+            END IF;
+        END
+        $body$;
         """
     )
     op.execute(
-        "ALTER TABLE public.tutors VALIDATE CONSTRAINT ck_tutors_max_sessions_per_week_range;"
+        """
+        DO $body$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM pg_constraint c
+                JOIN pg_class rel ON rel.oid = c.conrelid
+                JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+                WHERE c.conname = 'ck_tutors_max_sessions_per_week_range'
+                  AND nsp.nspname = 'public'
+                  AND rel.relname = 'tutors'
+            ) THEN
+                ALTER TABLE public.tutors
+                VALIDATE CONSTRAINT ck_tutors_max_sessions_per_week_range;
+            END IF;
+        END
+        $body$;
+        """
     )
 
 

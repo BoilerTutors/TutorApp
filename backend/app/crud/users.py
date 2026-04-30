@@ -6,6 +6,10 @@ from app.crud.embeddings import refresh_student_embeddings, refresh_tutor_embedd
 from app.models import User, TutorProfile, StudentProfile, TutorClass, StudentClass
 from app.schemas import ProfileUpdate, UserCreate, SecurityPreferencesUpdate
 
+DEFAULT_TUTOR_QUICK_REPLY_1 = "I am available for that time"
+DEFAULT_TUTOR_QUICK_REPLY_2 = "No, I am not available. Do you want to try a different time?"
+DEFAULT_TUTOR_QUICK_REPLY_3 = "Send me the lecture notes"
+
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
@@ -46,6 +50,9 @@ def create_user(db: Session, data: UserCreate) -> User:
             grad_year=data.tutor_profile.grad_year,
             preferred_locations=data.tutor_profile.preferred_locations or None,
             help_provided=data.tutor_profile.help_provided or None,
+            quick_reply1=data.tutor_profile.quick_reply1 or DEFAULT_TUTOR_QUICK_REPLY_1,
+            quick_reply2=data.tutor_profile.quick_reply2 or DEFAULT_TUTOR_QUICK_REPLY_2,
+            quick_reply3=data.tutor_profile.quick_reply3 or DEFAULT_TUTOR_QUICK_REPLY_3,
             session_mode=data.tutor_profile.session_mode or "both",
             max_sessions_per_week=data.tutor_profile.max_sessions_per_week,
         )
@@ -127,6 +134,12 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
         if t.help_provided is not None:
             user.tutor.help_provided = t.help_provided or None
             tutor_embedding_needs_refresh = True
+        if t.quick_reply1 is not None:
+            user.tutor.quick_reply1 = t.quick_reply1
+        if t.quick_reply2 is not None:
+            user.tutor.quick_reply2 = t.quick_reply2
+        if t.quick_reply3 is not None:
+            user.tutor.quick_reply3 = t.quick_reply3
         if t.session_mode is not None:
             user.tutor.session_mode = t.session_mode
         if t.matching_paused is not None:

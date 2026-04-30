@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "../config";
 import { clearToken } from "../auth/storage";
+console.log("[API_BASE_URL]", API_BASE_URL);
 
 type RequestInitWithBody = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -75,6 +76,7 @@ async function request<T>(
   const href = url(path);
   let res: Response;
   try {
+    console.log("[REQ]", rest.method, href);
     res = await fetch(href, {
       ...rest,
       headers: headers(init),
