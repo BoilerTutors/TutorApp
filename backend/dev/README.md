@@ -17,7 +17,7 @@ Stop: `docker compose -f dev/docker-compose.yml down`
 In **backend/.env**, set (and comment out RDS_* if you want to use only local):
 
 ```env
-LOCAL_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/tutorapp
+LOCAL_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/tutorapp
 ```
 
 See **dev/.env.example** for the same line.

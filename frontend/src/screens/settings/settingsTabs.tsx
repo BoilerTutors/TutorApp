@@ -1,6 +1,7 @@
 
 import React from "react";
 import NotificationPreferencesTab from "./NotificationPreferencesTab";
+import PaymentSettingsTab from "./PaymentSettingsTab";
 import SecurityPreferencesTab from "./SecurityPreferencesTab";
 import TutorQuickRepliesTab from "./TutorQuickRepliesTab";
 import { Alert, Platform } from "react-native";
@@ -34,6 +35,11 @@ export const SETTINGS_TABS: SettingsTabConfig[] = [
     id: "security-preferences",
     label: "Security Settings",
     component: () => <SecurityPreferencesTab showAlert={showAlert} />,
+  },
+  {
+    id: "payment-settings",
+    label: "Payment Settings",
+    component: () => <PaymentSettingsTab showAlert={showAlert} />,
   },
 ];
 
