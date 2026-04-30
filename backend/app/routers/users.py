@@ -9,14 +9,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session  # type: ignore[import]
 
-from app.auth import get_current_user
-from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user, update_user_security_preferences
+from app.auth import get_current_admin, get_current_user
+from app.crud.users import (
+    create_user,
+    get_user_by_email,
+    get_user_by_id,
+    update_user_profile,
+    delete_user,
+    update_user_security_preferences,
+    search_users,
+    toggle_user_active_status,
+)
 from app.database import get_db
-from app.models import User
+from app.models import Admin, User
 from app.schemas import (
+    AdminUserSearchPublic,
     UserCreate,
     UserPublic,
-    UserStatusUpdate,
     Message,
     ProfileUpdate,
     DeleteAccountRequest,
@@ -47,6 +56,20 @@ def register_user(data: UserCreate, db: Session = Depends(get_db)) -> UserPublic
 def get_me(current_user: User = Depends(get_current_user)) -> UserPublic:
     """Return the currently authenticated user."""
     return UserPublic.model_validate(current_user)
+
+
+@router.get("/admin/search", response_model=list[AdminUserSearchPublic])
+def admin_search_users(
+    q: str | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+) -> list[AdminUserSearchPublic]:
+    """Admin-only user search by first name, last name, or email."""
+    _ = current_admin
+    safe_limit = max(1, min(limit, 500))
+    users = search_users(db, query=q, limit=safe_limit)
+    return [AdminUserSearchPublic.model_validate(user) for user in users]
 
 
 @router.patch("/me", response_model=UserPublic)
@@ -85,21 +108,11 @@ def post_delete_me(
 @router.patch("/{user_id}/status", response_model=Message)
 def update_user_status(
     user_id: int,
-    data: UserStatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: Admin = Depends(get_current_admin),
 ) -> Message:
-    """
-    Change the status of a user account.
-
-    For now, users may only change their own status.
-    """
-    if current_user.email != "admin@example.com":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to change this user's status",
-        )
-
+    """Admin-only toggle between active (0) and disabled (1) user status."""
+    _ = current_admin
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(
@@ -107,9 +120,7 @@ def update_user_status(
             detail="User not found",
         )
 
-    user.status = data.status
-    db.commit()
-
+    toggle_user_active_status(db, user)
     return Message(message="User status updated")
 
 

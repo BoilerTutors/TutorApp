@@ -1,6 +1,7 @@
 """POST /auth/login  – email + password, return JWT (or trigger MFA).
 POST /auth/verify-mfa – verify a 6-digit OTP code and return JWT."""
 
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -12,9 +13,10 @@ from app.config import settings
 from app.crud.users import get_user_by_email
 from app.database import get_db
 from app.schemas import LoginRequest, LoginResponse, MfaVerifyRequest, Token
-from app.services.email import send_otp_email
+from app.services.email import send_mfa_attempts_security_email, send_otp_email
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _generate_otp() -> str:
@@ -52,7 +54,11 @@ def login(
 
 
 @router.post("/verify-mfa", response_model=LoginResponse)
-def verify_mfa(data: MfaVerifyRequest, db: Session = Depends(get_db)):
+def verify_mfa(
+    data: MfaVerifyRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     user = get_user_by_email(db, data.email)
     if not user or not user.mfa_enabled:
         raise HTTPException(
@@ -86,7 +92,21 @@ def verify_mfa(data: MfaVerifyRequest, db: Session = Depends(get_db)):
 
     if not secrets.compare_digest(user.mfa_code, data.code):
         user.mfa_code_attempts += 1
+        if user.mfa_code_attempts >= settings.mfa_max_attempts:
+            user.mfa_code = None
+            user.mfa_expires_at = None
         db.commit()
+        if user.mfa_code_attempts >= settings.mfa_max_attempts:
+            try:
+                send_mfa_attempts_security_email(user.email)
+            except Exception:
+                logger.exception(
+                    "Failed to send MFA security email for user %s", user.email
+                )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed attempts. Please wait 5 minutes before trying again.",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect MFA code",

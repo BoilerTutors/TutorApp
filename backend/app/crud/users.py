@@ -1,4 +1,5 @@
 from typing import Optional
+from sqlalchemy import or_
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import hash_password
@@ -14,6 +15,25 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 
 def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
     return db.get(User, user_id)
+
+
+def search_users(
+    db: Session,
+    query: str | None = None,
+    limit: int = 200,
+) -> list[User]:
+    stmt = db.query(User)
+    if query and query.strip():
+        q = f"%{query.strip()}%"
+        stmt = stmt.filter(
+            or_(
+                User.first_name.ilike(q),
+                User.last_name.ilike(q),
+                User.email.ilike(q),
+                (User.first_name + " " + User.last_name).ilike(q),
+            )
+        )
+    return stmt.order_by(User.id.desc()).limit(limit).all()
 
 
 def create_user(db: Session, data: UserCreate) -> User:
@@ -188,6 +208,14 @@ def delete_user(db: Session, user: User) -> None:
 def update_user_security_preferences(db: Session, user: User, data: SecurityPreferencesUpdate) -> User:
     """Update the current user's security preferences."""
     user.mfa_enabled = data.mfa_enabled
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def toggle_user_active_status(db: Session, user: User) -> User:
+    """Toggle a user's status between active (0) and disabled (1)."""
+    user.status = 1 if user.status == 0 else 0
     db.commit()
     db.refresh(user)
     return user

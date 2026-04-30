@@ -109,6 +109,18 @@ class UserLookupPublic(BaseModel):
     last_name: str
 
 
+class AdminUserSearchPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
+    is_tutor: bool
+    is_student: bool
+    status: int
+
+
 class UserProfileDetailsPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

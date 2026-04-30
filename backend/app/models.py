@@ -690,4 +690,41 @@ class TutorReport(Base):
     tutor: Mapped["User"] = relationship(foreign_keys=[tutor_id])
     session: Mapped[Optional["TutoringSession"]] = relationship(foreign_keys=[session_id])
 
-    
+
+# ============================================
+# Transcript Verification (MVP)
+# ============================================
+
+# A TranscriptSubmission is the parent record for one uploaded transcript file
+# (typically a PDF stored in S3). The DB stores only the metadata + S3 key in
+# `storage_path`; the actual file bytes live in object storage.
+class TranscriptSubmission(Base):
+    __tablename__ = "transcript_submissions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('uploaded', 'processing', 'parsed', 'verified', 'needs_review', 'failed')",
+            name="ck_transcript_submission_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="uploaded")
+
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+

@@ -6,6 +6,7 @@ import LoginScreen from "./src/screens/LoginScreen";
 import AdminLoginScreen from "./src/screens/AdminLoginScreen";
 import AdminDashboard from "./src/screens/AdminDashboard";
 import AdminSessionsScreen from "./src/screens/AdminSessionsScreen";
+import AdminUsersScreen from "./src/screens/AdminUsersScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
@@ -39,6 +40,7 @@ type RootStackParamList = {
   "Admin Login": undefined;
   "Admin Dashboard": undefined;
   "Admin Sessions": undefined;
+  "Admin Users": undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
@@ -254,6 +256,11 @@ export default function App() {
             name="Admin Sessions"
             component={AdminSessionsScreen}
             options={{ header: () => <GeneralHeader title="Recent Purchases" /> }}
+          />
+          <Stack.Screen
+            name="Admin Users"
+            component={AdminUsersScreen}
+            options={{ header: () => <GeneralHeader title="Search Users" /> }}
           />
           <Stack.Screen
             name="Student Dashboard"

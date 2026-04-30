@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import * as DocumentPicker from "expo-document-picker";
 import { api, setAuthToken } from "../api/client";
 import { loadToken } from "../auth/storage";
 import { logout } from "../auth/logout";
@@ -133,12 +134,16 @@ export default function ProfileScreen() {
   // Tutoring preferences editing state
   const [editingPrefs, setEditingPrefs] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
-  const [editClasses, setEditClasses] = useState<SelectedClassEdit[]>([]);
   const [editLocations, setEditLocations] = useState<string[]>([]);
   const [editSessionMode, setEditSessionMode] = useState<"online" | "in_person" | "both">("both");
   const [editHelpProvided, setEditHelpProvided] = useState<string[]>([]);
-  const [showClassPicker, setShowClassPicker] = useState(false);
-  const [classSearchQuery, setClassSearchQuery] = useState("");
+
+  // Authorized courses editing state (separate from tutoring preferences)
+  const [editingCourses, setEditingCourses] = useState(false);
+  const [savingCourses, setSavingCourses] = useState(false);
+  const [editCoursesList, setEditCoursesList] = useState<SelectedClassEdit[]>([]);
+  const [showCoursePicker, setShowCoursePicker] = useState(false);
+  const [courseSearchQuery, setCourseSearchQuery] = useState("");
 
   // Student preferences (session mode + locations; separate from tutor prefs state)
   const [editingStudentPrefs, setEditingStudentPrefs] = useState(false);
@@ -198,6 +203,7 @@ export default function ProfileScreen() {
         setLoading(true);
         setEditing(false);
         setEditingPrefs(false);
+        setEditingCourses(false);
         setDeleteModalVisible(false);
         loadMe();
       };
@@ -207,7 +213,19 @@ export default function ProfileScreen() {
 
   const startEditingPrefs = useCallback(() => {
     const t = me?.tutor;
-    setEditClasses(
+    setEditLocations(t?.preferred_locations ?? []);
+    setEditSessionMode((t?.session_mode as "online" | "in_person" | "both") ?? "both");
+    setEditHelpProvided(t?.help_provided ?? []);
+    setEditingPrefs(true);
+  }, [me?.tutor]);
+
+  const cancelEditingPrefs = useCallback(() => {
+    setEditingPrefs(false);
+  }, []);
+
+  const startEditingCourses = useCallback(() => {
+    const t = me?.tutor;
+    setEditCoursesList(
       (t?.classes_tutoring ?? []).map((c) => ({
         id: c.id,
         class_id: c.class_id,
@@ -217,16 +235,13 @@ export default function ProfileScreen() {
         hasTAed: c.has_taed,
       }))
     );
-    setEditLocations(t?.preferred_locations ?? []);
-    setEditSessionMode((t?.session_mode as "online" | "in_person" | "both") ?? "both");
-    setEditHelpProvided(t?.help_provided ?? []);
-    setEditingPrefs(true);
+    setEditingCourses(true);
   }, [me?.tutor]);
 
-  const cancelEditingPrefs = useCallback(() => {
-    setEditingPrefs(false);
-    setShowClassPicker(false);
-    setClassSearchQuery("");
+  const cancelEditingCourses = useCallback(() => {
+    setEditingCourses(false);
+    setShowCoursePicker(false);
+    setCourseSearchQuery("");
   }, []);
 
   const startEditingStudentPrefs = useCallback(() => {
@@ -246,8 +261,8 @@ export default function ProfileScreen() {
     );
   };
 
-  const addClass = (c: { id: number; courseCode: string; title?: string }) => {
-    setEditClasses((prev) => {
+  const addCourse = (c: { id: number; courseCode: string; title?: string }) => {
+    setEditCoursesList((prev) => {
       if (prev.some((x) => x.class_id === c.id)) return prev;
       return [
         ...prev,
@@ -261,20 +276,20 @@ export default function ProfileScreen() {
         },
       ];
     });
-    setShowClassPicker(false);
-    setClassSearchQuery("");
+    setShowCoursePicker(false);
+    setCourseSearchQuery("");
   };
 
-  const removeClass = (classId: number) => {
-    setEditClasses((prev) => prev.filter((x) => x.class_id !== classId));
+  const removeCourse = (classId: number) => {
+    setEditCoursesList((prev) => prev.filter((x) => x.class_id !== classId));
   };
 
-  const updateClassField = (
+  const updateCourseField = (
     classId: number,
     field: "semesterTaken" | "gradeReceived" | "hasTAed",
     value: string | boolean
   ) => {
-    setEditClasses((prev) =>
+    setEditCoursesList((prev) =>
       prev.map((x) => (x.class_id === classId ? { ...x, [field]: value } : x))
     );
   };
@@ -296,53 +311,21 @@ export default function ProfileScreen() {
       Alert.alert("Cannot save", "Only tutor accounts can save tutoring preferences.");
       return;
     }
-    const valid = editClasses.every((c) => c.gradeReceived && c.semesterTaken);
-    if (!valid) {
-      Alert.alert("Required", "Please complete grade and semester for each class.");
-      return;
-    }
     if ((editSessionMode === "in_person" || editSessionMode === "both") && editLocations.length === 0) {
       Alert.alert("Required", "Please select at least one tutoring location.");
       return;
     }
     setSavingPrefs(true);
     try {
-      const classes = editClasses
-        .map((c) => {
-          const parsed = parseSemester(c.semesterTaken);
-          if (!parsed || !c.gradeReceived) return null;
-          return {
-            class_id: c.class_id,
-            semester: parsed.semester,
-            year_taken: parsed.year_taken,
-            grade_received: c.gradeReceived,
-            has_taed: c.hasTAed,
-          };
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null);
-
-      const body: {
-        first_name?: string;
-        last_name?: string;
-        tutor_profile?: {
-          preferred_locations?: string[];
-          help_provided?: string[];
-          session_mode?: string;
-          classes?: typeof classes;
-        };
-      } = {};
-      body.tutor_profile = {
-        preferred_locations: editLocations,
-        help_provided: editHelpProvided.length > 0 ? editHelpProvided : undefined,
-        // Always send session_mode; "both" must not be omitted or the backend skips the field
-        // (`if t.session_mode is not None`) and the previous value stays in the database.
-        session_mode: editSessionMode,
-        classes,
-      };
-      await api.patch<MeResponse>("/users/me", body);
+      await api.patch<MeResponse>("/users/me", {
+        tutor_profile: {
+          preferred_locations: editLocations,
+          help_provided: editHelpProvided.length > 0 ? editHelpProvided : undefined,
+          session_mode: editSessionMode,
+        },
+      });
       await loadMe({ rethrow: true });
       setEditingPrefs(false);
-      setShowClassPicker(false);
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to save preferences");
     } finally {
@@ -379,12 +362,160 @@ export default function ProfileScreen() {
     }
   };
 
-  const filteredAvailableClasses = availableClasses.filter(
+  const filteredAvailableCourses = availableClasses.filter(
     (c) =>
-      !editClasses.some((x) => x.class_id === c.id) &&
-      (c.courseCode.toLowerCase().includes(classSearchQuery.toLowerCase()) ||
-        (c.title ?? "").toLowerCase().includes(classSearchQuery.toLowerCase()))
+      !editCoursesList.some((x) => x.class_id === c.id) &&
+      (c.courseCode.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+        (c.title ?? "").toLowerCase().includes(courseSearchQuery.toLowerCase()))
   );
+
+  const handleSaveCourses = async () => {
+    if (!me?.is_tutor) {
+      Alert.alert("Cannot save", "Only tutor accounts can save authorized courses.");
+      return;
+    }
+    const valid = editCoursesList.every((c) => c.gradeReceived && c.semesterTaken);
+    if (!valid) {
+      Alert.alert("Required", "Please complete grade and semester for each course.");
+      return;
+    }
+    setSavingCourses(true);
+    try {
+      const classes = editCoursesList
+        .map((c) => {
+          const parsed = parseSemester(c.semesterTaken);
+          if (!parsed || !c.gradeReceived) return null;
+          return {
+            class_id: c.class_id,
+            semester: parsed.semester,
+            year_taken: parsed.year_taken,
+            grade_received: c.gradeReceived,
+            has_taed: c.hasTAed,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      await api.patch<MeResponse>("/users/me", {
+        tutor_profile: { classes },
+      });
+      await loadMe({ rethrow: true });
+      setEditingCourses(false);
+      setShowCoursePicker(false);
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save courses");
+    } finally {
+      setSavingCourses(false);
+    }
+  };
+
+  const handleSaveCoursesWithNewTranscript = async () => {
+    if (!me?.is_tutor) {
+      Alert.alert("Cannot save", "Only tutor accounts can save authorized courses.");
+      return;
+    }
+    const valid = editCoursesList.every((c) => c.gradeReceived && c.semesterTaken);
+    if (!valid) {
+      Alert.alert("Required", "Please complete grade and semester for each course.");
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/pdf",
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      if (!asset?.uri) {
+        Alert.alert("Error", "Could not access the selected file.");
+        return;
+      }
+
+      setSavingCourses(true);
+
+      // Step 1: Get presigned upload URL from backend
+      const presignedData = await api.post<{
+        upload_url: string;
+        s3_key: string;
+        expires_in: number;
+      }>("/transcripts/presigned-upload-url");
+
+      // Step 2: Upload file directly to S3 using presigned URL
+      let fileBlob: Blob;
+      if (Platform.OS === "web") {
+        const webResponse = await fetch(asset.uri);
+        fileBlob = await webResponse.blob();
+      } else {
+        const response = await fetch(asset.uri);
+        fileBlob = await response.blob();
+      }
+
+      const s3UploadRes = await fetch(presignedData.upload_url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/pdf",
+        },
+        body: fileBlob,
+      });
+
+      if (!s3UploadRes.ok) {
+        throw new Error("Failed to upload transcript to S3");
+      }
+
+      // Step 3: Confirm upload with backend to create DB record
+      const submission = await api.post<{ id: number }>("/transcripts/confirm-upload", {
+        s3_key: presignedData.s3_key,
+        file_name: asset.name || "transcript.pdf",
+        mime_type: asset.mimeType || "application/pdf",
+      });
+
+      // Step 4: Build claimed-classes payload from current edits
+      const classes = editCoursesList
+        .map((c) => {
+          const parsed = parseSemester(c.semesterTaken);
+          if (!parsed || !c.gradeReceived) return null;
+          return {
+            class_id: c.class_id,
+            semester: parsed.semester,
+            year_taken: parsed.year_taken,
+            grade_received: c.gradeReceived,
+            has_taed: c.hasTAed,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      // Step 5: Verify the transcript against the claimed classes via Gemini
+      const verifyResult = await api.post<{ message: string }>(
+        `/transcripts/${submission.id}/verify`,
+        classes
+      );
+
+      if (!verifyResult.message.startsWith("success:")) {
+        const reason = verifyResult.message.replace(/^failure:\s*/, "");
+        Alert.alert("Class submission failed", reason || "Transcript could not be verified.");
+        return;
+      }
+
+      // Step 6: Verification passed — persist the TutorClasses
+      await api.patch<MeResponse>("/users/me", {
+        tutor_profile: { classes },
+      });
+
+      await loadMe({ rethrow: true });
+      setEditingCourses(false);
+      setShowCoursePicker(false);
+      Alert.alert("Success", "Courses saved and transcript verified.");
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save courses with transcript");
+    } finally {
+      setSavingCourses(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!me) return;
@@ -598,19 +729,18 @@ export default function ProfileScreen() {
 
       {me.is_tutor && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tutoring Preferences</Text>
-          {editingPrefs ? (
+          <Text style={styles.sectionTitle}>Authorized Courses</Text>
+          {editingCourses ? (
             <>
-              {/* Classes */}
-              <Text style={styles.label}>Classes you tutor</Text>
+              <Text style={styles.label}>Courses you can tutor</Text>
               <TouchableOpacity
                 style={styles.addClassBtn}
-                onPress={() => setShowClassPicker(true)}
+                onPress={() => setShowCoursePicker(true)}
               >
                 <Ionicons name="add-circle" size={20} color="#2E57A2" />
-                <Text style={styles.addClassText}>Add a class</Text>
+                <Text style={styles.addClassText}>Add a course</Text>
               </TouchableOpacity>
-              {showClassPicker && (
+              {showCoursePicker && (
                 <KeyboardAvoidingView
                   behavior={Platform.OS === "ios" ? "padding" : undefined}
                   style={styles.classPickerContainer}
@@ -619,13 +749,13 @@ export default function ProfileScreen() {
                     <Ionicons name="search" size={18} color="#8C93A4" />
                     <TextInput
                       style={styles.searchInput}
-                      placeholder="Search classes (e.g., CS 180)"
+                      placeholder="Search courses (e.g., CS 180)"
                       placeholderTextColor="#B0B6C3"
-                      value={classSearchQuery}
-                      onChangeText={setClassSearchQuery}
+                      value={courseSearchQuery}
+                      onChangeText={setCourseSearchQuery}
                       autoFocus
                     />
-                    <TouchableOpacity onPress={() => setShowClassPicker(false)}>
+                    <TouchableOpacity onPress={() => setShowCoursePicker(false)}>
                       <Ionicons name="close" size={20} color="#8C93A4" />
                     </TouchableOpacity>
                   </View>
@@ -635,16 +765,16 @@ export default function ProfileScreen() {
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator
                   >
-                    {filteredAvailableClasses.length === 0 ? (
+                    {filteredAvailableCourses.length === 0 ? (
                       <Text style={styles.classPickerEmpty}>
-                        {classSearchQuery ? "No matching classes" : "No classes available"}
+                        {courseSearchQuery ? "No matching courses" : "No courses available"}
                       </Text>
                     ) : (
-                      filteredAvailableClasses.map((c) => (
+                      filteredAvailableCourses.map((c) => (
                         <TouchableOpacity
                           key={c.id}
                           style={styles.classOption}
-                          onPress={() => addClass(c)}
+                          onPress={() => addCourse(c)}
                           activeOpacity={0.7}
                         >
                           <Text style={styles.classOptionCode}>{c.courseCode}</Text>
@@ -655,22 +785,22 @@ export default function ProfileScreen() {
                   </ScrollView>
                 </KeyboardAvoidingView>
               )}
-              {editClasses.map((c) => (
+              {editCoursesList.map((c) => (
                 <View key={c.class_id} style={styles.classCard}>
                   <View style={styles.classCardHeader}>
                     <Text style={styles.classCardCode}>{c.courseCode}</Text>
-                    <Pressable onPress={() => removeClass(c.class_id)}>
+                    <Pressable onPress={() => removeCourse(c.class_id)}>
                       <Text style={styles.removeText}>Remove</Text>
                     </Pressable>
                   </View>
-                  <Text style={styles.fieldLabel}>Grade</Text>
+                  <Text style={styles.fieldLabel}>Grade received</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.chipRow}>
                       {GRADE_OPTIONS.map((g) => (
                         <Pressable
                           key={g}
                           style={[styles.chip, c.gradeReceived === g && styles.chipActive]}
-                          onPress={() => updateClassField(c.class_id, "gradeReceived", g)}
+                          onPress={() => updateCourseField(c.class_id, "gradeReceived", g)}
                         >
                           <Text style={[styles.chipText, c.gradeReceived === g && styles.chipTextActive]}>{g}</Text>
                         </Pressable>
@@ -684,7 +814,7 @@ export default function ProfileScreen() {
                         <Pressable
                           key={s}
                           style={[styles.chip, c.semesterTaken === s && styles.chipActive]}
-                          onPress={() => updateClassField(c.class_id, "semesterTaken", s)}
+                          onPress={() => updateCourseField(c.class_id, "semesterTaken", s)}
                         >
                           <Text style={[styles.chipText, c.semesterTaken === s && styles.chipTextActive]}>{s}</Text>
                         </Pressable>
@@ -693,16 +823,83 @@ export default function ProfileScreen() {
                   </ScrollView>
                   <Pressable
                     style={styles.checkboxRow}
-                    onPress={() => updateClassField(c.class_id, "hasTAed", !c.hasTAed)}
+                    onPress={() => updateCourseField(c.class_id, "hasTAed", !c.hasTAed)}
                   >
                     <View style={[styles.checkbox, c.hasTAed && styles.checkboxActive]}>
                       {c.hasTAed && <Text style={styles.checkmark}>✓</Text>}
                     </View>
-                    <Text style={styles.checkboxLabel}>I have TA'd for this class</Text>
+                    <Text style={styles.checkboxLabel}>I have TA'd for this course</Text>
                   </Pressable>
                 </View>
               ))}
+              <View style={styles.coursesButtonContainer}>
+                <Pressable
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={cancelEditingCourses}
+                  disabled={savingCourses}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </Pressable>
+                <View style={styles.saveButtonsRow}>
+                  <Pressable
+                    style={[styles.button, styles.saveCurrentButton]}
+                    onPress={handleSaveCourses}
+                    disabled={savingCourses}
+                  >
+                    {savingCourses ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.buttonText}>Save with Current Transcript</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.button, styles.saveNewButton]}
+                    onPress={handleSaveCoursesWithNewTranscript}
+                    disabled={savingCourses}
+                  >
+                    {savingCourses ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.buttonText}>Save with New Transcript</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              {(me.tutor?.classes_tutoring?.length ?? 0) > 0 ? (
+                me.tutor!.classes_tutoring!.map((c) => (
+                  <View key={c.id} style={styles.courseItem}>
+                    <View style={styles.courseItemHeader}>
+                      <Text style={styles.courseItemCode}>{c.course_code}</Text>
+                      {c.has_taed && (
+                        <View style={styles.taBadge}>
+                          <Text style={styles.taBadgeText}>TA</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.courseItemDetails}>
+                      Grade: {c.grade_received} • {formatSemester(c.semester, c.year_taken)}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.placeholder}>No authorized courses yet. Add courses you can tutor.</Text>
+              )}
+              <Pressable style={styles.button} onPress={startEditingCourses}>
+                <Text style={styles.buttonText}>Edit courses</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
 
+      {me.is_tutor && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Tutoring Preferences</Text>
+          {editingPrefs ? (
+            <>
               {/* Session mode */}
               <Text style={styles.label}>Session mode</Text>
               <View style={styles.chipRow}>
@@ -774,19 +971,6 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
-              {(me.tutor?.classes_tutoring?.length ?? 0) > 0 && (
-                <>
-                  <Text style={styles.label}>Classes</Text>
-                  {me.tutor!.classes_tutoring!.map((c) => (
-                    <View key={c.id} style={styles.prefItem}>
-                      <Text style={styles.prefValue}>
-                        {c.course_code} — Grade: {c.grade_received}, {formatSemester(c.semester, c.year_taken)}
-                        {c.has_taed ? " • TA'd" : ""}
-                      </Text>
-                    </View>
-                  ))}
-                </>
-              )}
               <Text style={styles.label}>Session mode</Text>
               <Text style={styles.value}>
                 {me.tutor?.session_mode === "both" || !me.tutor?.session_mode
@@ -806,12 +990,6 @@ export default function ProfileScreen() {
                   <Text style={styles.label}>Help provided</Text>
                   <Text style={styles.value}>{me.tutor!.help_provided!.join(", ")}</Text>
                 </>
-              )}
-              {((me.tutor?.classes_tutoring?.length ?? 0) === 0 &&
-                (me.tutor?.preferred_locations?.length ?? 0) === 0 &&
-                (me.tutor?.help_provided?.length ?? 0) === 0 &&
-                !me.tutor?.session_mode) && (
-                <Text style={styles.placeholder}>No preferences set yet.</Text>
               )}
               <Pressable style={styles.button} onPress={startEditingPrefs}>
                 <Text style={styles.buttonText}>Edit preferences</Text>
@@ -1173,4 +1351,54 @@ const styles = StyleSheet.create({
   checkboxLabel: { fontSize: 14, color: "#374151" },
   prefItem: { marginBottom: 8 },
   prefValue: { fontSize: 15, color: "#111827" },
+  courseItem: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  courseItemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  courseItemCode: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2E57A2",
+  },
+  courseItemDetails: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  taBadge: {
+    marginLeft: 8,
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  taBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1E40AF",
+  },
+  coursesButtonContainer: {
+    marginTop: 12,
+    gap: 10,
+  },
+  saveButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  saveCurrentButton: {
+    flex: 1,
+    backgroundColor: "#2E57A2",
+  },
+  saveNewButton: {
+    flex: 1,
+    backgroundColor: "#059669",
+  },
 });

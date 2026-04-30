@@ -84,10 +84,6 @@ export default function SessionCard({
               <Text style={styles.detailText}>{session.duration}</Text>
             </View>
           </View>
-
-          <Pressable style={styles.detailsBtn}>
-            <Text style={styles.detailsBtnText}>View Details</Text>
-          </Pressable>
           {showCancelAction && session.status !== "cancelled" ? (
             <Pressable
               style={styles.cancelBtn}
@@ -174,19 +170,6 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 12,
     color: "#6B7280",
-  },
-  detailsBtn: {
-    borderWidth: 1.5,
-    borderColor: NAVY,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    alignSelf: "center",
-  },
-  detailsBtnText: {
-    color: NAVY,
-    fontWeight: "600",
-    fontSize: 13,
   },
   cancelBtn: {
     borderWidth: 1.5,

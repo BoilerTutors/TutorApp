@@ -9,6 +9,7 @@ import { api } from "../api/client";
 type RootStackParamList = {
   Profile: { role: "ADMIN" };
   "Admin Sessions": undefined;
+  "Admin Users": undefined;
 };
 
 type QuickAction = {
@@ -57,7 +58,7 @@ export default function AdminDashboard() {
     {
       label: "Search Users",
       icon: "search",
-      onPress: () => showPlaceholder("Search Users"),
+      onPress: () => navigation.navigate("Admin Users"),
     },
     {
       label: "See Recent Purchases",

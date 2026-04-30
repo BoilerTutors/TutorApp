@@ -26,3 +26,27 @@ def send_otp_email(to_email: str, otp_code: str) -> None:
         server.starttls()
         server.login(settings.smtp_user, settings.smtp_password.get_secret_value())
         server.send_message(msg)
+
+
+def send_mfa_attempts_security_email(to_email: str) -> None:
+    """Send a security notice after repeated failed MFA attempts."""
+    if not settings.smtp_host or not settings.smtp_user:
+        raise RuntimeError(
+            "SMTP is not configured. Set SMTP_HOST, SMTP_USER, "
+            "SMTP_PASSWORD, and SMTP_FROM_EMAIL in .env."
+        )
+
+    msg = EmailMessage()
+    msg["Subject"] = "BoilerTutors - Security alert"
+    msg["From"] = settings.smtp_from_email or settings.smtp_user
+    msg["To"] = to_email
+    msg.set_content(
+        "We detected 3 failed MFA verification attempts for your BoilerTutors account.\n\n"
+        "If this was you, you can log in again to request a new verification code.\n"
+        "If this was not you, we recommend changing your password and reviewing your account activity."
+    )
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+        server.starttls()
+        server.login(settings.smtp_user, settings.smtp_password.get_secret_value())
+        server.send_message(msg)
