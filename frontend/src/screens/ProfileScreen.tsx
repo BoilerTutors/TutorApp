@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   Switch,
@@ -522,6 +523,27 @@ export default function ProfileScreen() {
     }
   };
 
+  const onShareTutorProfile = async () => {
+    if (!me?.is_tutor) {
+      Alert.alert("Unavailable", "Only tutors can share a tutor profile link.");
+      return;
+    }
+    try {
+      const payload = await api.get<{ share_url: string }>(`/users/public/tutors/${me.id}/share-link`);
+      const shareUrl = payload.share_url;
+      if (!shareUrl) {
+        Alert.alert("Error", "Could not generate share link.");
+        return;
+      }
+      await Share.share({
+        message: shareUrl,
+        url: shareUrl,
+      });
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to generate share link.");
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (deleteConfirmInput.trim().toUpperCase() !== DELETE_CONFIRM_TEXT) {
       Alert.alert("Invalid confirmation", `Please type ${DELETE_CONFIRM_TEXT} to confirm.`);
@@ -689,6 +711,11 @@ export default function ProfileScreen() {
             <Pressable style={styles.button} onPress={() => setEditing(true)}>
               <Text style={styles.buttonText}>Edit profile</Text>
             </Pressable>
+            {me.is_tutor ? (
+              <Pressable style={[styles.button, styles.shareBtn]} onPress={() => void onShareTutorProfile()}>
+                <Text style={styles.buttonText}>Share public tutor profile</Text>
+              </Pressable>
+            ) : null}
           </>
         )}
       </View>
@@ -1266,6 +1293,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: { backgroundColor: "#6B7280" },
   dangerButton: { backgroundColor: "#B91C1C" },
+  shareBtn: { marginTop: 10, backgroundColor: "#1E40AF" },
   buttonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 16 },
   modalOverlay: {
     flex: 1,

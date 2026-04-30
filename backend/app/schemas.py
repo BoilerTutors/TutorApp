@@ -126,6 +126,20 @@ class UserProfileDetailsPublic(BaseModel):
     student: Optional["StudentProfilePublic"] = None
     student_average_help_level: Optional[float] = None
 
+
+class PublicTutorProfileResponse(BaseModel):
+    """Publicly shareable tutor profile payload."""
+
+    id: int
+    first_name: str
+    last_name: str
+    tutor: "TutorProfilePublic"
+
+
+class PublicTutorShareLinkResponse(BaseModel):
+    tutor_user_id: int
+    share_url: str
+
 # ===========================================================
 # ---- Tutor profile schemas ----
 # ===========================================================

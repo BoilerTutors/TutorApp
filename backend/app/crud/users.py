@@ -28,6 +28,15 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
     return db.get(User, user_id)
 
 
+def get_public_tutor_user_by_id(db: Session, user_id: int) -> Optional[User]:
+    user = db.get(User, user_id)
+    if user is None:
+        return None
+    if not user.is_tutor or user.tutor is None:
+        return None
+    return user
+
+
 def mark_user_active(db: Session, user: User) -> User:
     user.last_active_at = datetime.now(timezone.utc)
     user.active_now = True
