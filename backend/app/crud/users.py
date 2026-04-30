@@ -1,11 +1,18 @@
 from datetime import datetime, timezone
 from typing import Optional
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session  # type: ignore[import]
 
-from app.auth import hash_password
 from app.crud.embeddings import refresh_student_embeddings, refresh_tutor_embeddings
 from app.models import User, TutorProfile, StudentProfile, TutorClass, StudentClass
 from app.schemas import ProfileUpdate, UserCreate, SecurityPreferencesUpdate
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
 
 DEFAULT_TUTOR_QUICK_REPLY_1 = "I am available for that time"
 DEFAULT_TUTOR_QUICK_REPLY_2 = "No, I am not available. Do you want to try a different time?"
