@@ -200,6 +200,24 @@ def get_public_tutor_share_link(
         share_url=f"{base}/tutor/{user.id}",
     )
 
+
+@router.get("/me/public-tutor-share-link", response_model=PublicTutorShareLinkResponse)
+def get_my_public_tutor_share_link(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> PublicTutorShareLinkResponse:
+    """Authenticated helper so tutors can always generate their own share URL."""
+    if not current_user.is_tutor:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only tutors can generate tutor share links",
+        )
+    base = str(request.base_url).rstrip("/")
+    return PublicTutorShareLinkResponse(
+        tutor_user_id=current_user.id,
+        share_url=f"{base}/tutor/{current_user.id}",
+    )
+
 @router.get("/{user_id}", response_model=UserLookupPublic)
 def get_user_public_lookup(
     user_id: int,

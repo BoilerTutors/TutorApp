@@ -529,7 +529,7 @@ export default function ProfileScreen() {
       return;
     }
     try {
-      const payload = await api.get<{ share_url: string }>(`/users/public/tutors/${me.id}/share-link`);
+      const payload = await api.get<{ share_url: string }>(`/users/me/public-tutor-share-link`);
       const shareUrl = payload.share_url;
       if (!shareUrl) {
         Alert.alert("Error", "Could not generate share link.");
