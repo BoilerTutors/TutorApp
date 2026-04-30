@@ -197,7 +197,7 @@ def get_public_tutor_share_link(
     base = str(request.base_url).rstrip("/")
     return PublicTutorShareLinkResponse(
         tutor_user_id=user.id,
-        share_url=f"{base}/tutor/{user.id}",
+        share_url=f"{base}/users/public/tutors/{user.id}",
     )
 
 
@@ -215,7 +215,7 @@ def get_my_public_tutor_share_link(
     base = str(request.base_url).rstrip("/")
     return PublicTutorShareLinkResponse(
         tutor_user_id=current_user.id,
-        share_url=f"{base}/tutor/{current_user.id}",
+        share_url=f"{base}/users/public/tutors/{current_user.id}",
     )
 
 @router.get("/{user_id}", response_model=UserLookupPublic)
