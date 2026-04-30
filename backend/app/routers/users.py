@@ -10,7 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import get_current_user
-from app.crud.users import create_user, get_user_by_email, get_user_by_id, update_user_profile, delete_user, update_user_security_preferences
+from app.crud.users import (
+    create_user,
+    delete_user,
+    get_user_by_email,
+    get_user_by_id,
+    mark_user_active,
+    mark_user_inactive,
+    update_user_profile,
+    update_user_security_preferences,
+)
 from app.database import get_db
 from app.models import User
 from app.schemas import (
@@ -57,6 +66,26 @@ def update_me(
 ) -> UserPublic:
     """Update the current user's profile (name and optional tutor/student fields)."""
     updated = update_user_profile(db, current_user, data)
+    return UserPublic.model_validate(updated)
+
+
+@router.post("/me/activity/heartbeat", response_model=UserPublic)
+def heartbeat_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserPublic:
+    """Mark current user as active right now and refresh last_active_at."""
+    updated = mark_user_active(db, current_user)
+    return UserPublic.model_validate(updated)
+
+
+@router.post("/me/activity/offline", response_model=UserPublic)
+def mark_me_offline(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserPublic:
+    """Mark current user as offline. last_active_at remains last heartbeat time."""
+    updated = mark_user_inactive(db, current_user)
     return UserPublic.model_validate(updated)
 
 

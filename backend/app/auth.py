@@ -8,6 +8,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.crud.users import mark_user_active, mark_user_inactive_by_id
 from app.database import get_db
 from app.models import Admin, User
 
@@ -33,13 +34,33 @@ def create_access_token(sub: str, role: str = "user") -> str:
     )
 
 
-def decode_token(token: str) -> dict:
+def _decode_without_exp_validation(token: str) -> dict:
+    return jwt.decode(
+        token,
+        settings.secret_key.get_secret_value(),
+        algorithms=[settings.algorithm],
+        options={"verify_exp": False},
+    )
+
+
+def decode_token(token: str, db: Session | None = None) -> dict:
     try:
         payload = jwt.decode(
             token,
             settings.secret_key.get_secret_value(),
             algorithms=[settings.algorithm],
         )
+    except jwt.ExpiredSignatureError:
+        if db is not None:
+            try:
+                stale_payload = _decode_without_exp_validation(token)
+                stale_sub = stale_payload.get("sub")
+                if stale_sub is not None:
+                    mark_user_inactive_by_id(db, int(stale_sub))
+            except Exception:
+                # Best effort only; keep auth error behavior unchanged.
+                pass
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     sub = payload.get("sub")
@@ -49,7 +70,7 @@ def decode_token(token: str) -> dict:
 
 
 def get_user_from_token(token: str, db: Session) -> User:
-    payload = decode_token(token)
+    payload = decode_token(token, db)
     role = payload.get("role", "user")
     if role != "user":
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -61,6 +82,8 @@ def get_user_from_token(token: str, db: Session) -> User:
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Every successful authenticated access marks this user as active.
+    mark_user_active(db, user)
     return user
 
 

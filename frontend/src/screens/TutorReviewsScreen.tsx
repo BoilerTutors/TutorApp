@@ -331,35 +331,44 @@ export default function TutorReviewsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {studentPickTargets.length > 0 ? (
-            <>
-              <Text style={styles.sectionTitle}>Review a student</Text>
-              <Text style={styles.sectionHint}>
-                After a completed session, you can leave feedback. Your name is not shown to the student.
+          <Text style={styles.sectionTitle}>Review a student</Text>
+          <Text style={styles.sectionHint}>
+            Leave private feedback after a completed session. Your name is never shown to the student.
+          </Text>
+          {studentPickTargets.length === 0 ? (
+            <View style={styles.leaveStudentEmpty}>
+              <Ionicons name="people-outline" size={40} color="#CCD1DC" />
+              <Text style={styles.leaveStudentEmptyTitle}>No students available yet</Text>
+              <Text style={styles.leaveStudentEmptyText}>
+                Students appear here once you have at least one past session with status{" "}
+                <Text style={styles.leaveStudentEmptyEm}>completed</Text>. Past sessions still marked
+                accepted or pending won&apos;t count until they&apos;re completed.
               </Text>
-              {studentPickTargets.map((t) => (
-                <View key={t.studentId} style={styles.leaveStudentCard}>
-                  <View style={styles.leaveStudentCardText}>
-                    <Text style={styles.leaveStudentName}>{t.studentName}</Text>
-                    <Text style={styles.leaveStudentMeta}>
-                      Last session: {t.latestSubject} ·{" "}
-                      {new Date(t.latestSessionStart).toLocaleDateString()}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.leaveStudentBtn}
-                    onPress={() => openStudentReviewModal(t)}
-                  >
-                    <Ionicons name="create-outline" size={18} color="#2E57A2" />
-                    <Text style={styles.leaveStudentBtnText}>Review</Text>
-                  </TouchableOpacity>
+            </View>
+          ) : (
+            studentPickTargets.map((t) => (
+              <View key={t.studentId} style={styles.leaveStudentCard}>
+                <View style={styles.leaveStudentCardText}>
+                  <Text style={styles.leaveStudentName}>{t.studentName}</Text>
+                  <Text style={styles.leaveStudentMeta}>
+                    Last completed session: {t.latestSubject} ·{" "}
+                    {new Date(t.latestSessionStart).toLocaleDateString()}
+                  </Text>
                 </View>
-              ))}
-            </>
-          ) : null}
+                <TouchableOpacity
+                  style={styles.leaveStudentBtn}
+                  onPress={() => openStudentReviewModal(t)}
+                  accessibilityLabel="Leave a review for this student"
+                >
+                  <Ionicons name="create-outline" size={18} color="#2E57A2" />
+                  <Text style={styles.leaveStudentBtnText}>Leave a review</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
 
           {/* Summary Card */}
-          <View style={[styles.summaryCard, studentPickTargets.length > 0 && { marginTop: 16 }]}>
+          <View style={[styles.summaryCard, { marginTop: 16 }]}>
             <View style={styles.summaryTop}>
               <View style={styles.avgRatingSection}>
                 <Text style={styles.avgRating}>{averageRating}</Text>
@@ -463,7 +472,7 @@ export default function TutorReviewsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.studentReviewModalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Review student</Text>
+              <Text style={styles.modalTitle}>Leave a review</Text>
               <TouchableOpacity onPress={() => setShowStudentReviewModal(false)}>
                 <Ionicons name="close" size={24} color="#5D667C" />
               </TouchableOpacity>
@@ -752,6 +761,33 @@ const styles = StyleSheet.create({
   leaveStudentBtnText: {
     fontSize: 14,
     fontWeight: "600",
+    color: "#2E57A2",
+  },
+  leaveStudentEmpty: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    alignItems: "center",
+  },
+  leaveStudentEmptyTitle: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2F3850",
+    textAlign: "center",
+  },
+  leaveStudentEmptyText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#5D667C",
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  leaveStudentEmptyEm: {
+    fontWeight: "700",
     color: "#2E57A2",
   },
   studentReviewModalCard: {
