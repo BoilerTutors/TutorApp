@@ -214,7 +214,17 @@ export default function MessengerScreen() {
     if (Number.isNaN(ts.getTime())) {
       return "Last active unavailable";
     }
-    return `Last active ${ts.toLocaleString()}`;
+    const eastern = ts.toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZoneName: "short",
+    });
+    return `Last active ${eastern}`;
   }, []);
 
   const loadSidebarItems = useCallback(async () => {
@@ -290,8 +300,19 @@ export default function MessengerScreen() {
           setMatchedTutors(rows);
         }
       }
+      const uniqueTutorIds = Array.from(new Set(rows.map((r) => r.tutor_id)));
+      const lookupPairs = await Promise.all(
+        uniqueTutorIds.map(async (uid) => {
+          try {
+            const user = await api.get<UserActivityLookup>(`/users/${uid}`);
+            return [uid, user] as const;
+          } catch {
+            return [uid, { id: uid, active_now: false, last_active_at: null }] as const;
+          }
+        })
+      );
+      setUserActivityById(Object.fromEntries(lookupPairs));
       setConversations([]);
-      setUserActivityById({});
     }
   }, []);
 
@@ -926,6 +947,7 @@ export default function MessengerScreen() {
             renderItem={({ item }) => {
               if (item.kind === "match") {
                 const selected = item.tutor_id === selectedTutorUserId;
+                const activityStatus = formatLastActive(userActivityById[item.tutor_id]);
                 return (
                   <View style={[styles.conversationRow, selected && styles.conversationSelected]}>
                     <Pressable
@@ -938,7 +960,7 @@ export default function MessengerScreen() {
                         {item.tutor_first_name} {item.tutor_last_name}
                       </Text>
                       <Text style={styles.conversationSub}>
-                        Similarity {(item.similarity_score * 100).toFixed(1)}%
+                        Similarity {(item.similarity_score * 100).toFixed(1)}% · {activityStatus}
                       </Text>
                     </Pressable>
                     <Pressable
