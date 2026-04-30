@@ -95,6 +95,8 @@ class UserPublic(BaseModel):
     is_student: bool
     stripe_account_id: Optional[str] = None
     created_at: datetime
+    last_active_at: Optional[datetime] = None
+    active_now: bool = False
     mfa_enabled: bool
 
     tutor: Optional["TutorProfilePublic"] = None
@@ -108,6 +110,8 @@ class UserLookupPublic(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
+    last_active_at: Optional[datetime] = None
+    active_now: bool = False
 
 
 class UserProfileDetailsPublic(BaseModel):

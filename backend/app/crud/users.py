@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session  # type: ignore[import]
 
@@ -18,6 +19,29 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 
 def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
     return db.get(User, user_id)
+
+
+def mark_user_active(db: Session, user: User) -> User:
+    user.last_active_at = datetime.now(timezone.utc)
+    user.active_now = True
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def mark_user_inactive(db: Session, user: User) -> User:
+    user.active_now = False
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def mark_user_inactive_by_id(db: Session, user_id: int) -> None:
+    user = db.get(User, user_id)
+    if user is None:
+        return
+    user.active_now = False
+    db.commit()
 
 
 def create_user(db: Session, data: UserCreate) -> User:

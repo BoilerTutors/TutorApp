@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { setAuthToken, getAuthToken } from "../api/client";
+import { api, setAuthToken, getAuthToken } from "../api/client";
 import { saveToken, loadToken, clearToken } from "../auth/storage";
 import { authApi, usersApi, UserPublic, UserCreate, LoginRequest, Token } from "../services/api";
 import { API_BASE_URL } from "../config";
@@ -40,6 +40,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadStoredAuth();
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        await api.post<UserPublic>("/users/me/activity/heartbeat");
+      } catch {
+        // request helper handles auth failures/session expiry centrally.
+      }
+    };
+    void tick();
+    const interval = setInterval(() => {
+      if (!cancelled) {
+        void tick();
+      }
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [token]);
 
   const loadStoredAuth = async () => {
     try {
@@ -99,6 +123,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    if (getAuthToken()) {
+      try {
+        await api.post("/users/me/activity/offline");
+      } catch {
+        // Best effort.
+      }
+    }
     setAuthToken(null);
     await clearToken();
     setToken(null);

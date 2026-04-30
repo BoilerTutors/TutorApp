@@ -57,6 +57,16 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    active_now: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
     # 1-to-1 relationships (what other tables are linked to this one)
     # If you use user.tutor_profile, you can get the tutor profile associated with the user, or None if the user is not a tutor

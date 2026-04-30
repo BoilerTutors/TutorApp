@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import verify_password, create_access_token
 from app.config import settings
-from app.crud.users import get_user_by_email
+from app.crud.users import get_user_by_email, mark_user_active
 from app.database import get_db
 from app.schemas import LoginRequest, LoginResponse, MfaVerifyRequest, Token
 from app.services.email import send_otp_email
@@ -35,6 +35,7 @@ def login(
         )
 
     if not user.mfa_enabled:
+        mark_user_active(db, user)
         token = create_access_token(sub=str(user.id))
         return LoginResponse(access_token=token)
 
@@ -97,5 +98,6 @@ def verify_mfa(data: MfaVerifyRequest, db: Session = Depends(get_db)):
     user.mfa_code_attempts = 0
     db.commit()
 
+    mark_user_active(db, user)
     token = create_access_token(sub=str(user.id))
     return LoginResponse(access_token=token)
