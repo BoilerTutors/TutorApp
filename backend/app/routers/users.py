@@ -6,7 +6,7 @@
 - DELETE /users/me        - delete current user account (body: { "confirmation": "DELETE" })
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.auth import get_current_user
@@ -15,6 +15,7 @@ from app.crud.users import (
     delete_user,
     get_user_by_email,
     get_user_by_id,
+    get_public_tutor_user_by_id,
     mark_user_active,
     mark_user_inactive,
     update_user_profile,
@@ -31,6 +32,8 @@ from app.schemas import (
     DeleteAccountRequest,
     UserLookupPublic,
     UserProfileDetailsPublic,
+    PublicTutorProfileResponse,
+    PublicTutorShareLinkResponse,
     SecurityPreferencesUpdate,
 )
 
@@ -162,6 +165,40 @@ def update_security_preferences(
     user = update_user_security_preferences(db, current_user, data)
     mfa_enabled = user.mfa_enabled
     return {"mfa_enabled": mfa_enabled}
+
+
+@router.get("/public/tutors/{user_id}", response_model=PublicTutorProfileResponse)
+def get_public_tutor_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+) -> PublicTutorProfileResponse:
+    """Public endpoint for shareable tutor profile pages."""
+    user = get_public_tutor_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tutor profile not found")
+    return PublicTutorProfileResponse(
+        id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        tutor=user.tutor,
+    )
+
+
+@router.get("/public/tutors/{user_id}/share-link", response_model=PublicTutorShareLinkResponse)
+def get_public_tutor_share_link(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> PublicTutorShareLinkResponse:
+    """Build a shareable frontend URL for this tutor profile."""
+    user = get_public_tutor_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tutor profile not found")
+    base = str(request.base_url).rstrip("/")
+    return PublicTutorShareLinkResponse(
+        tutor_user_id=user.id,
+        share_url=f"{base}/tutor/{user.id}",
+    )
 
 @router.get("/{user_id}", response_model=UserLookupPublic)
 def get_user_public_lookup(
