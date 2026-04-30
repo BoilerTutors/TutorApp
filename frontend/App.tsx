@@ -1,8 +1,22 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, View, Image, Dimensions, Text } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  View,
+  Image,
+  Dimensions,
+  Text,
+  Pressable,
+} from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { API_BASE_URL } from "./src/config";
 import LoginScreen from "./src/screens/LoginScreen";
+import AdminLoginScreen from "./src/screens/AdminLoginScreen";
+import AdminDashboard from "./src/screens/AdminDashboard";
+import AdminSessionsScreen from "./src/screens/AdminSessionsScreen";
+import AdminFlaggedReviewsScreen from "./src/screens/AdminFlaggedReviewsScreen";
 import StudentScreen from "./src/screens/StudentScreen";
 import TutorScreen from "./src/screens/TutorScreen";
 import TutorRegistrationScreen from "./src/screens/TutorRegistrationScreen";
@@ -16,7 +30,7 @@ import HelpScreen from "./src/screens/HelpScreen";
 import StudentReviewsScreen from "./src/screens/StudentReviewsScreen";
 import TutorReviewsScreen from "./src/screens/TutorReviewsScreen";
 import TutorPastSessionsScreen from "./src/screens/TutorPastSessionsScreen";
-import { api, setAuthToken, setOnUnauthorized } from "./src/api/client";
+import { setAuthToken, setOnUnauthorized } from "./src/api/client";
 import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
@@ -27,11 +41,14 @@ import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
 import ReportTutorScreen from "./src/screens/ReportTutorScreen";
 import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
 import TutorCalendarScreen from "./src/screens/TutorCalendarScreen";
-import ContactAdminScreen from "./src/screens/ContactAdminScreen";
 const Stack = createNativeStackNavigator();
 
 type RootStackParamList = {
   Login: undefined;
+  "Admin Login": undefined;
+  "Admin Dashboard": undefined;
+  "Admin Sessions": undefined;
+  "Admin Flagged Reviews": undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
   "Tutor Registration": undefined;
@@ -68,14 +85,34 @@ type RootStackParamList = {
         role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
       }
     | undefined;
-  "Contact Admin": undefined;
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 const HEADER_HEIGHT = Dimensions.get("window").height * 0.20;
-type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard";
+type InitialRouteName = "Login" | "Student Dashboard" | "Tutor Dashboard" | "Admin Dashboard";
 const AUTH_CHECK_TIMEOUT_MS = 15000;
-type MeResponse = { is_tutor: boolean; is_student: boolean };
+
+type ProbedSession =
+  | { kind: "user"; is_tutor: boolean; is_student: boolean }
+  | { kind: "admin" }
+  | null;
+
+async function probeStoredSession(token: string): Promise<ProbedSession> {
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  };
+  const userRes = await fetch(`${API_BASE_URL}/users/me`, { headers });
+  if (userRes.ok) {
+    const body = (await userRes.json()) as { is_tutor: boolean; is_student: boolean };
+    return { kind: "user", is_tutor: body.is_tutor, is_student: body.is_student };
+  }
+  const adminRes = await fetch(`${API_BASE_URL}/admin/me`, { headers });
+  if (adminRes.ok) {
+    return { kind: "admin" };
+  }
+  return null;
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -120,8 +157,21 @@ export default function App() {
         }
 
         setAuthToken(token);
-        const me = await withTimeout(api.get<MeResponse>("/users/me"), AUTH_CHECK_TIMEOUT_MS);
-        const route: InitialRouteName = me.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
+        const session = await withTimeout(probeStoredSession(token), AUTH_CHECK_TIMEOUT_MS);
+        if (!session) {
+          setAuthToken(null);
+          await clearToken();
+          if (!cancelled) {
+            setInitialRoute("Login");
+          }
+          return;
+        }
+        let route: InitialRouteName;
+        if (session.kind === "admin") {
+          route = "Admin Dashboard";
+        } else {
+          route = session.is_tutor ? "Tutor Dashboard" : "Student Dashboard";
+        }
         if (!cancelled) {
           setInitialRoute(route);
         }
@@ -182,6 +232,35 @@ export default function App() {
                 </View>
               )
             }}
+          />
+          <Stack.Screen name="Admin Login" component={AdminLoginScreen} options={{ headerShown: false }} />
+          <Stack.Screen
+            name="Admin Dashboard"
+            component={AdminDashboard}
+            options={({ navigation }) => ({
+              title: "Admin",
+              headerRight: () => (
+                <Pressable
+                  onPress={async () => {
+                    await logout();
+                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                  }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+                >
+                  <Text style={{ color: "#2E57A2", fontWeight: "700", fontSize: 15 }}>Log out</Text>
+                </Pressable>
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="Admin Sessions"
+            component={AdminSessionsScreen}
+            options={{ title: "Recent Purchases" }}
+          />
+          <Stack.Screen
+            name="Admin Flagged Reviews"
+            component={AdminFlaggedReviewsScreen}
+            options={{ header: () => <GeneralHeader title="Flagged reviews" /> }}
           />
           <Stack.Screen
             name="Student Dashboard"
@@ -318,11 +397,6 @@ export default function App() {
             name="Tutor Profile Reviews"
             component={TutorProfileReviewsScreen}
             options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Contact Admin"
-            component={ContactAdminScreen}
-            options={{ header: () => <GeneralHeader title="Contact Admin" /> }}
           />
         </Stack.Navigator>
       </NavigationContainer>

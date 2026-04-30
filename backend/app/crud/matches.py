@@ -107,6 +107,25 @@ def get_active_matches_for_student(db: Session, *, student_id: int) -> list[Matc
     return deduped
 
 
+def get_active_matches_for_tutor(db: Session, *, tutor_id: int) -> list[Match]:
+    """All non-unmatched matches for the tutor (one row per student, most recent wins)."""
+    rows = (
+        db.query(Match)
+        .filter(Match.tutor_id == tutor_id, Match.unmatched.is_(False))
+        .order_by(Match.created_at.desc(), Match.id.desc())
+        .all()
+    )
+    seen: set[int] = set()
+    deduped: list[Match] = []
+    for m in rows:
+        if m.student_id in seen:
+            continue
+        seen.add(m.student_id)
+        deduped.append(m)
+    deduped.sort(key=lambda x: (-x.similarity_score, x.student_id))
+    return deduped
+
+
 def get_latest_match_run_for_student(db: Session, *, student_id: int) -> MatchRun | None:
     return (
         db.query(MatchRun)

@@ -69,6 +69,14 @@ type ReviewPublic = {
   created_at: string;
 };
 
+/** Tutor → student reviews; API never returns tutor identity */
+type StudentReviewReceived = {
+  review_id: number;
+  review_timestamp: string;
+  review_text: string;
+  rating: number;
+};
+
 type UserName = { first_name: string; last_name: string };
 type ClassPublic = { id: number; subject: string; class_number: number };
 
@@ -94,6 +102,7 @@ export default function StudentReviewsScreen() {
   
   const [sessions, setSessions] = useState<Session[]>([]);
   const [myReviews, setMyReviews] = useState<Review[]>([]);
+  const [receivedFromTutors, setReceivedFromTutors] = useState<StudentReviewReceived[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Review form state
@@ -114,9 +123,10 @@ export default function StudentReviewsScreen() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [rawSessions, rawReviews] = await Promise.all([
+      const [rawSessions, rawReviews, rawReceived] = await Promise.all([
         api.get<TutoringSessionPublic[]>("/sessions/student/past"),
         api.get<ReviewPublic[]>("/reviews/student/me"),
+        api.get<StudentReviewReceived[]>("/reviews/students/received/me").catch(() => []),
       ]);
 
       const tutorIds = Array.from(new Set(rawSessions.map((s) => s.tutor_id)));
@@ -179,10 +189,12 @@ export default function StudentReviewsScreen() {
 
       setSessions(mappedSessions);
       setMyReviews(mappedReviews);
+      setReceivedFromTutors(rawReceived);
     } catch {
       showAlert("Error", "Failed to load review data");
       setSessions([]);
       setMyReviews([]);
+      setReceivedFromTutors([]);
     } finally {
       setIsLoading(false);
     }
@@ -406,10 +418,43 @@ export default function StudentReviewsScreen() {
             </>
           )}
 
-          {/* My Reviews */}
-          <Text style={[styles.sectionTitle, sessionsToReview.length > 0 && { marginTop: 24 }]}>
-            My Past Reviews
+          <Text
+            style={[styles.sectionTitle, (sessionsToReview.length > 0 || receivedFromTutors.length > 0) && { marginTop: 24 }]}
+          >
+            Feedback from tutors
           </Text>
+          <Text style={styles.sectionSubtitle}>
+            Private notes from tutors you worked with. Tutors stay anonymous here.
+          </Text>
+          {receivedFromTutors.length === 0 ? (
+            <View style={[styles.emptyState, { paddingVertical: 24 }]}>
+              <Text style={styles.emptySubtext}>No tutor feedback yet</Text>
+            </View>
+          ) : (
+            receivedFromTutors.map((r) => (
+              <View key={r.review_id} style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <View style={styles.reviewHeaderLeft}>
+                    <View style={styles.anonymousBadge}>
+                      <Ionicons name="eye-off-outline" size={12} color="#5D667C" />
+                      <Text style={styles.anonymousText}>Anonymous tutor</Text>
+                    </View>
+                  </View>
+                  {renderStars(Math.round(r.rating))}
+                </View>
+                <Text style={styles.comment}>{r.review_text}</Text>
+                <View style={styles.reviewFooter}>
+                  <Text style={styles.reviewDate}>
+                    {new Date(r.review_timestamp).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+
+          {/* My Reviews */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>My reviews of tutors</Text>
+          <Text style={styles.sectionSubtitle}>Reviews you submitted about tutoring sessions</Text>
           
           {myReviews.length === 0 ? (
             <View style={styles.emptyState}>
@@ -664,6 +709,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 12,
+  },
+  reviewHeaderLeft: {
+    flex: 1,
+    marginRight: 8,
   },
   starsRow: {
     flexDirection: "row",

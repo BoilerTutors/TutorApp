@@ -9,6 +9,7 @@ import { api } from "../api/client";
 type RootStackParamList = {
   Profile: { role: "ADMIN" };
   "Admin Sessions": undefined;
+  "Admin Flagged Reviews": undefined;
 };
 
 type QuickAction = {
@@ -50,9 +51,9 @@ export default function AdminDashboard() {
 
   const quickActions: QuickAction[] = [
     {
-      label: "View Reports",
+      label: "Flagged Reviews",
       icon: "bar-chart",
-      onPress: () => showPlaceholder("View Reports"),
+      onPress: () => navigation.navigate("Admin Flagged Reviews"),
     },
     {
       label: "Search Users",

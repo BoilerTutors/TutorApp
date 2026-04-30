@@ -92,6 +92,15 @@ def get_current_user(
     return get_user_from_token(credentials.credentials, db)
 
 
+def get_current_user_optional(
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Optional[User]:
+    if not credentials:
+        return None
+    return get_user_from_token(credentials.credentials, db)
+
+
 def get_current_admin(
     credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer_scheme)],
     db: Annotated[Session, Depends(get_db)],

@@ -15,7 +15,7 @@ if str(backend) not in sys.path:
 
 from app.database import SessionLocal  # type: ignore  # noqa: E402
 from app.crud.sessions import utc_week_start_end  # type: ignore  # noqa: E402
-from app.models import User, TutorProfile, StudentProfile, TutoringSession  # type: ignore  # noqa: E402
+from app.models import Admin, User, TutorProfile, StudentProfile, TutoringSession  # type: ignore  # noqa: E402
 from app.auth import hash_password  # type: ignore  # noqa: E402
 
 
@@ -153,6 +153,11 @@ def main() -> None:
             )
             session.add(tutor_profile)
 
+        # Admin row (separate from users): use the app's Admin Login screen and POST /admin/login.
+        admin_row = session.query(Admin).filter_by(email="admin@example.com").one_or_none()
+        if not admin_row:
+            session.add(Admin(email="admin@example.com", hashed_password=dummy_hashed))
+
         # Current session for Tutor A <-> Student (in-window around now, always this UTC week).
         now = datetime.now(timezone.utc)
         current_start = now - timedelta(minutes=10)
@@ -189,6 +194,10 @@ def main() -> None:
         session.commit()
 
     print("Seeded local DB with:")
+    print(
+        f"  Admin    -> email=admin@example.com, password={plain_password!r} "
+        "(use Admin Login in the app, not the tutor/student login)"
+    )
     print(f"  Tutor A  -> id={tutor_user_a.id}, email=tutor1@example.com, password={plain_password!r}")
     print(f"  Tutor B  -> id={tutor_user_b.id}, email=tutor2@example.com, password={plain_password!r}")
     print(f"  Student  -> id={student_user.id}, email=student@example.com, password={plain_password!r}")

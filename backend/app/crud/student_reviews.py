@@ -2,10 +2,27 @@
 
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.models import StudentReview, User
+from app.models import StudentReview, TutoringSession, User
+
+
+def tutor_has_completed_session_with_student(
+    db: Session, tutor_user_id: int, student_user_id: int
+) -> bool:
+    row = db.execute(
+        select(TutoringSession.id)
+        .where(
+            and_(
+                TutoringSession.tutor_id == tutor_user_id,
+                TutoringSession.student_id == student_user_id,
+                TutoringSession.status == "completed",
+            )
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return row is not None
 
 
 def create_student_review(
@@ -36,6 +53,9 @@ def create_student_review(
 
     if tutor_user.tutor is None:
         raise ValueError("Tutor profile not found for this account")
+
+    if not tutor_has_completed_session_with_student(db, tutor_user_id, student_user_id):
+        raise ValueError("You can only review students you have completed a session with")
 
     if rating < 0.0 or rating > 5.0:
         raise ValueError("Rating must be between 0.0 and 5.0")

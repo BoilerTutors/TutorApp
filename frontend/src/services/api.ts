@@ -121,6 +121,8 @@ export type ReviewPublic = {
   rating: number;
   comment?: string;
   is_anonymous: boolean;
+  is_flagged?: boolean;
+  flag_reason?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -169,6 +171,8 @@ export const reviewsApi = {
   getMyReviews: () => api.get<ReviewPublic[]>("/reviews/student/me"),
   update: (reviewId: number, data: ReviewUpdate) => api.patch<ReviewPublic>(`/reviews/${reviewId}`, data),
   delete: (reviewId: number) => api.delete<void>(`/reviews/${reviewId}`),
+  flag: (reviewId: number, reason: string) =>
+    api.post<ReviewPublic>(`/reviews/${reviewId}/flag`, { reason }),
 };
 
 // Sessions API

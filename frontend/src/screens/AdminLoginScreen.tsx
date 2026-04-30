@@ -43,10 +43,14 @@ export default function AdminLoginScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      const data = await api.post<AdminLoginResponse>("/admin/login", {
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      const data = await api.post<AdminLoginResponse>(
+        "/admin/login",
+        {
+          email: email.trim().toLowerCase(),
+          password,
+        },
+        { skipAuth: true }
+      );
       setAuthToken(data.access_token);
       await saveToken(data.access_token);
       navigation.reset({
