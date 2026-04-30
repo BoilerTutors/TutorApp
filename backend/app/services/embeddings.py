@@ -92,7 +92,7 @@ def embed_text(text: str) -> list[float]:
 def cosine_sim(a: Sequence[float], b: Sequence[float]) -> float:
     a_norm = _normalize(list(a))
     b_norm = _normalize(list(b))
-    return float(sum(x * y for x, y in zip(a_norm, b_norm, strict=False)))
+    return float(sum(x * y for x, y in zip(a_norm, b_norm)))
 
 
 def _grade_to_points(grade: str) -> float:

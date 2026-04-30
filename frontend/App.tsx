@@ -22,13 +22,14 @@ import { clearToken, loadToken } from "./src/auth/storage";
 import DashboardHeader, { ProfileHeader, SettingsHeader } from "./src/components/DashboardHeader";
 import { logout } from "./src/auth/logout";
 import GeneralHeader from "./src/components/GeneralHeader";
-import { AuthProvider } from "./src/context/AuthContext";
+import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import AvailabilityScreen from "./src/screens/AvailabilityScreen";
 import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
 import ReportTutorScreen from "./src/screens/ReportTutorScreen";
 import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
 import TutorCalendarScreen from "./src/screens/TutorCalendarScreen";
 import ContactAdminScreen from "./src/screens/ContactAdminScreen";
+import FavoritesScreen from "./src/screens/FavoritesScreen";
 const Stack = createNativeStackNavigator();
 
 type RootStackParamList = {
@@ -42,6 +43,7 @@ type RootStackParamList = {
   "Tutor Past Sessions": undefined;
   "Tutor Notes Overview": undefined;
   "Tutor Schedule": undefined;
+  Favorites: undefined;
   Messenger:
     | {
         openTutorUserId?: number;
@@ -94,8 +96,35 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   });
 }
 
-export default function App() {
+// Helper used by toggle. Determines whether the user can switch to the given target role,
+// and prompts them to register if they can't.
+function handleToggleRole(
+  navigation: any,
+  user: { is_tutor: boolean; is_student: boolean } | null,
+  targetRole: "STUDENT" | "TUTOR",
+  setActiveRole: (role: "STUDENT" | "TUTOR") => void
+) {
+  if (!user) return;
+
+  const hasTargetRole = targetRole === "TUTOR" ? user.is_tutor : user.is_student;
+
+  if (!hasTargetRole) {
+    Alert.alert(
+      `Not Registered as ${targetRole === "TUTOR" ? "Tutor" : "Student"}`,
+      `You don't have a ${targetRole.toLowerCase()} profile yet. To use BoilerTutors as a ${targetRole.toLowerCase()}, please register a separate account from the login screen.`,
+      [{ text: "OK" }]
+    );
+    return;
+  }
+
+  setActiveRole(targetRole);
+  const targetScreen = targetRole === "TUTOR" ? "Tutor Dashboard" : "Student Dashboard";
+  navigation.reset({ index: 0, routes: [{ name: targetScreen }] });
+}
+
+function AppContent() {
   const [initialRoute, setInitialRoute] = useState<InitialRouteName | null>(null);
+  const { user, activeRole, setActiveRole } = useAuth();
 
   useEffect(() => {
     setOnUnauthorized(() => {
@@ -165,172 +194,186 @@ export default function App() {
   };
 
   return (
+    <NavigationContainer linking={linking as any} ref={navigationRef}>
+      <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{
+            header: () => (
+              <View style={styles.loginHeader}>
+                <Image
+                  source={require("./src/assets/purdue_logo.png")}
+                  style={styles.loginHeaderImage}
+                  resizeMode="cover"
+                />
+              </View>
+            )
+          }}
+        />
+        <Stack.Screen
+          name="Student Dashboard"
+          component={StudentScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <DashboardHeader
+                role="STUDENT"
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                }}
+                onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() => navigation.navigate("Notifications")}
+                onHelpPress={() => navigation.navigate("Help")}
+                onToggleRole={() => handleToggleRole(navigation, user, "TUTOR", setActiveRole)}
+              />
+            ),
+          })}
+        />
+        <Stack.Screen
+          name="Tutor Dashboard"
+          component={TutorScreen}
+          options={({ navigation }) => ({
+            header: () => (
+              <DashboardHeader
+                role="TUTOR"
+                onLogout={async () => {
+                  await logout();
+                  navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                }}
+                onSettingsPress={() => navigation.navigate("Settings")}
+                onNotificationsPress={() => navigation.navigate("Notifications")}
+                onHelpPress={() => navigation.navigate("Help")}
+                onToggleRole={() => handleToggleRole(navigation, user, "STUDENT", setActiveRole)}
+              />
+            ),
+          })}
+        />
+        <Stack.Screen
+          name="Tutor Registration"
+          component={TutorRegistrationScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Student Registration"
+          component={StudentRegistrationScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Student Reviews"
+          component={StudentReviewsScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Tutor Reviews"
+          component={TutorReviewsScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Tutor Past Sessions"
+          component={TutorPastSessionsScreen}
+          options={{ header: () => <GeneralHeader title="Past Sessions" /> }}
+        />
+        <Stack.Screen
+          name="Tutor Notes Overview"
+          component={TutorNotesOverviewScreen}
+          options={{ header: () => <GeneralHeader title="My Notes" /> }}
+        />
+        <Stack.Screen
+          name="Tutor Schedule"
+          component={TutorCalendarScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Messenger"
+          component={MessengerScreen}
+          options={{ header: () => <GeneralHeader title="Messenger" /> }}
+        />
+        <Stack.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={({ navigation, route }) => ({
+            header: () => (
+              <ProfileHeader
+                onBack={() => navigation.goBack()}
+                role={(() => {
+                  const rawRole = (
+                    route.params as
+                      | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
+                      | undefined
+                  )?.role;
+                  if (rawRole === "ADMINISTRATOR") return "ADMIN";
+                  return rawRole ?? "STUDENT";
+                })()}
+              />
+            ),
+          })}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={({ navigation }) => ({
+            header: () => <SettingsHeader onBack={() => navigation.goBack()} />,
+          })}
+        />
+        <Stack.Screen
+          name="Notifications"
+          component={NotificationsTab}
+          options={{ title: "Notifications" }}
+        />
+        <Stack.Screen
+          name="Help"
+          component={HelpScreen}
+          options={{ header: () => <GeneralHeader title="Help" /> }}
+        />
+        <Stack.Screen
+          name="Matches"
+          component={MatchesScreen}
+          options={{ title: "Your Matches" }}
+        />
+        <Stack.Screen
+          name="Availability"
+          component={AvailabilityScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="Session History"
+          component={SessionHistoryScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="Favorites"
+          component={FavoritesScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="Report Tutor"
+          component={ReportTutorScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="Tutor Profile Reviews"
+          component={TutorProfileReviewsScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Contact Admin"
+          component={ContactAdminScreen}
+          options={{ header: () => <GeneralHeader title="Contact Admin" /> }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
     <AuthProvider>
-      <NavigationContainer linking={linking as any} ref={navigationRef}>
-        <Stack.Navigator initialRouteName={initialRoute} key={initialRoute}>
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{
-              header: () => (
-                <View style={styles.loginHeader}>
-                  <Image
-                    source={require("./src/assets/purdue_logo.png")}
-                    style={styles.loginHeaderImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              )
-            }}
-          />
-          <Stack.Screen
-            name="Student Dashboard"
-            component={StudentScreen}
-            options={({ navigation }) => ({
-              header: () => (
-                <DashboardHeader
-                  role="STUDENT"
-                  onLogout={async () => {
-                    await logout();
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-                  }}
-                  onSettingsPress={() => navigation.navigate("Settings")}
-                  onNotificationsPress={() => navigation.navigate("Notifications")}
-                  onHelpPress={() => navigation.navigate("Help")}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="Tutor Dashboard"
-            component={TutorScreen}
-            options={({ navigation }) => ({
-              header: () => (
-                <DashboardHeader
-                  role="TUTOR"
-                  onLogout={async () => {
-                    await logout();
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-                  }}
-                  onSettingsPress={() => navigation.navigate("Settings")}
-                  onNotificationsPress={() => navigation.navigate("Notifications")}
-                  onHelpPress={() => navigation.navigate("Help")}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="Tutor Registration"
-            component={TutorRegistrationScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Student Registration"
-            component={StudentRegistrationScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Student Reviews"
-            component={StudentReviewsScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Tutor Reviews"
-            component={TutorReviewsScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Tutor Past Sessions"
-            component={TutorPastSessionsScreen}
-            options={{ header: () => <GeneralHeader title="Past Sessions" /> }}
-          />
-          <Stack.Screen
-            name="Tutor Notes Overview"
-            component={TutorNotesOverviewScreen}
-            options={{ header: () => <GeneralHeader title="My Notes" /> }}
-          />
-          <Stack.Screen
-            name="Tutor Schedule"
-            component={TutorCalendarScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Messenger"
-            component={MessengerScreen}
-            options={{ header: () => <GeneralHeader title="Messenger" /> }}
-          />
-          <Stack.Screen
-            name="Profile"
-            component={ProfileScreen}
-            options={({ navigation, route }) => ({
-              header: () => (
-                <ProfileHeader
-                  onBack={() => navigation.goBack()}
-                  role={(() => {
-                    const rawRole = (
-                      route.params as
-                        | { role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR" }
-                        | undefined
-                    )?.role;
-                    if (rawRole === "ADMINISTRATOR") return "ADMIN";
-                    return rawRole ?? "STUDENT";
-                  })()}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={({ navigation }) => ({
-              header: () => <SettingsHeader onBack={() => navigation.goBack()} />,
-            })}
-          />
-          <Stack.Screen
-            name="Notifications"
-            component={NotificationsTab}
-            options={{ title: "Notifications" }}
-          />
-          <Stack.Screen
-            name="Help"
-            component={HelpScreen}
-            options={{ header: () => <GeneralHeader title="Help" /> }}
-          />
-          <Stack.Screen
-            name="Matches"
-            component={MatchesScreen}
-            options={{ title: "Your Matches" }}
-          />
-          <Stack.Screen
-            name="Availability"
-            component={AvailabilityScreen}
-            options={{ headerShown: false }}
-          />
-
-          <Stack.Screen
-            name="Session History"
-            component={SessionHistoryScreen}
-            options={{ headerShown: false }}
-          />
-
-          <Stack.Screen
-            name="Report Tutor"
-            component={ReportTutorScreen}
-            options={{ headerShown: false }}
-          />
-
-          <Stack.Screen
-            name="Tutor Profile Reviews"
-            component={TutorProfileReviewsScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Contact Admin"
-            component={ContactAdminScreen}
-            options={{ header: () => <GeneralHeader title="Contact Admin" /> }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <AppContent />
     </AuthProvider>
   );
 }

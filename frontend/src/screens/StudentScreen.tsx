@@ -11,7 +11,9 @@ type RootStackParamList = {
   Profile: { role: "STUDENT" | "TUTOR" | "ADMINISTRATOR" };
   Settings: undefined;
   "Student Reviews": undefined;
+  "Session History": undefined;
   Availability: undefined;
+  Favorites: undefined;
   Matches:
     | {
         matches?: MatchItem[];
@@ -38,6 +40,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { label: "Find Tutors", icon: "search" },
   { label: "Book Session", icon: "calendar" },
   { label: "My Schedule", icon: "time" },
+  { label: "Favorites", icon: "heart" },
 ];
 
 export default function StudentScreen() {
@@ -54,7 +57,7 @@ export default function StudentScreen() {
           setFirstName(me.first_name.trim());
         }
       } catch {
-        // Keep friendly fallback if profile fetch fails.
+        // ignore
       }
     };
     void loadMe();
@@ -74,7 +77,7 @@ export default function StudentScreen() {
       setComputingMatches(false);
     }
   };
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.card}>
@@ -96,6 +99,13 @@ export default function StudentScreen() {
         </Pressable>
 
         <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate("Session History")}
+        >
+          <Text style={styles.buttonText}>📋 Session History</Text>
+        </Pressable>
+
+        <Pressable
           style={[styles.button, styles.secondaryButton]}
           onPress={() => navigation.navigate("Profile", { role: "STUDENT" })}
         >
@@ -109,7 +119,6 @@ export default function StudentScreen() {
         </Pressable>
       </View>
 
-      {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.actionsGrid}>
         {QUICK_ACTIONS.map((action) => (
@@ -124,6 +133,8 @@ export default function StudentScreen() {
                 navigation.navigate("Matches");
               } else if (action.label === "My Schedule") {
                 navigation.navigate("Availability");
+              } else if (action.label === "Favorites") {
+                navigation.navigate("Favorites");
               }
             }}
           >
@@ -139,7 +150,6 @@ export default function StudentScreen() {
 }
 
 const NAVY = "#1B2D50";
-const GOLD = "#D4AF4A";
 
 const styles = StyleSheet.create({
   container: {
@@ -173,21 +183,21 @@ const styles = StyleSheet.create({
   actionsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 5,
+    gap: 10,
   },
   actionButton: {
-    width: "31.5%",
+    flexBasis: "48%",
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: NAVY,
     borderRadius: 10,
-    paddingVertical: 14,
+    paddingVertical: 18,
   },
   actionText: {
     color: "#FFFFFF",
     fontWeight: "600",
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 6,
     textAlign: "center",
   },

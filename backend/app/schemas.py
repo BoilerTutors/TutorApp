@@ -728,3 +728,21 @@ class SessionNoteCreate(BaseModel):
 
 class SessionNoteUpdate(BaseModel):
     content: str
+
+class FavoriteTutorPublic(BaseModel):
+    """Rich tutor info bundled into a favorite row for the favorites list page."""
+    favorite_id: int
+    tutor_id: int
+    first_name: str
+    last_name: str
+    major: Optional[str] = None
+    bio: Optional[str] = None
+    hourly_rate_cents: Optional[int] = None
+    average_rating: Optional[float] = None
+    review_count: int = 0
+    subjects: list[str] = []
+    created_at: datetime
+
+
+class FavoriteCheckPublic(BaseModel):
+    is_favorited: bool

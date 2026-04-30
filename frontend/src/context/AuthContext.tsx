@@ -4,9 +4,12 @@ import { saveToken, loadToken, clearToken } from "../auth/storage";
 import { authApi, usersApi, UserPublic, UserCreate, LoginRequest, Token } from "../services/api";
 import { API_BASE_URL } from "../config";
 
+export type ActiveRole = "STUDENT" | "TUTOR";
+
 type AuthContextType = {
   user: UserPublic | null;
   token: string | null;
+  activeRole: ActiveRole | null;
   isLoading: boolean;
   error: string | null;
   login: (data: LoginRequest) => Promise<void>;
@@ -14,6 +17,7 @@ type AuthContextType = {
   logout: () => Promise<void>;
   clearError: () => void;
   refreshUser: () => Promise<void>;
+  setActiveRole: (role: ActiveRole) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +37,7 @@ async function probeUserWithToken(token: string): Promise<UserPublic | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [activeRole, setActiveRoleState] = useState<ActiveRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(storedToken);
         const userInfo = await probeUserWithToken(storedToken);
         setUser(userInfo);
+        // Default activeRole on bootstrap: tutor if they're a tutor, else student
+        if (userInfo) {
+          setActiveRoleState(userInfo.is_tutor ? "TUTOR" : "STUDENT");
+        }
       }
     } catch (err) {
       // Token expired or invalid
@@ -103,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearToken();
     setToken(null);
     setUser(null);
+    setActiveRoleState(null);
   };
 
   const clearError = () => setError(null);
@@ -118,11 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setActiveRole = (role: ActiveRole) => {
+    setActiveRoleState(role);
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         token,
+        activeRole,
         isLoading,
         error,
         login,
@@ -130,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         clearError,
         refreshUser,
+        setActiveRole,
       }}
     >
       {children}

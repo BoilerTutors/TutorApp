@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 type DashboardHeaderProps = {
   role: "STUDENT" | "TUTOR" | "ADMIN";
@@ -17,6 +18,7 @@ type DashboardHeaderProps = {
   onSettingsPress?: () => void;
   onNotificationsPress?: () => void;
   onHelpPress?: () => void;
+  onToggleRole?: () => void;
 };
 
 export type AccountType = "STUDENT" | "TUTOR" | "ADMIN";
@@ -84,8 +86,10 @@ export default function DashboardHeader({
   onSettingsPress,
   onNotificationsPress,
   onHelpPress,
+  onToggleRole,
 }: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const menuAnimation = useRef(new Animated.Value(0)).current;
@@ -121,8 +125,16 @@ export default function DashboardHeader({
     };
   }, [menuOpen, onNotificationsPress]);
 
+  const otherRoleLabel = role === "TUTOR" ? "Student" : "Tutor";
+
   const menuItems = useMemo(
     () => [
+      {
+        key: "toggle",
+        label: `Switch to ${otherRoleLabel}`,
+        icon: "swap-horizontal-outline" as const,
+        onPress: onToggleRole,
+      },
       {
         key: "notifications",
         label: "Notifications",
@@ -148,7 +160,7 @@ export default function DashboardHeader({
         onPress: onLogout,
       },
     ].filter((item) => typeof item.onPress === "function"),
-    [onLogout, onNotificationsPress, onSettingsPress, onHelpPress]
+    [onLogout, onNotificationsPress, onSettingsPress, onHelpPress, onToggleRole, otherRoleLabel]
   );
 
   const handleMenuItemPress = (action?: () => void) => {

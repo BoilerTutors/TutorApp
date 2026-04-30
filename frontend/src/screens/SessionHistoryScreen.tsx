@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,10 @@ import {
   ActivityIndicator,
   TextInput,
   Pressable,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api } from "../api/client";
 
@@ -29,6 +30,17 @@ type TutoringSessionPublic = {
   notes: string | null;
   status: string;
   purchased_at: string;
+};
+
+type SessionNote = {
+  id: number;
+  session_id: number;
+  tutor_id: number;
+  student_id: number;
+  content: string;
+  subject: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type SessionWithTutor = TutoringSessionPublic & { tutorName: string };
@@ -63,41 +75,123 @@ const STATUS_COLORS: Record<string, string> = {
 export default function SessionHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [sessions, setSessions] = useState<SessionWithTutor[]>([]);
+  const [tutorNotes, setTutorNotes] = useState<Map<number, SessionNote | null>>(new Map());
+  const [favoritedTutorIds, setFavoritedTutorIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [tutorSearch, setTutorSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<number>>(new Set());
+
+  const loadSessionsAndExtras = useCallback(async () => {
+    setLoading(true);
+    try {
+      const raw = await api.get<TutoringSessionPublic[]>("/sessions/student/past");
+
+      const uniqueTutorIds = Array.from(new Set(raw.map((s) => s.tutor_id)));
+      const tutorNamePairs = await Promise.all(
+        uniqueTutorIds.map(async (id) => {
+          try {
+            const user = await api.get<{ first_name: string; last_name: string }>(`/users/${id}`);
+            return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
+          } catch {
+            return [id, `Tutor #${id}`] as const;
+          }
+        })
+      );
+      const nameById = new Map<number, string>(tutorNamePairs);
+      const sessionsWithTutor = raw.map((s) => ({
+        ...s,
+        tutorName: nameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}`,
+      }));
+      setSessions(sessionsWithTutor);
+
+      // Tutor notes for completed sessions
+      const completed = sessionsWithTutor.filter((s) => s.status === "completed");
+      const notePairs = await Promise.all(
+        completed.map(async (s) => {
+          try {
+            const note = await api.get<SessionNote | null>(`/session-notes/${s.id}`);
+            return [s.id, note] as const;
+          } catch {
+            return [s.id, null] as const;
+          }
+        })
+      );
+      setTutorNotes(new Map(notePairs));
+
+      // Favorite status for each unique tutor
+      const favPairs = await Promise.all(
+        uniqueTutorIds.map(async (id) => {
+          try {
+            const result = await api.get<{ is_favorited: boolean }>(`/favorites/me/check/${id}`);
+            return [id, result.is_favorited] as const;
+          } catch {
+            return [id, false] as const;
+          }
+        })
+      );
+      const favSet = new Set<number>();
+      favPairs.forEach(([id, isFav]) => {
+        if (isFav) favSet.add(id);
+      });
+      setFavoritedTutorIds(favSet);
+    } catch {
+      setSessions([]);
+      setTutorNotes(new Map());
+      setFavoritedTutorIds(new Set());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const raw = await api.get<TutoringSessionPublic[]>("/sessions/student/past");
+    void loadSessionsAndExtras();
+  }, [loadSessionsAndExtras]);
 
-        // Fetch unique tutor names
-        const uniqueTutorIds = Array.from(new Set(raw.map((s) => s.tutor_id)));
-        const tutorNamePairs = await Promise.all(
-          uniqueTutorIds.map(async (id) => {
-            try {
-              const user = await api.get<{ first_name: string; last_name: string }>(`/users/${id}`);
-              return [id, `${user.first_name} ${user.last_name}`.trim()] as const;
-            } catch {
-              return [id, `Tutor #${id}`] as const;
-            }
-          })
-        );
-        const nameById = new Map<number, string>(tutorNamePairs);
+  useFocusEffect(
+    useCallback(() => {
+      void loadSessionsAndExtras();
+    }, [loadSessionsAndExtras])
+  );
 
-        setSessions(raw.map((s) => ({ ...s, tutorName: nameById.get(s.tutor_id) ?? `Tutor #${s.tutor_id}` })));
-      } catch {
-        setSessions([]);
-      } finally {
-        setLoading(false);
+  const toggleNoteExpanded = (sessionId: number) => {
+    setExpandedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  };
+
+  const toggleFavorite = async (tutorId: number, tutorName: string) => {
+    const isFav = favoritedTutorIds.has(tutorId);
+    // Optimistic update
+    setFavoritedTutorIds((prev) => {
+      const next = new Set(prev);
+      if (isFav) next.delete(tutorId);
+      else next.add(tutorId);
+      return next;
+    });
+    try {
+      if (isFav) {
+        await api.delete(`/favorites/${tutorId}`);
+      } else {
+        await api.post(`/favorites/${tutorId}`, {});
       }
-    };
-    void load();
-  }, []);
+    } catch (e) {
+      // Revert on failure
+      setFavoritedTutorIds((prev) => {
+        const next = new Set(prev);
+        if (isFav) next.add(tutorId);
+        else next.delete(tutorId);
+        return next;
+      });
+      const message = e instanceof Error ? e.message : "Failed to update favorites";
+      Alert.alert("Error", message);
+    }
+  };
 
   const filtered = useMemo(() => {
     let result = sessions;
@@ -130,7 +224,6 @@ export default function SessionHistoryScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#2F3850" />
@@ -141,7 +234,6 @@ export default function SessionHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Payment Summary */}
       <View style={styles.summaryCard}>
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>{filtered.length}</Text>
@@ -159,7 +251,6 @@ export default function SessionHistoryScreen() {
         </View>
       </View>
 
-      {/* Filters */}
       {showFilters && (
         <View style={styles.filtersContainer}>
           <View style={styles.searchBar}>
@@ -229,40 +320,88 @@ export default function SessionHistoryScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {filtered.map((session) => (
-            <View key={session.id} style={styles.sessionCard}>
-              <View style={styles.sessionTop}>
-                <View style={styles.sessionInfo}>
-                  <Text style={styles.tutorName}>{session.tutorName}</Text>
-                  <Text style={styles.subject}>{session.subject}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: `${STATUS_COLORS[session.status]}20` }]}>
-                  <Text style={[styles.statusText, { color: STATUS_COLORS[session.status] ?? "#5D667C" }]}>
-                    {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                  </Text>
-                </View>
-              </View>
+          {filtered.map((session) => {
+            const tutorNote = tutorNotes.get(session.id) ?? null;
+            const isExpanded = expandedNoteIds.has(session.id);
+            const showTutorNotesSection = session.status === "completed";
+            const isFavorited = favoritedTutorIds.has(session.tutor_id);
 
-              <View style={styles.sessionDetails}>
-                <View style={styles.detailRow}>
-                  <Ionicons name="calendar-outline" size={14} color="#8C93A4" />
-                  <Text style={styles.detailText}>{formatDate(session.scheduled_start)}</Text>
+            return (
+              <View key={session.id} style={styles.sessionCard}>
+                <View style={styles.sessionTop}>
+                  <View style={styles.sessionInfo}>
+                    <View style={styles.tutorRow}>
+                      <Text style={styles.tutorName}>{session.tutorName}</Text>
+                      <Pressable
+                        onPress={() => toggleFavorite(session.tutor_id, session.tutorName)}
+                        hitSlop={10}
+                        style={styles.favBtn}
+                      >
+                        <Ionicons
+                          name={isFavorited ? "heart" : "heart-outline"}
+                          size={20}
+                          color={isFavorited ? "#E74C3C" : "#8C93A4"}
+                        />
+                      </Pressable>
+                    </View>
+                    <Text style={styles.subject}>{session.subject}</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: `${STATUS_COLORS[session.status]}20` }]}>
+                    <Text style={[styles.statusText, { color: STATUS_COLORS[session.status] ?? "#5D667C" }]}>
+                      {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="time-outline" size={14} color="#8C93A4" />
-                  <Text style={styles.detailText}>{formatDuration(session.scheduled_start, session.scheduled_end)}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="card-outline" size={14} color="#8C93A4" />
-                  <Text style={styles.detailText}>{formatCost(session.cost_cents)}</Text>
-                </View>
-              </View>
 
-              {session.notes ? (
-                <Text style={styles.notes} numberOfLines={2}>{session.notes}</Text>
-              ) : null}
-            </View>
-          ))}
+                <View style={styles.sessionDetails}>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="calendar-outline" size={14} color="#8C93A4" />
+                    <Text style={styles.detailText}>{formatDate(session.scheduled_start)}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="time-outline" size={14} color="#8C93A4" />
+                    <Text style={styles.detailText}>{formatDuration(session.scheduled_start, session.scheduled_end)}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="card-outline" size={14} color="#8C93A4" />
+                    <Text style={styles.detailText}>{formatCost(session.cost_cents)}</Text>
+                  </View>
+                </View>
+
+                {session.notes ? (
+                  <Text style={styles.notes} numberOfLines={2}>{session.notes}</Text>
+                ) : null}
+
+                {showTutorNotesSection && (
+                  <Pressable
+                    style={styles.tutorNotesSection}
+                    onPress={() => tutorNote && toggleNoteExpanded(session.id)}
+                  >
+                    <View style={styles.tutorNotesHeader}>
+                      <Ionicons name="document-text-outline" size={14} color={BLUE} />
+                      <Text style={styles.tutorNotesLabel}>Notes from your tutor</Text>
+                      {tutorNote ? (
+                        <Ionicons
+                          name={isExpanded ? "chevron-up" : "chevron-down"}
+                          size={14}
+                          color="#8C93A4"
+                        />
+                      ) : null}
+                    </View>
+                    {tutorNote ? (
+                      <Text style={styles.tutorNotesContent} numberOfLines={isExpanded ? undefined : 3}>
+                        {tutorNote.content}
+                      </Text>
+                    ) : (
+                      <Text style={styles.tutorNotesEmpty}>
+                        Your tutor hasn't added notes for this session yet.
+                      </Text>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
         </ScrollView>
       )}
     </View>
@@ -352,7 +491,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sessionInfo: { flex: 1 },
+  tutorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   tutorName: { fontSize: 16, fontWeight: "700", color: NAVY },
+  favBtn: { padding: 2 },
   subject: { fontSize: 14, color: BLUE, marginTop: 2 },
   statusBadge: {
     paddingHorizontal: 10,
@@ -364,4 +509,19 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   detailText: { fontSize: 13, color: "#5D667C" },
   notes: { marginTop: 10, fontSize: 13, color: "#8C93A4", fontStyle: "italic" },
+  tutorNotesSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E8EBF0",
+  },
+  tutorNotesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  tutorNotesLabel: { fontSize: 12, fontWeight: "700", color: BLUE, flex: 1 },
+  tutorNotesContent: { fontSize: 13, color: "#374151", lineHeight: 19 },
+  tutorNotesEmpty: { fontSize: 13, color: "#8C93A4", fontStyle: "italic" },
 });

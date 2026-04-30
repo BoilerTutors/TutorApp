@@ -221,9 +221,6 @@ export default function TutorRegistrationScreen() {
     try {
       console.log("Starting registration...");
       
-      // For demo: Skip API call and show success
-      // TODO: Re-enable when backend is ready
-      /*
       const userData: UserCreate = {
         email: email.toLowerCase().trim(),
         first_name: firstName.trim(),
@@ -237,14 +234,15 @@ export default function TutorRegistrationScreen() {
           grad_year: gradYear ? parseInt(gradYear) : undefined,
           hourly_rate_cents: hourlyRate ? Math.round(parseFloat(hourlyRate) * 100) : undefined,
         },
+        student_profile: {
+          major: major.trim() || undefined,
+          grad_year: gradYear ? parseInt(gradYear) : undefined,
+        },
+        
       };
-  
+
       await register(userData);
       await login({ email: userData.email, password: password });
-      */
-      
-      // Simulate success for demo
-      await new Promise(resolve => setTimeout(resolve, 500));
       
       setIsSubmitted(true);
       

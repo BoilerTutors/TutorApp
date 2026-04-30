@@ -265,7 +265,7 @@ export default function StudentRegistrationScreen() {
       first_name: firstName,
       last_name: lastName,
       password,
-      is_tutor: false,
+      is_tutor: true,
       is_student: true,
       student_profile: {
         bio: bio.trim() || undefined,
