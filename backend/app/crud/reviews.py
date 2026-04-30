@@ -10,8 +10,8 @@
 """
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import Review, TutoringSession
 from app.schemas import ReviewCreate, ReviewUpdate
@@ -53,7 +53,9 @@ def create_review(db: Session, student_id: int, data: ReviewCreate) -> Review:
 
 def get_review_by_id(db: Session, review_id: int) -> Optional[Review]:
     """Get a single review by ID."""
-    return db.get(Review, review_id)
+    return db.execute(
+        select(Review).where(Review.id == review_id).options(selectinload(Review.session))
+    ).scalar_one_or_none()
 
 
 def get_review_by_session_id(db: Session, session_id: int) -> Optional[Review]:
@@ -69,6 +71,7 @@ def get_reviews_by_tutor(db: Session, tutor_user_id: int) -> list[Review]:
         select(Review)
         .join(TutoringSession, Review.session_id == TutoringSession.id)
         .where(TutoringSession.tutor_id == tutor_user_id)
+        .options(selectinload(Review.session))
         .order_by(Review.created_at.desc())
     )
     return list(db.execute(stmt).scalars().all())
@@ -80,6 +83,7 @@ def get_reviews_by_student(db: Session, student_user_id: int) -> list[Review]:
         select(Review)
         .join(TutoringSession, Review.session_id == TutoringSession.id)
         .where(TutoringSession.student_id == student_user_id)
+        .options(selectinload(Review.session))
         .order_by(Review.created_at.desc())
     )
     return list(db.execute(stmt).scalars().all())
@@ -103,3 +107,39 @@ def delete_review(db: Session, review: Review) -> None:
     """Delete a review."""
     db.delete(review)
     db.commit()
+
+
+def flag_review_by_tutor(db: Session, review: Review, tutor_user_id: int, reason: str) -> Review:
+    """Mark a review as flagged by the tutor who received it."""
+    if review.session.tutor_id != tutor_user_id:
+        raise ValueError("Only the reviewed tutor can flag this review")
+    if review.is_flagged:
+        raise ValueError("Review has already been flagged")
+    review.is_flagged = True
+    review.flag_reason = reason
+    db.commit()
+    db.refresh(review)
+    return review
+
+
+def get_flagged_reviews_for_admin(db: Session) -> list[Review]:
+    """All reviews currently flagged for moderation."""
+    stmt = (
+        select(Review)
+        .where(Review.is_flagged.is_(True))
+        .order_by(Review.created_at.desc())
+        .options(
+            selectinload(Review.session).selectinload(TutoringSession.student),
+            selectinload(Review.session).selectinload(TutoringSession.tutor),
+        )
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def admin_clear_review_flag(db: Session, review: Review) -> Review:
+    """Admin dismisses flag; review stays published."""
+    review.is_flagged = False
+    review.flag_reason = None
+    db.commit()
+    db.refresh(review)
+    return review

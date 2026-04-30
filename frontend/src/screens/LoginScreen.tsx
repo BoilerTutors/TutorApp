@@ -21,6 +21,7 @@ import { LoginResponse } from "../types/models";
 type Role = "tutor" | "student";
 type RootStackParamList = {
   Login: undefined;
+  "Admin Login": undefined;
   "Student Dashboard": undefined;
   "Tutor Dashboard": undefined;
   "Tutor Registration": {
@@ -76,7 +77,8 @@ export default function LoginScreen() {
     try {
       const data = await api.post<LoginResponse>(
         "/auth/login",
-        { email: email.trim().toLowerCase(), password }
+        { email: email.trim().toLowerCase(), password },
+        { skipAuth: true }
       );
       if (!data) {
         setLoginError("Unexpected response from server.");
@@ -132,7 +134,11 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const data = await api.post<LoginResponse>("/auth/verify-mfa", { email: email.trim().toLowerCase(), code: mfaCode.trim() });
+      const data = await api.post<LoginResponse>(
+        "/auth/verify-mfa",
+        { email: email.trim().toLowerCase(), code: mfaCode.trim() },
+        { skipAuth: true }
+      );
       if (!data) {
         setLoginError("Unexpected response from server.");
         return;
@@ -340,6 +346,15 @@ export default function LoginScreen() {
             <Text style={styles.loginText}>{isSignUp ? "SIGN UP" : "LOGIN"}</Text>
           )}
         </TouchableOpacity>
+
+        {!isSignUp ? (
+          <Text style={[styles.helperText, styles.adminLinkBelowLogin]}>
+            Staff admin?{" "}
+            <Text style={styles.link} onPress={() => navigation.navigate("Admin Login")}>
+              Sign in as administrator
+            </Text>
+          </Text>
+        ) : null}
       </View>
     </View>
     </>
@@ -482,6 +497,9 @@ const styles = StyleSheet.create({
     color: "#555F75",
     fontSize: 13,
     marginBottom: 4
+  },
+  adminLinkBelowLogin: {
+    marginTop: 14,
   },
   link: {
     color: "#3F6FB4",

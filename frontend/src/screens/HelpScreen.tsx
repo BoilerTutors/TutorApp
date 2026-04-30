@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-  LayoutAnimation,
-  Platform,
   UIManager,
+  View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { api } from "../api/client";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -55,21 +58,171 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
+type MeRole = "student" | "tutor" | null;
+
+type MatchedPeer = {
+  id: number;
+  first_name: string;
+  last_name: string;
+};
+
+type MatchRowStudent = {
+  tutor_id: number;
+  tutor_first_name: string;
+  tutor_last_name: string;
+};
+
+type MatchRowTutor = {
+  student_id: number;
+  student_first_name: string;
+  student_last_name: string;
+};
+
 export default function HelpScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [contactMessage, setContactMessage] = useState("");
+  const [meRole, setMeRole] = useState<MeRole>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [peers, setPeers] = useState<MatchedPeer[]>([]);
+  const [selectedPeerId, setSelectedPeerId] = useState<number | null>(null);
+  const [refundRequested, setRefundRequested] = useState(false);
+  const [contactMessage, setContactMessage] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
+  const trimmedMessage = contactMessage.trim();
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPeersForRole = async () => {
+      try {
+        setLoading(true);
+        const me = await api.get<{ is_tutor: boolean; is_student: boolean }>("/users/me");
+        if (!mounted) return;
+
+        if (me.is_tutor) {
+          setMeRole("tutor");
+          const rows = await api.get<MatchRowTutor[]>("/matches/tutor/me");
+          if (!mounted) return;
+          const mapped: MatchedPeer[] = (rows ?? []).map((r) => ({
+            id: r.student_id,
+            first_name: r.student_first_name,
+            last_name: r.student_last_name,
+          }));
+          setPeers(mapped);
+          setSelectedPeerId(mapped[0]?.id ?? null);
+        } else if (me.is_student) {
+          setMeRole("student");
+          const rows = await api.get<MatchRowStudent[]>("/matches/me");
+          if (!mounted) return;
+          const mapped: MatchedPeer[] = (rows ?? []).map((r) => ({
+            id: r.tutor_id,
+            first_name: r.tutor_first_name,
+            last_name: r.tutor_last_name,
+          }));
+          setPeers(mapped);
+          setSelectedPeerId(mapped[0]?.id ?? null);
+        } else {
+          setMeRole(null);
+          setPeers([]);
+          setSelectedPeerId(null);
+        }
+      } catch (e) {
+        if (!mounted) return;
+        Alert.alert(
+          "Error",
+          e instanceof Error ? e.message : "Failed to load matches for contacting admin."
+        );
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+    void loadPeersForRole();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectedPeerLabel = useMemo(() => {
+    const selected = peers.find((p) => p.id === selectedPeerId);
+    if (!selected) return meRole === "tutor" ? "No student selected" : "No tutor selected";
+    return `${selected.first_name} ${selected.last_name}`;
+  }, [peers, selectedPeerId, meRole]);
 
   const toggleFaq = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  const handleSubmit = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setSubmitted(true);
-    setContactMessage("");
+  const handleSubmit = async () => {
+    if (meRole !== "student" && meRole !== "tutor") {
+      Alert.alert("Unavailable", "This contact form is only for student or tutor accounts.");
+      return;
+    }
+    if (selectedPeerId == null) {
+      Alert.alert(
+        meRole === "tutor" ? "Student required" : "Tutor required",
+        meRole === "tutor"
+          ? "Please select a matched student."
+          : "Please select a matched tutor."
+      );
+      return;
+    }
+    if (!trimmedMessage) {
+      Alert.alert("Message required", "Please enter your message to admin.");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      if (meRole === "student") {
+        await api.post("/admin-messages/", {
+          tutor_id: selectedPeerId,
+          message: trimmedMessage,
+          refund_requested: refundRequested,
+        });
+      } else {
+        await api.post("/admin-messages/", {
+          student_id: selectedPeerId,
+          message: trimmedMessage,
+          refund_requested: refundRequested,
+        });
+      }
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setSubmitted(true);
+      setContactMessage("");
+      setRefundRequested(false);
+      if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert("You have successfully contacted the admin team.");
+      } else {
+        Alert.alert("Success", "You have successfully contacted the admin team.");
+      }
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to submit admin message.");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const selectLabel = meRole === "tutor" ? "Select Student" : "Select Tutor";
+  const contactIntro =
+    meRole === "tutor"
+      ? "Select a student, optionally request a refund, and describe your issue below."
+      : "Select a tutor, optionally request a refund, and describe your issue below.";
+  const loadingPeersLabel =
+    meRole === "tutor" ? "Loading matched students..." : "Loading matched tutors...";
+  const emptyPeersLabel =
+    meRole === "tutor"
+      ? "You need an active matched student to submit this form."
+      : "You need an active matched tutor to submit this form.";
+  const selectedHintPrefix = meRole === "tutor" ? "Selected student" : "Selected tutor";
+
+  const formDisabled =
+    meRole == null ||
+    loading ||
+    peers.length === 0 ||
+    selectedPeerId == null ||
+    !trimmedMessage ||
+    submitting;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -102,10 +255,51 @@ export default function HelpScreen() {
         Contact an Administrator
       </Text>
       <View style={styles.contactCard}>
-        <Text style={styles.contactLabel}>
-          Describe your question or issue below. An administrator will respond as
-          soon as possible.
-        </Text>
+        <Text style={styles.contactLabel}>{contactIntro}</Text>
+        <Text style={styles.contactFieldLabel}>{selectLabel}</Text>
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color={NAVY} />
+            <Text style={styles.helperText}>{loadingPeersLabel}</Text>
+          </View>
+        ) : meRole == null ? (
+          <Text style={styles.helperText}>Contacting admin from this screen requires a student or tutor account.</Text>
+        ) : peers.length === 0 ? (
+          <Text style={styles.helperText}>{emptyPeersLabel}</Text>
+        ) : (
+          peers.map((peer) => {
+            const isSelected = selectedPeerId === peer.id;
+            return (
+              <Pressable
+                key={peer.id}
+                style={[styles.peerRow, isSelected && styles.peerRowSelected]}
+                onPress={() => setSelectedPeerId(peer.id)}
+              >
+                <Text style={[styles.peerName, isSelected && styles.peerNameSelected]}>
+                  {peer.first_name} {peer.last_name}
+                </Text>
+                {isSelected ? <Ionicons name="checkmark-circle" size={18} color="#2E57A2" /> : null}
+              </Pressable>
+            );
+          })
+        )}
+        <Pressable
+          style={[styles.refundRow, refundRequested && styles.refundRowActive]}
+          onPress={() => setRefundRequested((prev) => !prev)}
+        >
+          <View style={styles.refundTextWrap}>
+            <Text style={styles.refundTitle}>Refund Option</Text>
+            <Text style={styles.refundSubtitle}>
+              Toggle this if this admin message is requesting a refund.
+            </Text>
+          </View>
+          <Ionicons
+            name={refundRequested ? "checkbox" : "square-outline"}
+            size={22}
+            color={refundRequested ? "#2E57A2" : "#6B7280"}
+          />
+        </Pressable>
+        <Text style={styles.contactFieldLabel}>Message</Text>
         <TextInput
           style={styles.textInput}
           placeholder="Type your message here..."
@@ -119,12 +313,19 @@ export default function HelpScreen() {
             if (submitted) setSubmitted(false);
           }}
         />
+        <Text style={styles.selectedPeerHint}>
+          {selectedHintPrefix}: {selectedPeerLabel}
+        </Text>
         <Pressable
-          style={[styles.submitButton, !contactMessage.trim() && styles.submitDisabled]}
+          style={[styles.submitButton, formDisabled && styles.submitDisabled]}
           onPress={handleSubmit}
-          disabled={!contactMessage.trim()}
+          disabled={formDisabled}
         >
-          <Text style={styles.submitButtonText}>Submit</Text>
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.submitButtonText}>Send to Admin</Text>
+          )}
         </Pressable>
         {submitted && (
           <Text style={styles.submitSuccess}>
@@ -209,6 +410,7 @@ const styles = StyleSheet.create({
     color: NAVY,
     minHeight: 120,
     backgroundColor: "#F9FAFB",
+    marginTop: 8,
   },
   submitButton: {
     backgroundColor: NAVY,
@@ -230,5 +432,82 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#059669",
     textAlign: "center",
+  },
+  contactFieldLabel: {
+    marginTop: 8,
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "700",
+    color: NAVY,
+  },
+  loadingWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  helperText: {
+    color: "#6B7280",
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  peerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    backgroundColor: "#FFFFFF",
+  },
+  peerRowSelected: {
+    borderColor: "#2E57A2",
+    backgroundColor: "#EEF3FF",
+  },
+  peerName: {
+    fontSize: 14,
+    color: "#374151",
+  },
+  peerNameSelected: {
+    color: "#1B2D50",
+    fontWeight: "700",
+  },
+  refundRow: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  refundRowActive: {
+    borderColor: "#2E57A2",
+    backgroundColor: "#EEF3FF",
+  },
+  refundTextWrap: {
+    flex: 1,
+  },
+  refundTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1B2D50",
+  },
+  refundSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  selectedPeerHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#6B7280",
   },
 });

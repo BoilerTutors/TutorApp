@@ -5,13 +5,14 @@ from app.auth import get_current_user
 from app.crud.matches import (
     add_match_to_latest_run,
     get_active_matches_for_student,
+    get_active_matches_for_tutor,
     has_student_matched_tutor,
     unmatch_student_tutor_pair,
 )
 from app.database import get_db
 from app.crud.sessions import tutor_weekly_cap_reached as tutor_weekly_cap_reached_crud
 from app.models import Class, TutorClass, TutorProfile, User
-from app.schemas import MatchResultPublic, MatchSelectRequest, MatchUnmatchRequest
+from app.schemas import MatchedStudentPublic, MatchResultPublic, MatchSelectRequest, MatchUnmatchRequest
 from app.services.embeddings import knn_retrieve_candidates, rerank_candidates
 from app.services.notification_events import build_and_store_notification, emit_notification
 
@@ -232,6 +233,37 @@ def get_my_matches(
             detail="Only student accounts can view tutor matches.",
         )
     return _build_saved_match_payload(db, current_user.id)
+
+
+@router.get("/tutor/me", response_model=list[MatchedStudentPublic])
+def get_my_matched_students(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[MatchedStudentPublic]:
+    if not current_user.is_tutor or current_user.tutor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only tutor accounts can view matched students.",
+        )
+    active = get_active_matches_for_tutor(db, tutor_id=current_user.id)
+    if not active:
+        return []
+
+    student_ids = [m.student_id for m in active]
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(student_ids)).all()}
+    response: list[MatchedStudentPublic] = []
+    for m in active:
+        su = users_by_id.get(m.student_id)
+        if su is None:
+            continue
+        response.append(
+            MatchedStudentPublic(
+                student_id=m.student_id,
+                student_first_name=su.first_name or "",
+                student_last_name=su.last_name or "",
+            )
+        )
+    return response
 
 
 @router.post("/unmatch", status_code=status.HTTP_204_NO_CONTENT)

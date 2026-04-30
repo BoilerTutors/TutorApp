@@ -27,39 +27,85 @@ def upgrade() -> None:
     sa.Column('hashed_password', sa.String(length=255), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_admins_email'), 'admins', ['email'], unique=True)
-    op.create_index(op.f('ix_admins_id'), 'admins', ['id'], unique=False)
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_admins_email ON admins (email);"
+    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admins_id ON admins (id);")
     op.alter_column('classes', 'subject',
                existing_type=sa.VARCHAR(length=255),
                type_=sa.String(length=20),
                existing_nullable=False)
-    op.create_unique_constraint('uq_class_identity', 'classes', ['subject', 'class_number', 'professor'])
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'uq_class_identity'
+            ) THEN
+                ALTER TABLE classes
+                ADD CONSTRAINT uq_class_identity
+                UNIQUE (subject, class_number, professor);
+            END IF;
+        END $$;
+        """
+    )
     op.alter_column('match_runs', 'weights_json',
                existing_type=postgresql.JSONB(astext_type=sa.Text()),
                type_=sa.JSON(),
                existing_nullable=True)
-    op.drop_index(op.f('ix_match_runs_student_created'), table_name='match_runs')
-    op.create_index(op.f('ix_match_runs_id'), 'match_runs', ['id'], unique=False)
-    op.create_index(op.f('ix_match_runs_student_id'), 'match_runs', ['student_id'], unique=False)
-    op.drop_index(op.f('ix_matches_run_rank'), table_name='matches')
-    op.drop_index(op.f('ix_matches_student_score'), table_name='matches')
-    op.create_index(op.f('ix_matches_id'), 'matches', ['id'], unique=False)
-    op.create_index(op.f('ix_matches_run_id'), 'matches', ['run_id'], unique=False)
-    op.create_index(op.f('ix_matches_student_id'), 'matches', ['student_id'], unique=False)
-    op.create_index(op.f('ix_matches_tutor_id'), 'matches', ['tutor_id'], unique=False)
+    op.execute("DROP INDEX IF EXISTS ix_match_runs_student_created;")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_match_runs_id ON match_runs (id);")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_match_runs_student_id ON match_runs (student_id);"
+    )
+    op.execute("DROP INDEX IF EXISTS ix_matches_run_rank;")
+    op.execute("DROP INDEX IF EXISTS ix_matches_student_score;")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_matches_id ON matches (id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_matches_run_id ON matches (run_id);")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_matches_student_id ON matches (student_id);"
+    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_matches_tutor_id ON matches (tutor_id);")
     op.alter_column('notifications', 'payload_json',
                existing_type=postgresql.JSONB(astext_type=sa.Text()),
                type_=sa.JSON(),
                existing_nullable=True)
-    op.drop_index(op.f('ix_notifications_user_created'), table_name='notifications')
-    op.drop_index(op.f('ix_notifications_user_unread'), table_name='notifications')
-    op.create_index(op.f('ix_notifications_id'), 'notifications', ['id'], unique=False)
-    op.create_index(op.f('ix_notifications_user_id'), 'notifications', ['user_id'], unique=False)
-    op.drop_index(op.f('ix_user_embeddings_entity_field'), table_name='user_embeddings')
-    op.drop_constraint(op.f('user_embeddings_user_id_entity_type_field_name_model_name_key'), 'user_embeddings', type_='unique')
-    op.create_index(op.f('ix_user_embeddings_id'), 'user_embeddings', ['id'], unique=False)
-    op.create_unique_constraint('uq_user_embedding_slot', 'user_embeddings', ['user_id', 'entity_type', 'field_name', 'model_name'])
-    op.create_index(op.f('ix_user_notification_settings_user_id'), 'user_notification_settings', ['user_id'], unique=False)
+    op.execute("DROP INDEX IF EXISTS ix_notifications_user_created;")
+    op.execute("DROP INDEX IF EXISTS ix_notifications_user_unread;")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_notifications_id ON notifications (id);")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications (user_id);"
+    )
+    op.execute("DROP INDEX IF EXISTS ix_user_embeddings_entity_field;")
+    op.execute(
+        """
+        ALTER TABLE user_embeddings
+        DROP CONSTRAINT IF EXISTS user_embeddings_user_id_entity_type_field_name_model_name_key;
+        """
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_user_embeddings_id ON user_embeddings (id);"
+    )
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_embedding_slot'
+            ) THEN
+                ALTER TABLE user_embeddings
+                ADD CONSTRAINT uq_user_embedding_slot
+                UNIQUE (user_id, entity_type, field_name, model_name);
+            END IF;
+        END $$;
+        """
+    )
+    op.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_user_notification_settings_user_id
+        ON user_notification_settings (user_id);
+        """
+    )
     # ### end Alembic commands ###
 
 
@@ -92,7 +138,7 @@ def downgrade() -> None:
                existing_type=sa.JSON(),
                type_=postgresql.JSONB(astext_type=sa.Text()),
                existing_nullable=True)
-    op.drop_constraint('uq_class_identity', 'classes', type_='unique')
+    op.execute("ALTER TABLE classes DROP CONSTRAINT IF EXISTS uq_class_identity;")
     op.alter_column('classes', 'subject',
                existing_type=sa.String(length=20),
                type_=sa.VARCHAR(length=255),

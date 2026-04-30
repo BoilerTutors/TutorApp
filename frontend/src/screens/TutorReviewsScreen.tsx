@@ -40,6 +40,8 @@ type ReviewPublic = {
   rating: number;
   comment: string | null;
   is_anonymous: boolean;
+  is_flagged?: boolean;
+  flag_reason?: string | null;
   created_at: string;
 };
 
@@ -101,7 +103,7 @@ export default function TutorReviewsScreen() {
         comment: r.comment ?? "",
         date: r.created_at,
         isAnonymous: r.is_anonymous,
-        isFlagged: false,
+        isFlagged: Boolean(r.is_flagged),
       }));
       setReviews(mapped);
     } catch {
@@ -168,19 +170,32 @@ export default function TutorReviewsScreen() {
       return;
     }
 
+    if (!flaggingReview) {
+      setIsSubmittingFlag(false);
+      return;
+    }
+
     setIsSubmittingFlag(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Mark review as flagged
-    setReviews(reviews.map(r => 
-      r.id === flaggingReview?.id ? { ...r, isFlagged: true } : r
-    ));
-    
-    setIsSubmittingFlag(false);
-    setShowFlagModal(false);
-    showAlert("Flagged", "This review has been flagged for admin review. Thank you for your feedback.");
+    try {
+      await api.post<ReviewPublic>(`/reviews/${flaggingReview.id}/flag`, {
+        reason: flagReason.trim(),
+      });
+      setReviews((prev) =>
+        prev.map((r) => (r.id === flaggingReview.id ? { ...r, isFlagged: true } : r))
+      );
+      setShowFlagModal(false);
+      setFlaggingReview(null);
+      setFlagReason("");
+      showAlert(
+        "Flagged",
+        "This review has been flagged for admin review. Thank you for your feedback."
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not submit flag. Please try again.";
+      showAlert("Error", msg);
+    } finally {
+      setIsSubmittingFlag(false);
+    }
   };
 
   const renderStars = (rating: number, size: number = 16) => {

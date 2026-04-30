@@ -18,18 +18,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    """Upgrade schema.
+
+    Drop the old check constraint before renaming confirmed → accepted;
+    otherwise PostgreSQL rejects rows that violate the constraint during UPDATE.
+    """
+    op.execute(
+        """
+        ALTER TABLE tutoring_sessions
+        DROP CONSTRAINT IF EXISTS ck_session_status;
+        """
+    )
     op.execute(
         """
         UPDATE tutoring_sessions
         SET status = 'accepted'
         WHERE status = 'confirmed';
-        """
-    )
-    op.execute(
-        """
-        ALTER TABLE tutoring_sessions
-        DROP CONSTRAINT IF EXISTS ck_session_status;
         """
     )
     op.execute(
@@ -45,15 +49,22 @@ def downgrade() -> None:
     """Downgrade schema."""
     op.execute(
         """
-        UPDATE tutoring_sessions
-        SET status = 'pending'
-        WHERE status IN ('accepted', 'declined');
+        ALTER TABLE tutoring_sessions
+        DROP CONSTRAINT IF EXISTS ck_session_status;
         """
     )
     op.execute(
         """
-        ALTER TABLE tutoring_sessions
-        DROP CONSTRAINT IF EXISTS ck_session_status;
+        UPDATE tutoring_sessions
+        SET status = 'confirmed'
+        WHERE status = 'accepted';
+        """
+    )
+    op.execute(
+        """
+        UPDATE tutoring_sessions
+        SET status = 'pending'
+        WHERE status = 'declined';
         """
     )
     op.execute(

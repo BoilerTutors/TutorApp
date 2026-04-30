@@ -1,7 +1,11 @@
 import { API_BASE_URL } from "../config";
 import { clearToken } from "../auth/storage";
 
-type RequestInitWithBody = Omit<RequestInit, "body"> & { body?: unknown };
+type RequestInitWithBody = Omit<RequestInit, "body"> & {
+  body?: unknown;
+  /** Omit Authorization so login/signup work even if a stale token is in memory. */
+  skipAuth?: boolean;
+};
 
 /** Called when a request returns 401 (after clearing token). Use to show a message and navigate to Login. */
 let onUnauthorized: (() => void) | null = null;
@@ -41,7 +45,7 @@ function headers(init?: RequestInitWithBody): HeadersInit {
     "Content-Type": "application/json",
     ...((init?.headers as Record<string, string>) ?? {}),
   };
-  if (authToken) {
+  if (authToken && !init?.skipAuth) {
     h["Authorization"] = `Bearer ${authToken}`;
   }
   return h;
@@ -88,20 +92,28 @@ async function request<T>(
   }
   if (!res.ok) {
     if (res.status === 401) {
-      // Had a token → session expired: clear and notify so app can redirect to Login.
-      if (authToken) {
+      const skipAuth = Boolean(init.skipAuth);
+      // Authenticated call lost authorization (expired / revoked).
+      if (authToken && !skipAuth) {
         authToken = null;
         await clearToken();
         onUnauthorized?.();
         throw new Error("Your session has expired. Please sign in again.");
       }
-      // No token (e.g. wrong login credentials): show message on the login screen.
-      const text401 = await res.json();
-      const detail = text401.detail;
+      // Login / register style: no Bearer sent, or skipAuth — treat as credential error.
+      let detail: unknown;
+      try {
+        const parsed = (await res.json()) as { detail?: unknown };
+        detail = parsed?.detail;
+      } catch {
+        detail = undefined;
+      }
       if (detail === "Incorrect MFA code") {
+        throw new Error(String(detail));
+      }
+      if (typeof detail === "string" && detail.trim()) {
         throw new Error(detail);
       }
-
       throw new Error("Invalid email or password.");
     }
     const text = await res.text();

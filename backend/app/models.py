@@ -442,6 +442,8 @@ class Review(Base):
     rating: Mapped[float] = mapped_column(Float, nullable=False)  # 1.0 - 5.0
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    flag_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

@@ -413,8 +413,33 @@ class ReviewPublic(BaseModel):
     rating: float
     comment: Optional[str] = None
     is_anonymous: bool
+    is_flagged: bool = False
+    flag_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class ReviewFlagCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=4000)
+
+
+class ReviewFlaggedAdmin(BaseModel):
+    """Flagged review row for admin moderation (full context)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: int
+    subject: str
+    rating: float
+    comment: Optional[str] = None
+    is_anonymous: bool
+    is_flagged: bool
+    flag_reason: Optional[str] = None
+    created_at: datetime
+    tutor_name: str
+    student_display: str
+
 
 # ===========================================================
 # ---- Class schemas ----
@@ -587,6 +612,12 @@ class MatchResultPublic(BaseModel):
     tutor_weekly_cap_reached: bool = False
 
 
+class MatchedStudentPublic(BaseModel):
+    student_id: int
+    student_first_name: str
+    student_last_name: str
+
+
 class MatchSelectRequest(BaseModel):
     tutor_id: int
     class_id: Optional[int] = None
@@ -677,7 +708,8 @@ class TutoringSessionStudentPublic(BaseModel):
 
 
 class AdminMessageCreate(BaseModel):
-    tutor_id: int
+    tutor_id: Optional[int] = None
+    student_id: Optional[int] = None
     message: str = Field(min_length=1, max_length=4000)
     refund_requested: bool = False
 

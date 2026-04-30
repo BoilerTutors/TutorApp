@@ -256,6 +256,8 @@ CREATE TABLE public.reviews (
     rating double precision NOT NULL,
     comment text,
     is_anonymous boolean NOT NULL,
+    is_flagged boolean DEFAULT false NOT NULL,
+    flag_reason text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT ck_review_rating_range CHECK (((rating >= (1.0)::double precision) AND (rating <= (5.0)::double precision)))
