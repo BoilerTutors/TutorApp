@@ -8,11 +8,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin, get_current_user
-from app.crud.admin_messages import create_admin_message, list_admin_messages
+from app.crud.admin_messages import (
+    create_admin_message,
+    list_admin_messages,
+    list_admin_messages_for_user,
+    set_admin_message_response,
+)
 from app.crud.matches import has_student_matched_tutor
 from app.database import get_db
-from app.models import Admin, User
-from app.schemas import AdminMessageCreate, AdminMessagePublic
+from app.models import Admin, AdminMessage, User
+from app.schemas import (
+    AdminMessageAdminPublic,
+    AdminMessageCreate,
+    AdminMessagePublic,
+    AdminMessageRespondRequest,
+)
 
 router = APIRouter()
 
@@ -119,3 +129,69 @@ def get_admin_messages(
     _ = current_admin
     rows = list_admin_messages(db, limit=limit)
     return [AdminMessagePublic.model_validate(row) for row in rows]
+
+
+@router.get("/me", response_model=list[AdminMessagePublic])
+def get_my_admin_messages(
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AdminMessagePublic]:
+    rows = list_admin_messages_for_user(db, user_id=current_user.id, limit=limit)
+    return [AdminMessagePublic.model_validate(row) for row in rows]
+
+
+@router.get("/admin/all", response_model=list[AdminMessageAdminPublic])
+def get_admin_messages_for_admin(
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+) -> list[AdminMessageAdminPublic]:
+    _ = current_admin
+    rows = list_admin_messages(db, limit=limit)
+    payload: list[AdminMessageAdminPublic] = []
+    for row in rows:
+        student = db.get(User, row.student_id)
+        tutor = db.get(User, row.tutor_id)
+        student_name = (
+            f"{student.first_name} {student.last_name}".strip() if student else f"User #{row.student_id}"
+        )
+        tutor_name = (
+            f"{tutor.first_name} {tutor.last_name}".strip() if tutor else f"User #{row.tutor_id}"
+        )
+        payload.append(
+            AdminMessageAdminPublic(
+                id=row.id,
+                student_id=row.student_id,
+                tutor_id=row.tutor_id,
+                message=row.message,
+                refund_requested=row.refund_requested,
+                created_at=row.created_at,
+                admin_response=row.admin_response,
+                responded_at=row.responded_at,
+                student_name=student_name,
+                tutor_name=tutor_name,
+            )
+        )
+    return payload
+
+
+@router.post("/admin/{message_id}/respond", response_model=AdminMessagePublic)
+def respond_to_admin_message(
+    message_id: int,
+    body: AdminMessageRespondRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+) -> AdminMessagePublic:
+    _ = current_admin
+    target = db.get(AdminMessage, message_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin message not found.")
+    response_message = body.response_message.strip()
+    if not response_message:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Response message cannot be empty.",
+        )
+    updated = set_admin_message_response(db, row=target, response_message=response_message)
+    return AdminMessagePublic.model_validate(updated)

@@ -10,6 +10,7 @@ type RootStackParamList = {
   Profile: { role: "ADMIN" };
   "Admin Sessions": undefined;
   "Admin Flagged Reviews": undefined;
+  "Admin Help Requests": undefined;
 };
 
 type QuickAction = {
@@ -64,6 +65,11 @@ export default function AdminDashboard() {
       label: "See Recent Purchases",
       icon: "card",
       onPress: () => navigation.navigate("Admin Sessions"),
+    },
+    {
+      label: "Help Requests",
+      icon: "chatbubble-ellipses",
+      onPress: () => navigation.navigate("Admin Help Requests"),
     },
   ];
 

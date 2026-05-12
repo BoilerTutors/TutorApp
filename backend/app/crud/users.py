@@ -106,6 +106,7 @@ def create_user(db: Session, data: UserCreate) -> User:
 def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
     """Update user first/last name and optionally tutor/student profile fields."""
     tutor_classes_were_replaced = False
+    student_classes_were_replaced = False
     if data.first_name is not None:
         user.first_name = data.first_name
     if data.last_name is not None:
@@ -191,6 +192,21 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
             user.student.session_mode = s.session_mode
         if "max_hourly_rate_cents" in s.model_fields_set:
             user.student.max_hourly_rate_cents = s.max_hourly_rate_cents
+        if s.classes is not None:
+            for sc in user.student.classes_enrolled:
+                db.delete(sc)
+            db.flush()
+            for sc in s.classes:
+                db.add(
+                    StudentClass(
+                        student_id=user.student.id,
+                        class_id=sc.class_id,
+                        help_level=sc.help_level,
+                        estimated_grade=sc.estimated_grade,
+                    )
+                )
+            student_embedding_needs_refresh = True
+            student_classes_were_replaced = True
         if student_embedding_needs_refresh:
             refresh_student_embeddings(db, user.student)
     db.commit()
@@ -198,6 +214,8 @@ def update_user_profile(db: Session, user: User, data: ProfileUpdate) -> User:
     # expire_on_commit=False: in-memory classes_tutoring can be stale after replace; force reload on read.
     if tutor_classes_were_replaced and user.tutor is not None:
         db.expire(user.tutor, ["classes_tutoring"])
+    if student_classes_were_replaced and user.student is not None:
+        db.expire(user.student, ["classes_enrolled"])
     return user
 
 

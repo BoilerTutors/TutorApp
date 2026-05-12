@@ -258,9 +258,21 @@ class StudentProfileUpdate(BaseModel):
     major: Optional[str] = Field(default=None, max_length=120)
     grad_year: Optional[int] = None
     preferred_locations: Optional[list[str]] = None
+    classes: Optional[list["StudentClassCreate"]] = None
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None  # "online" | "in_person" | "both"
     max_hourly_rate_cents: Optional[int] = Field(default=None, ge=0)
+
+
+class StudentClassWithClassPublic(BaseModel):
+    """StudentClass with course_code from the related Class."""
+    id: int
+    student_id: int
+    class_id: int
+    help_level: int
+    estimated_grade: str
+    course_code: str
+    professor: Optional[str] = None
 
 
 class StudentProfilePublic(BaseModel):
@@ -275,6 +287,45 @@ class StudentProfilePublic(BaseModel):
     help_needed: Optional[list[str]] = None
     session_mode: Optional[str] = None
     max_hourly_rate_cents: Optional[int] = None
+    classes_enrolled: list["StudentClassWithClassPublic"] = []
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def build_classes_enrolled(cls, data: object, handler):
+        """Build classes_enrolled from ORM StudentClass objects with class_ relation."""
+        if hasattr(data, "classes_enrolled") and not isinstance(data, dict):
+            student = data
+            classes_data = []
+            for sc in student.classes_enrolled:
+                c = getattr(sc, "class_", None)
+                course_code = f"{c.subject} {c.class_number}" if c else "Unknown"
+                classes_data.append(
+                    StudentClassWithClassPublic(
+                        id=sc.id,
+                        student_id=sc.student_id,
+                        class_id=sc.class_id,
+                        help_level=sc.help_level,
+                        estimated_grade=sc.estimated_grade,
+                        course_code=course_code,
+                        professor=c.professor if c else None,
+                    )
+                )
+            return handler(
+                {
+                    "id": student.id,
+                    "user_id": student.user_id,
+                    "bio": student.bio,
+                    "major": student.major,
+                    "grad_year": student.grad_year,
+                    "preferred_locations": student.preferred_locations,
+                    "help_needed": student.help_needed,
+                    "session_mode": student.session_mode,
+                    "max_hourly_rate_cents": student.max_hourly_rate_cents,
+                    "classes_enrolled": classes_data,
+                }
+            )
+        return handler(data)
+
 
 
 # ===========================================================
@@ -752,6 +803,17 @@ class AdminMessagePublic(BaseModel):
     message: str
     refund_requested: bool
     created_at: datetime
+    admin_response: Optional[str] = None
+    responded_at: Optional[datetime] = None
+
+
+class AdminMessageRespondRequest(BaseModel):
+    response_message: str = Field(min_length=1, max_length=4000)
+
+
+class AdminMessageAdminPublic(AdminMessagePublic):
+    student_name: str
+    tutor_name: str
  
 class ReportCreate(BaseModel):
     tutor_id: int

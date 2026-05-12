@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,7 @@ import {
   PURDUE_LOCATIONS,
   HELP_TYPE_OPTIONS,
 } from "../constants/classes";
+import { classesApi, type ClassPublic } from "../services/api";
 
 type TutorClassWithClass = {
   id: number;
@@ -42,6 +43,16 @@ type TutorClassWithClass = {
   professor?: string | null;
 };
 
+type StudentClassWithClass = {
+  id: number;
+  student_id: number;
+  class_id: number;
+  help_level: number;
+  estimated_grade: string;
+  course_code: string;
+  professor?: string | null;
+};
+
 type SelectedClassEdit = {
   id?: number;
   class_id: number;
@@ -52,6 +63,12 @@ type SelectedClassEdit = {
   hasTAed: boolean;
   /** Dollars per hour as typed in the field, e.g. "25" or "25.50" */
   hourlyRate: string;
+};
+
+type ClassOption = {
+  id: number;
+  courseCode: string;
+  title?: string;
 };
 
 type MeResponse = {
@@ -83,6 +100,7 @@ type MeResponse = {
     grad_year: number | null;
     preferred_locations?: string[] | null;
     help_needed?: string[] | null;
+    classes_enrolled?: StudentClassWithClass[] | null;
     session_mode?: string | null;
     max_hourly_rate_cents?: number | null;
   } | null;
@@ -162,13 +180,37 @@ export default function ProfileScreen() {
   /** Dollars per hour, e.g. "25" — stored as max_hourly_rate_cents on save */
   const [editStudentMaxHourly, setEditStudentMaxHourly] = useState("");
   const [editStudentHelpNeeded, setEditStudentHelpNeeded] = useState<string[]>([]);
+  const [editStudentClassIds, setEditStudentClassIds] = useState<number[]>([]);
+  const [showStudentClassPicker, setShowStudentClassPicker] = useState(false);
+  const [studentClassSearchQuery, setStudentClassSearchQuery] = useState("");
+  const [availableClasses, setAvailableClasses] = useState<ClassOption[]>(AVAILABLE_CLASSES_FALLBACK);
 
-  // Same class list as tutor registration (no backend fetch)
-  const availableClasses = AVAILABLE_CLASSES_FALLBACK;
   const currentRole =
     ((route.params as { role?: "STUDENT" | "TUTOR" | "ADMIN" } | undefined)?.role ??
       "STUDENT");
   const isAdminProfile = currentRole === "ADMIN";
+
+  useEffect(() => {
+    const mapFromBackend = (classes: ClassPublic[]): ClassOption[] =>
+      classes.map((c) => ({
+        id: c.id,
+        courseCode: `${c.subject} ${c.class_number}`,
+        title: `Prof. ${c.professor}`,
+      }));
+
+    (async () => {
+      try {
+        const classes = await classesApi.list();
+        if (classes.length > 0) {
+          setAvailableClasses(mapFromBackend(classes));
+          return;
+        }
+      } catch {
+        // keep fallback class catalog for local/dev scenarios
+      }
+      setAvailableClasses(AVAILABLE_CLASSES_FALLBACK);
+    })();
+  }, []);
 
   const loadMe = useCallback(async (opts?: { rethrow?: boolean }) => {
     try {
@@ -261,11 +303,14 @@ export default function ProfileScreen() {
       cents != null && cents >= 0 ? String(cents / 100) : ""
     );
     setEditStudentHelpNeeded(s?.help_needed ?? []);
+    setEditStudentClassIds((s?.classes_enrolled ?? []).map((c) => c.class_id));
     setEditingStudentPrefs(true);
   }, [me?.student]);
 
   const cancelEditingStudentPrefs = useCallback(() => {
     setEditingStudentPrefs(false);
+    setShowStudentClassPicker(false);
+    setStudentClassSearchQuery("");
   }, []);
 
   const toggleStudentLocation = (loc: string) => {
@@ -278,6 +323,16 @@ export default function ProfileScreen() {
     setEditStudentHelpNeeded((prev) =>
       prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]
     );
+  };
+
+  const addStudentClass = (classId: number) => {
+    setEditStudentClassIds((prev) => (prev.includes(classId) ? prev : [...prev, classId]));
+    setShowStudentClassPicker(false);
+    setStudentClassSearchQuery("");
+  };
+
+  const removeStudentClass = (classId: number) => {
+    setEditStudentClassIds((prev) => prev.filter((id) => id !== classId));
   };
 
   const addClass = (c: { id: number; courseCode: string; title?: string }) => {
@@ -461,6 +516,11 @@ export default function ProfileScreen() {
     try {
       await api.patch<MeResponse>("/users/me", {
         student_profile: {
+          classes: editStudentClassIds.map((classId) => ({
+            class_id: classId,
+            help_level: 5,
+            estimated_grade: "NA",
+          })),
           preferred_locations: editStudentLocations,
           session_mode: editStudentSessionMode,
           max_hourly_rate_cents,
@@ -481,6 +541,13 @@ export default function ProfileScreen() {
       !editClasses.some((x) => x.class_id === c.id) &&
       (c.courseCode.toLowerCase().includes(classSearchQuery.toLowerCase()) ||
         (c.title ?? "").toLowerCase().includes(classSearchQuery.toLowerCase()))
+  );
+
+  const filteredAvailableStudentClasses = availableClasses.filter(
+    (c) =>
+      !editStudentClassIds.includes(c.id) &&
+      (c.courseCode.toLowerCase().includes(studentClassSearchQuery.toLowerCase()) ||
+        (c.title ?? "").toLowerCase().includes(studentClassSearchQuery.toLowerCase()))
   );
 
   const handleSave = async () => {
@@ -955,6 +1022,77 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Student preferences</Text>
           {editingStudentPrefs ? (
             <>
+              <Text style={styles.label}>Classes you need help with</Text>
+              <TouchableOpacity
+                style={styles.addClassBtn}
+                onPress={() => setShowStudentClassPicker(true)}
+              >
+                <Ionicons name="add-circle" size={20} color="#2E57A2" />
+                <Text style={styles.addClassText}>Add a class</Text>
+              </TouchableOpacity>
+              {showStudentClassPicker && (
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === "ios" ? "padding" : undefined}
+                  style={styles.classPickerContainer}
+                >
+                  <View style={styles.searchWrap}>
+                    <Ionicons name="search" size={18} color="#8C93A4" />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search classes (e.g., CS 180)"
+                      placeholderTextColor="#B0B6C3"
+                      value={studentClassSearchQuery}
+                      onChangeText={setStudentClassSearchQuery}
+                      autoFocus
+                    />
+                    <TouchableOpacity onPress={() => setShowStudentClassPicker(false)}>
+                      <Ionicons name="close" size={20} color="#8C93A4" />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    style={styles.classListScroll}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator
+                  >
+                    {filteredAvailableStudentClasses.length === 0 ? (
+                      <Text style={styles.classPickerEmpty}>
+                        {studentClassSearchQuery ? "No matching classes" : "No classes available"}
+                      </Text>
+                    ) : (
+                      filteredAvailableStudentClasses.map((c) => (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={styles.classOption}
+                          onPress={() => addStudentClass(c.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.classOptionCode}>{c.courseCode}</Text>
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </ScrollView>
+                </KeyboardAvoidingView>
+              )}
+              {editStudentClassIds.map((classId) => {
+                const classInfo = availableClasses.find((c) => c.id === classId);
+                const enrolledClassInfo = me.student?.classes_enrolled?.find(
+                  (c) => c.class_id === classId
+                );
+                return (
+                  <View key={classId} style={styles.classCard}>
+                    <View style={styles.classCardHeader}>
+                      <Text style={styles.classCardCode}>
+                        {classInfo?.courseCode ?? enrolledClassInfo?.course_code ?? `Class #${classId}`}
+                      </Text>
+                      <Pressable onPress={() => removeStudentClass(classId)}>
+                        <Text style={styles.removeText}>Remove</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+
               <Text style={styles.label}>Session mode</Text>
               <View style={styles.chipRow}>
                 {(["online", "in_person", "both"] as const).map((m) => (
@@ -1060,6 +1198,14 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
+              {(me.student?.classes_enrolled?.length ?? 0) > 0 && (
+                <>
+                  <Text style={styles.label}>Classes you need help with</Text>
+                  <Text style={styles.value}>
+                    {me.student!.classes_enrolled!.map((c) => c.course_code).join(", ")}
+                  </Text>
+                </>
+              )}
               <Text style={styles.label}>Session mode</Text>
               <Text style={styles.value}>
                 {me.student?.session_mode === "both" || !me.student?.session_mode
@@ -1089,6 +1235,7 @@ export default function ProfileScreen() {
                 </>
               )}
               {(me.student?.preferred_locations?.length ?? 0) === 0 &&
+                (me.student?.classes_enrolled?.length ?? 0) === 0 &&
                 me.student?.max_hourly_rate_cents == null &&
                 !me.student?.session_mode &&
                 (me.student?.help_needed?.length ?? 0) === 0 && (

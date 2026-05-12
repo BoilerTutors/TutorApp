@@ -202,10 +202,13 @@ async def select_match(
         ranked_row=selected,
         model_name="local-hash-v1",
         weights_json={
-            "embedding_weight": 0.45,
-            "class_strength_weight": 0.35,
+            "embedding_weight": 0.35,
+            "class_strength_weight": 0.25,
             "availability_weight": 0.10,
             "location_weight": 0.10,
+            "budget_weight": 0.10,
+            "help_type_weight": 0.05,
+            "session_mode_weight": 0.05,
         },
     )
     tutor_user = db.get(User, body.tutor_id)

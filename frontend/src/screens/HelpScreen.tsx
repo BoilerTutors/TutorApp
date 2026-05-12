@@ -78,6 +78,27 @@ type MatchRowTutor = {
   student_last_name: string;
 };
 
+type AdminMessageHistory = {
+  id: number;
+  student_id: number;
+  tutor_id: number;
+  message: string;
+  refund_requested: boolean;
+  created_at: string;
+  admin_response: string | null;
+  responded_at: string | null;
+};
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function HelpScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [meRole, setMeRole] = useState<MeRole>(null);
@@ -88,6 +109,8 @@ export default function HelpScreen() {
   const [refundRequested, setRefundRequested] = useState(false);
   const [contactMessage, setContactMessage] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
+  const [myRequests, setMyRequests] = useState<AdminMessageHistory[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
   const trimmedMessage = contactMessage.trim();
 
   useEffect(() => {
@@ -143,6 +166,22 @@ export default function HelpScreen() {
     };
   }, []);
 
+  const loadMyRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      const rows = await api.get<AdminMessageHistory[]>("/admin-messages/me");
+      setMyRequests(Array.isArray(rows) ? rows : []);
+    } catch {
+      setMyRequests([]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadMyRequests();
+  }, []);
+
   const selectedPeerLabel = useMemo(() => {
     const selected = peers.find((p) => p.id === selectedPeerId);
     if (!selected) return meRole === "tutor" ? "No student selected" : "No tutor selected";
@@ -196,6 +235,7 @@ export default function HelpScreen() {
       } else {
         Alert.alert("Success", "You have successfully contacted the admin team.");
       }
+      await loadMyRequests();
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to submit admin message.");
     } finally {
@@ -332,6 +372,37 @@ export default function HelpScreen() {
             Thank you! Your message has been submitted. We will get back to you
             shortly.
           </Text>
+        )}
+      </View>
+
+      <Text style={[styles.sectionTitle, styles.contactSectionTitle]}>Your Help Requests</Text>
+      <View style={styles.contactCard}>
+        {loadingRequests ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color={NAVY} />
+            <Text style={styles.helperText}>Loading your requests...</Text>
+          </View>
+        ) : myRequests.length === 0 ? (
+          <Text style={styles.helperText}>You have not submitted any help requests yet.</Text>
+        ) : (
+          myRequests.map((row) => (
+            <View key={row.id} style={styles.historyCard}>
+              <Text style={styles.historyMeta}>Sent {formatWhen(row.created_at)}</Text>
+              <Text style={styles.historyBody}>{row.message}</Text>
+              {row.refund_requested ? <Text style={styles.historyRefund}>Refund requested</Text> : null}
+              {row.admin_response ? (
+                <View style={styles.responseBox}>
+                  <Text style={styles.responseLabel}>Admin response</Text>
+                  <Text style={styles.responseBody}>{row.admin_response}</Text>
+                  {row.responded_at ? (
+                    <Text style={styles.historyMeta}>Replied {formatWhen(row.responded_at)}</Text>
+                  ) : null}
+                </View>
+              ) : (
+                <Text style={styles.pendingReply}>Awaiting admin response</Text>
+              )}
+            </View>
+          ))
         )}
       </View>
     </ScrollView>
@@ -509,5 +580,60 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     color: "#6B7280",
+  },
+  historyCard: {
+    borderWidth: 1,
+    borderColor: "#E1E5EE",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: "#FFFFFF",
+  },
+  historyMeta: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  historyBody: {
+    marginTop: 6,
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 20,
+  },
+  historyRefund: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#FEF3C7",
+    color: "#92400E",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  pendingReply: {
+    marginTop: 8,
+    color: "#6B7280",
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+  responseBox: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    padding: 10,
+  },
+  responseLabel: {
+    fontSize: 12,
+    color: "#1D4ED8",
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  responseBody: {
+    fontSize: 14,
+    color: "#1F2937",
+    lineHeight: 20,
+    marginBottom: 4,
   },
 });

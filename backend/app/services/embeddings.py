@@ -229,6 +229,9 @@ class TutorMatchResult(TypedDict):
     class_strength: float
     availability_overlap: float
     location_match: float
+    budget_match: float
+    help_type_match: float
+    session_mode_match: float
 
 
 class TutorCandidateResult(TypedDict):
@@ -282,6 +285,48 @@ def _location_match_score(
         return 0.0
     tutor_set = {loc.strip() for loc in (tutor_locations or []) if loc and loc.strip()}
     return len(student_set.intersection(tutor_set)) / len(student_set)
+
+
+def _help_type_match_score(
+    student_help_needed: Sequence[str] | None,
+    tutor_help_provided: Sequence[str] | None,
+) -> float:
+    student_set = {h.strip().lower() for h in (student_help_needed or []) if h and h.strip()}
+    if not student_set:
+        return 0.5
+    tutor_set = {h.strip().lower() for h in (tutor_help_provided or []) if h and h.strip()}
+    if not tutor_set:
+        return 0.0
+    return len(student_set.intersection(tutor_set)) / len(student_set)
+
+
+def _budget_match_score(
+    student_max_hourly_rate_cents: int | None,
+    tutor_hourly_rate_cents: int | None,
+) -> float:
+    if student_max_hourly_rate_cents is None or tutor_hourly_rate_cents is None:
+        return 0.5
+    if student_max_hourly_rate_cents <= 0:
+        return 0.0
+    if tutor_hourly_rate_cents <= student_max_hourly_rate_cents:
+        return 1.0
+    over_budget = tutor_hourly_rate_cents - student_max_hourly_rate_cents
+    return max(0.0, 1.0 - (over_budget / student_max_hourly_rate_cents))
+
+
+def _normalize_session_mode(mode: str | None) -> str:
+    normalized = (mode or "both").strip().lower()
+    if normalized in {"online", "in_person", "both"}:
+        return normalized
+    return "both"
+
+
+def _session_mode_match_score(student_mode: str | None, tutor_mode: str | None) -> float:
+    student_norm = _normalize_session_mode(student_mode)
+    tutor_norm = _normalize_session_mode(tutor_mode)
+    if student_norm == "both" or tutor_norm == "both":
+        return 1.0
+    return 1.0 if student_norm == tutor_norm else 0.0
 
 
 def knn_retrieve_candidates(
@@ -375,10 +420,13 @@ def rerank_candidates(
     student_id: int,
     candidate_tutor_ids: list[int],
     top_k: int = 10,
-    embedding_weight: float = 0.45,
-    class_strength_weight: float = 0.35,
+    embedding_weight: float = 0.35,
+    class_strength_weight: float = 0.25,
     availability_weight: float = 0.10,
     location_weight: float = 0.10,
+    budget_weight: float = 0.10,
+    help_type_weight: float = 0.05,
+    session_mode_weight: float = 0.05,
     model_name: str = "local-hash-v1",
 ) -> list[TutorMatchResult]:
     if not candidate_tutor_ids:
@@ -452,8 +500,19 @@ def rerank_candidates(
             tutor_slots=tutor_slots_by_user.get(tutor.user_id, []),
         )
         location_match = _location_match_score(student.preferred_locations, tutor.preferred_locations)
+        budget_match = _budget_match_score(student.max_hourly_rate_cents, tutor.hourly_rate_cents)
+        help_type_match = _help_type_match_score(student.help_needed, tutor.help_provided)
+        session_mode_match = _session_mode_match_score(student.session_mode, tutor.session_mode)
 
-        weight_sum = embedding_weight + class_strength_weight + availability_weight + location_weight
+        weight_sum = (
+            embedding_weight
+            + class_strength_weight
+            + availability_weight
+            + location_weight
+            + budget_weight
+            + help_type_weight
+            + session_mode_weight
+        )
         if weight_sum <= 0:
             weight_sum = 1.0
         final_score = (
@@ -461,6 +520,9 @@ def rerank_candidates(
             + (class_strength_weight * class_strength)
             + (availability_weight * availability_overlap)
             + (location_weight * location_match)
+            + (budget_weight * budget_match)
+            + (help_type_weight * help_type_match)
+            + (session_mode_weight * session_mode_match)
         ) / weight_sum
 
         scored.append(
@@ -471,6 +533,9 @@ def rerank_candidates(
                 "class_strength": class_strength,
                 "availability_overlap": availability_overlap,
                 "location_match": location_match,
+                "budget_match": budget_match,
+                "help_type_match": help_type_match,
+                "session_mode_match": session_mode_match,
             }
         )
 
