@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
+from app.database import engine
 
 from app.routers import (
     admin,
@@ -53,6 +56,22 @@ app.include_router(matches.router, prefix="/matches", tags=["matches"])
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(admin_messages.router, prefix="/admin-messages", tags=["admin-messages"])
+
+
+@app.on_event("startup")
+def ensure_reviews_flag_columns() -> None:
+    # Safety net for drifted environments where Alembic history got out of sync.
+    # This is idempotent and safe if columns already exist.
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                ALTER TABLE public.reviews
+                ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN NOT NULL DEFAULT false,
+                ADD COLUMN IF NOT EXISTS flag_reason TEXT NULL
+                """
+            )
+        )
 
 
 @app.get("/")

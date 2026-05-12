@@ -49,6 +49,12 @@ type UserMe = {
   } | null;
 };
 
+type UserActivityLookup = {
+  id: number;
+  active_now?: boolean;
+  last_active_at?: string | null;
+};
+
 type MatchListRow = {
   tutor_id: number;
   tutor_first_name: string;
@@ -126,6 +132,7 @@ export default function MessengerScreen() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isStudentAccount, setIsStudentAccount] = useState(false);
   const [tutorQuickReplies, setTutorQuickReplies] = useState<string[]>([]);
+  const [userActivityById, setUserActivityById] = useState<Record<number, UserActivityLookup>>({});
   const [conversations, setConversations] = useState<
     Array<{
       id: number;
@@ -193,6 +200,33 @@ export default function MessengerScreen() {
     [isStudentAccount, matchedTutors, conversations]
   );
 
+  const formatLastActive = useCallback((activity?: UserActivityLookup): string => {
+    if (!activity) {
+      return "Last active unavailable";
+    }
+    if (activity.active_now) {
+      return "Active now";
+    }
+    if (!activity.last_active_at) {
+      return "Last active unavailable";
+    }
+    const ts = new Date(activity.last_active_at);
+    if (Number.isNaN(ts.getTime())) {
+      return "Last active unavailable";
+    }
+    const eastern = ts.toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZoneName: "short",
+    });
+    return `Last active ${eastern}`;
+  }, []);
+
   const loadSidebarItems = useCallback(async () => {
     const [me, currentSession] = await Promise.all([
       api.get<UserMe>("/users/me"),
@@ -225,6 +259,18 @@ export default function MessengerScreen() {
         }>
       >("/messages/conversations");
       setConversations(convs);
+      const uniqueOtherIds = Array.from(new Set(convs.map((c) => c.other_user_id)));
+      const lookupPairs = await Promise.all(
+        uniqueOtherIds.map(async (uid) => {
+          try {
+            const user = await api.get<UserActivityLookup>(`/users/${uid}`);
+            return [uid, user] as const;
+          } catch {
+            return [uid, { id: uid, active_now: false, last_active_at: null }] as const;
+          }
+        })
+      );
+      setUserActivityById(Object.fromEntries(lookupPairs));
       setMatchedTutors([]);
     } else {
       const rows = await api.get<MatchListRow[]>("/matches/me");
@@ -254,6 +300,18 @@ export default function MessengerScreen() {
           setMatchedTutors(rows);
         }
       }
+      const uniqueTutorIds = Array.from(new Set(rows.map((r) => r.tutor_id)));
+      const lookupPairs = await Promise.all(
+        uniqueTutorIds.map(async (uid) => {
+          try {
+            const user = await api.get<UserActivityLookup>(`/users/${uid}`);
+            return [uid, user] as const;
+          } catch {
+            return [uid, { id: uid, active_now: false, last_active_at: null }] as const;
+          }
+        })
+      );
+      setUserActivityById(Object.fromEntries(lookupPairs));
       setConversations([]);
     }
   }, []);
@@ -889,6 +947,7 @@ export default function MessengerScreen() {
             renderItem={({ item }) => {
               if (item.kind === "match") {
                 const selected = item.tutor_id === selectedTutorUserId;
+                const activityStatus = formatLastActive(userActivityById[item.tutor_id]);
                 return (
                   <View style={[styles.conversationRow, selected && styles.conversationSelected]}>
                     <Pressable
@@ -901,7 +960,7 @@ export default function MessengerScreen() {
                         {item.tutor_first_name} {item.tutor_last_name}
                       </Text>
                       <Text style={styles.conversationSub}>
-                        Similarity {(item.similarity_score * 100).toFixed(1)}%
+                        Similarity {(item.similarity_score * 100).toFixed(1)}% · {activityStatus}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -1007,6 +1066,7 @@ export default function MessengerScreen() {
               const personName = (item.other_user_first_name || item.other_user_last_name)
                 ? `${item.other_user_first_name ?? ""} ${item.other_user_last_name ?? ""}`.trim()
                 : `User ${item.other_user_id}`;
+              const activityStatus = formatLastActive(userActivityById[item.other_user_id]);
               return (
                 <View style={[styles.conversationRow, selected && styles.conversationSelected]}>
                   <Pressable
@@ -1015,7 +1075,9 @@ export default function MessengerScreen() {
                     }}
                   >
                     <Text style={styles.conversationTitle}>{personName}</Text>
-                    <Text style={styles.conversationSub}>User ID: {item.other_user_id}</Text>
+                    <Text style={styles.conversationSub}>
+                      User ID: {item.other_user_id} · {activityStatus}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={styles.infoBtn}

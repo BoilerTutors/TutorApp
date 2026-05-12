@@ -42,6 +42,7 @@ import SessionHistoryScreen from "./src/screens/SessionHistoryScreen";
 import ReportTutorScreen from "./src/screens/ReportTutorScreen";
 import TutorProfileReviewsScreen from "./src/screens/TutorProfileReviewsScreen";
 import TutorCalendarScreen from "./src/screens/TutorCalendarScreen";
+import PublicTutorProfileScreen from "./src/screens/PublicTutorProfileScreen";
 const Stack = createNativeStackNavigator();
 
 type RootStackParamList = {
@@ -87,6 +88,7 @@ type RootStackParamList = {
         role?: "STUDENT" | "TUTOR" | "ADMINISTRATOR";
       }
     | undefined;
+  "Public Tutor Profile": { tutorUserId: number };
 };
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -212,6 +214,7 @@ export default function App() {
     config: {
       screens: {
         Profile: "profile",
+        "Public Tutor Profile": "tutor/:tutorUserId",
       },
     },
   };
@@ -404,6 +407,11 @@ export default function App() {
             name="Tutor Profile Reviews"
             component={TutorProfileReviewsScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Public Tutor Profile"
+            component={PublicTutorProfileScreen}
+            options={{ header: () => <GeneralHeader title="Tutor Profile" /> }}
           />
         </Stack.Navigator>
       </NavigationContainer>

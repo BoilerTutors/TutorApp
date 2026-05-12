@@ -383,6 +383,19 @@ export default function StudentReviewsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          <TouchableOpacity
+            style={styles.createReviewBtn}
+            onPress={() => {
+              showAlert(
+                "Create Review",
+                "you need to have completed at least one session to select a tutor"
+              );
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.createReviewBtnText}>Create Review</Text>
+          </TouchableOpacity>
+
           {/* Sessions to Review */}
           {sessionsToReview.length > 0 && (
             <>
@@ -632,6 +645,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#5D667C",
     marginBottom: 12,
+  },
+  createReviewBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#2E57A2",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  createReviewBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   sessionCard: {
     backgroundColor: "#FFF",

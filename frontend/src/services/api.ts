@@ -56,6 +56,8 @@ export type UserPublic = {
   last_name: string;
   is_tutor: boolean;
   is_student: boolean;
+  active_now?: boolean;
+  last_active_at?: string;
   created_at: string;
   tutor?: TutorProfilePublic;
   student?: StudentProfilePublic;

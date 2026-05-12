@@ -95,6 +95,8 @@ class UserPublic(BaseModel):
     is_student: bool
     stripe_account_id: Optional[str] = None
     created_at: datetime
+    last_active_at: Optional[datetime] = None
+    active_now: bool = False
     mfa_enabled: bool
 
     tutor: Optional["TutorProfilePublic"] = None
@@ -108,6 +110,8 @@ class UserLookupPublic(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
+    last_active_at: Optional[datetime] = None
+    active_now: bool = False
 
 
 class UserProfileDetailsPublic(BaseModel):
@@ -121,6 +125,20 @@ class UserProfileDetailsPublic(BaseModel):
     tutor: Optional["TutorProfilePublic"] = None
     student: Optional["StudentProfilePublic"] = None
     student_average_help_level: Optional[float] = None
+
+
+class PublicTutorProfileResponse(BaseModel):
+    """Publicly shareable tutor profile payload."""
+
+    id: int
+    first_name: str
+    last_name: str
+    tutor: "TutorProfilePublic"
+
+
+class PublicTutorShareLinkResponse(BaseModel):
+    tutor_user_id: int
+    share_url: str
 
 # ===========================================================
 # ---- Tutor profile schemas ----

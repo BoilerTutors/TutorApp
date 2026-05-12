@@ -1,8 +1,7 @@
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
-#import stripe
+import stripe
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -11,10 +10,6 @@ from app.database import get_db
 from app.models import User
 
 router = APIRouter()
-
-
-class ConnectOnboardingCompleteRequest(BaseModel):
-    account_id: str = Field(min_length=1)
 
 
 def _append_query_param(url: str, key: str, value: str) -> str:
@@ -59,8 +54,24 @@ def _get_or_create_connected_account(current_user: User, db: Session) -> str:
     try:
         account = stripe.Account.create(
             type="express",
+            country="US",
             email=current_user.email,
-            metadata={"user_id": str(current_user.id)},
+            business_type="individual",
+            capabilities={
+                "card_payments": {"requested": True},
+                "transfers": {"requested": True},
+            },
+            business_profile={
+                "url": f"https://boilertutors.com/tutors/{current_user.id}",
+                "product_description": (
+                    "Tutoring services for students, including class-specific help, "
+                    "homework support, and exam preparation."
+                ),
+                "mcc": "8299",  # Educational services
+            },
+            metadata={
+                "user_id": str(current_user.id),
+            },
         )
     except stripe.error.StripeError as exc:
         message = exc.user_message or str(exc)
@@ -124,42 +135,6 @@ def create_connect_onboarding(
         "refresh_url": effective_refresh_url,
         "return_url": onboarding_return_url,
         "details_submitted": bool(account.get("details_submitted")),
-        "charges_enabled": bool(account.get("charges_enabled")),
-        "payouts_enabled": bool(account.get("payouts_enabled")),
-    }
-
-
-@router.post("/connect/onboarding/complete")
-def complete_connect_onboarding(
-    data: ConnectOnboardingCompleteRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    stripe_secret_key = _get_stripe_secret_key()
-
-    stripe.api_key = stripe_secret_key
-    try:
-        account = stripe.Account.retrieve(data.account_id)
-    except stripe.error.StripeError as exc:
-        message = exc.user_message or str(exc)
-        raise HTTPException(status_code=400, detail=message)
-
-    metadata_user_id = account.get("metadata", {}).get("user_id")
-    if metadata_user_id != str(current_user.id):
-        raise HTTPException(status_code=403, detail="Stripe account does not belong to current user")
-
-    details_submitted = bool(account.get("details_submitted"))
-    if not details_submitted:
-        raise HTTPException(status_code=400, detail="Stripe onboarding is not complete yet")
-
-    current_user.stripe_account_id = data.account_id
-    db.commit()
-    db.refresh(current_user)
-
-    return {
-        "message": "Stripe onboarding complete",
-        "stripe_account_id": current_user.stripe_account_id,
-        "details_submitted": details_submitted,
         "charges_enabled": bool(account.get("charges_enabled")),
         "payouts_enabled": bool(account.get("payouts_enabled")),
     }
